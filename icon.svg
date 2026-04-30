@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" fill="#2d6a4f"/>
+  <rect x="60" y="60" width="392" height="392" rx="70" fill="#f6f4ee"/>
+  <text x="256" y="305" font-family="system-ui, -apple-system, sans-serif"
+        font-weight="800" font-size="160" text-anchor="middle"
+        fill="#2d6a4f" letter-spacing="-2">CNP</text>
+  <rect x="186" y="370" width="140" height="6" fill="#c14a1f"/>
+</svg>
