@@ -1,364 +1,395 @@
 // ============================================================
-// APP CNP - Lógica de navegación
+// APP CNP v2 — controlador, router, shell, onboarding, perfiles
 // ============================================================
 
 const app = {
   currentView: 'week',
-  currentDay: null,
-  currentGuide: null,
+  params: {},
   history: [],
 
-  init() {
-    this.bindNav();
-    this.render();
+  settings: null,
+  mainUser: null,
+  activeUser: null,   // en uso diario, siempre = mainUser
+  usersById: {},
+  routine: null,      // rutina principal del usuario activo (cache)
+
+  // Registro de vistas: cada una expone render(app, params)->HTML y opcional bind()
+  views: {},
+
+  async init() {
+    await DB.open();
+    this.registerViews();
+    this.bindShell();
+
+    this.settings = await DB.getSettings();
+    if (!this.settings || !this.settings.seeded || !this.settings.mainUserId) {
+      this.renderOnboarding();
+      return;
+    }
+    await DB.migrate();
+    await this.loadUsers();
+    await this.refreshRoutine();
+    this.go('week', {}, true);
   },
 
-  bindNav() {
+  registerViews() {
+    this.views = {
+      week:     { render: (a, p) => VPlan.week(a, p),     bind: (a, r, p) => VPlan.weekBind(a, r, p) },
+      day:      { render: (a, p) => VPlan.day(a, p),      bind: (a, r, p) => VPlan.dayBind(a, r, p) },
+      exercises:{ render: (a, p) => VPlan.exercises(a, p),bind: (a, r, p) => VPlan.exercisesBind(a, r, p) },
+      guides:   { render: (a, p) => VPlan.guides(a, p) },
+      guide:    { render: (a, p) => VPlan.guide(a, p) },
+      info:     { render: (a, p) => VPlan.info(a, p),      bind: (a, r, p) => VPlan.infoBind(a, r, p) },
+
+      sessions: { render: (a, p) => VSessions.list(a, p),   bind: (a, r, p) => VSessions.listBind(a, r, p) },
+      session:  { render: (a, p) => VSessions.detail(a, p), bind: (a, r, p) => VSessions.detailBind(a, r, p) },
+      live:     { render: (a, p) => VSessions.live(a, p),   bind: (a, r, p) => VSessions.liveBind(a, r, p) },
+
+      progress: { render: (a, p) => VProgress.render(a, p), bind: (a, r, p) => VProgress.bind(a, r, p) },
+      journal:  { render: (a, p) => VJournal.render(a, p),  bind: (a, r, p) => VJournal.bind(a, r, p) },
+
+      more:     { render: (a, p) => this.renderMore(),      bind: (a, r) => this.bindMore(r) },
+      profiles: { render: (a, p) => this.renderProfiles(),  bind: (a, r) => this.bindProfiles(r) },
+      data:     { render: (a, p) => VData.render(a, p),     bind: (a, r, p) => VData.bind(a, r, p) },
+      settings: { render: (a, p) => this.renderSettings(),  bind: (a, r) => this.bindSettings(r) },
+    };
+  },
+
+  bindShell() {
     document.querySelectorAll('.nav-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const view = btn.dataset.view;
-        this.history = [];
-        this.go(view);
-      });
+      btn.addEventListener('click', () => { this.history = []; this.go(btn.dataset.view, {}, true); });
     });
-
-    document.getElementById('backBtn').addEventListener('click', () => {
-      this.back();
-    });
+    document.getElementById('backBtn').addEventListener('click', () => this.back());
+    document.getElementById('userChip').addEventListener('click', () => this.openUserMenu());
+    const dataBtn = document.getElementById('dataBtn');
+    if (dataBtn) dataBtn.addEventListener('click', () => VData.openMenu(this));
   },
 
-  go(view, params = {}) {
-    if (this.currentView !== view || params.id) {
-      this.history.push({
-        view: this.currentView,
-        day: this.currentDay,
-        guide: this.currentGuide
-      });
+  async loadUsers() {
+    const users = await DB.getUsers();
+    this.usersById = {};
+    users.forEach(u => { this.usersById[u.id] = u; });
+    this.mainUser = await DB.getMainUser();
+    this.activeUser = this.mainUser;
+    this.renderUserChip();
+  },
+
+  async refreshRoutine() {
+    this.routine = await DB.primaryRoutineOf(this.activeUser.id);
+  },
+
+  userById(id) { return this.usersById[id] || null; },
+
+  // ---- Navegación ----
+  go(view, params = {}, replace = false) {
+    if (!replace && this.currentView) {
+      this.history.push({ view: this.currentView, params: this.params });
     }
     this.currentView = view;
-    if (params.id && view === 'day') this.currentDay = params.id;
-    if (params.id && view === 'guide') this.currentGuide = params.id;
+    this.params = params || {};
     this.render();
     window.scrollTo(0, 0);
   },
 
   back() {
-    if (this.history.length === 0) return;
+    if (this.history.length === 0) { this.go('week', {}, true); return; }
     const prev = this.history.pop();
     this.currentView = prev.view;
-    this.currentDay = prev.day;
-    this.currentGuide = prev.guide;
+    this.params = prev.params || {};
     this.render();
     window.scrollTo(0, 0);
   },
 
-  updateHeader() {
-    const backBtn = document.getElementById('backBtn');
-    const title = document.getElementById('headerTitle');
-    const meta = document.getElementById('headerMeta');
-
-    if (this.history.length > 0) {
-      backBtn.style.display = 'flex';
-    } else {
-      backBtn.style.display = 'none';
-    }
-
-    if (this.currentView === 'week') {
-      title.textContent = 'Plan CNP';
-      meta.textContent = 'Fase 1';
-    } else if (this.currentView === 'day') {
-      const day = PLAN_DATA.days.find(d => d.id === this.currentDay);
-      title.textContent = day ? day.name : 'Día';
-      meta.textContent = day ? day.duration : '';
-    } else if (this.currentView === 'guides') {
-      title.textContent = 'Guías';
-      meta.textContent = `${PLAN_DATA.guides.length} temas`;
-    } else if (this.currentView === 'guide') {
-      const guide = PLAN_DATA.guides.find(g => g.id === this.currentGuide);
-      title.textContent = guide ? guide.title : 'Guía';
-      meta.textContent = guide ? `Guía ${guide.number}` : '';
-    } else if (this.currentView === 'info') {
-      title.textContent = 'El plan';
-      meta.textContent = 'Información';
-    }
-  },
-
-  updateNavActive() {
-    document.querySelectorAll('.nav-btn').forEach(btn => {
-      btn.classList.remove('active');
-    });
-    let activeView = this.currentView;
-    if (activeView === 'day') activeView = 'week';
-    if (activeView === 'guide') activeView = 'guides';
-    const activeBtn = document.querySelector(`.nav-btn[data-view="${activeView}"]`);
-    if (activeBtn) activeBtn.classList.add('active');
-  },
-
-  render() {
+  async render() {
     this.updateHeader();
     this.updateNavActive();
     const main = document.getElementById('mainContent');
-
+    const def = this.views[this.currentView] || this.views.week;
+    main.innerHTML = `<div class="view active"><div class="loading">Cargando…</div></div>`;
     let html = '';
-    if (this.currentView === 'week') {
-      html = this.renderWeek();
-    } else if (this.currentView === 'day') {
-      html = this.renderDay();
-    } else if (this.currentView === 'guides') {
-      html = this.renderGuides();
-    } else if (this.currentView === 'guide') {
-      html = this.renderGuide();
-    } else if (this.currentView === 'info') {
-      html = this.renderInfo();
+    try {
+      html = await def.render(this, this.params);
+    } catch (e) {
+      console.error(e);
+      html = `<div class="empty-state"><p>Error al cargar la vista.</p><p class="dim">${UI.esc(e.message || e)}</p></div>`;
     }
-
     main.innerHTML = `<div class="view active">${html}</div>`;
-    this.bindLinks();
+    this.bindLinks(main);
+    if (def.bind) { try { def.bind(this, main, this.params); } catch (e) { console.error(e); } }
   },
 
-  bindLinks() {
-    document.querySelectorAll('[data-link]').forEach(el => {
+  bindLinks(scope) {
+    scope.querySelectorAll('[data-link]').forEach(el => {
       el.addEventListener('click', (e) => {
         e.preventDefault();
         const target = el.dataset.link;
-        const id = el.dataset.id;
-        this.go(target, { id });
+        const params = el.dataset.params ? JSON.parse(el.dataset.params) : {};
+        this.go(target, params);
       });
     });
   },
 
-  renderWeek() {
-    const days = PLAN_DATA.days.map(d => {
-      if (d.isRest) {
-        return `
-          <a class="day-card ${d.type}" data-link="day" data-id="${d.id}">
-            <div class="day-row-1">
-              <span class="day-name">${d.name}</span>
-              <span class="day-tag tag-${d.type}">${d.typeLabel}</span>
-            </div>
-            <div class="day-focus">${d.focus}</div>
-            <div class="day-meta">
-              <span class="day-place">${d.place}</span>
-              <span class="day-arrow">›</span>
-            </div>
-          </a>
-        `;
-      }
-      const placeClass = d.placeAccent ? 'parque' : '';
-      return `
-        <a class="day-card ${d.type}" data-link="day" data-id="${d.id}">
-          <div class="day-row-1">
-            <span class="day-name">${d.name}</span>
-            <span class="day-tag tag-${d.type}">${d.typeLabel}</span>
+  updateHeader() {
+    const backBtn = document.getElementById('backBtn');
+    backBtn.style.display = this.history.length > 0 ? 'flex' : 'none';
+    const title = document.getElementById('headerTitle');
+    const titles = {
+      week: 'Traindía', exercises: 'Ejercicios', guides: 'Guías', info: 'El plan',
+      sessions: 'Sesiones', live: 'Entreno', session: 'Sesión',
+      progress: 'Progreso', journal: 'Diario',
+      more: 'Más', profiles: 'Perfiles', data: 'Datos', settings: 'Ajustes',
+    };
+    let label = titles[this.currentView] || 'Traindía';
+    if (this.currentView === 'day' && this.routine) {
+      const d = this.routine.days.find(x => x.id === this.params.dayId);
+      if (d) label = d.name;
+    } else if (this.currentView === 'guide' && typeof PLAN_DATA !== 'undefined') {
+      const g = PLAN_DATA.guides.find(x => x.id === this.params.guideId);
+      if (g) label = g.title;
+    }
+    title.textContent = label;
+  },
+
+  updateNavActive() {
+    const map = {
+      week: 'week', day: 'week', exercises: 'week',
+      sessions: 'sessions', session: 'sessions', live: 'sessions',
+      progress: 'progress', journal: 'journal',
+      more: 'more', profiles: 'more', data: 'more', settings: 'more', guides: 'more', guide: 'more', info: 'more',
+    };
+    const active = map[this.currentView] || 'week';
+    document.querySelectorAll('.nav-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.view === active);
+    });
+  },
+
+  renderUserChip() {
+    const chip = document.getElementById('userChip');
+    if (!this.activeUser) { chip.innerHTML = ''; return; }
+    chip.innerHTML = `${UI.avatar(this.activeUser, 28)}`;
+    chip.title = this.activeUser.name;
+  },
+
+  // ---- Onboarding (primer arranque) ----
+  renderOnboarding() {
+    document.getElementById('appShell').style.display = 'none';
+    let host = document.getElementById('onboarding');
+    if (!host) {
+      host = document.createElement('div');
+      host.id = 'onboarding';
+      document.body.appendChild(host);
+    }
+    host.innerHTML = `
+      <div class="onb-wrap">
+        <div class="onb-card">
+          <div class="onb-eyebrow">Bienvenida a Traindía</div>
+          <h1>Configura tu perfil</h1>
+          <p class="onb-sub">Este es el perfil principal de este dispositivo. La app arrancará siempre con él. Podrás cambiar el nombre y el color cuando quieras desde Ajustes.</p>
+          <div id="onbForm">
+            ${UI.field('Tu nombre', UI.input('name', '', { placeholder: 'Ej: Raúl' }))}
+            ${UI.field('Color', UI.colorPicker('color', UI.COLORS[0]))}
           </div>
-          <div class="day-focus">${d.focus}</div>
-          <div class="day-meta">
-            <span class="day-place ${placeClass}">${d.place} · <strong>${d.duration}</strong></span>
-            <span class="day-arrow">›</span>
-          </div>
-        </a>
-      `;
-    }).join('');
-
-    return `
-      <div class="week-intro">
-        <div class="eyebrow">Semana — Fase 1</div>
-        <h2>Tu rutina</h2>
-        <p>Toca un día para ver los ejercicios, suplentes y guías relacionadas.</p>
-      </div>
-      <div class="legend">
-        <div class="legend-item"><span class="legend-dot dot-strong"></span>Fuerte</div>
-        <div class="legend-item"><span class="legend-dot dot-moderate"></span>Moderado</div>
-        <div class="legend-item"><span class="legend-dot dot-light"></span>Ligero</div>
-        <div class="legend-item"><span class="legend-dot dot-rest"></span>Descanso</div>
-      </div>
-      ${days}
-    `;
+          <button class="btn primary block" id="onbStart">Empezar</button>
+        </div>
+      </div>`;
+    UI.bindColorPicker(host);
+    const start = host.querySelector('#onbStart');
+    start.addEventListener('click', async () => {
+      const data = UI.readForm(host.querySelector('#onbForm'));
+      if (!data.name || !data.name.trim()) { UI.toast('Escribe un nombre', 'err'); return; }
+      start.disabled = true;
+      const user = await DB.createUser({ name: data.name, color: data.color, isMain: true });
+      await DB.seedForUser(user.id);
+      await DB.saveSettings({ mainUserId: user.id, activeUserId: user.id, seeded: true, version: 2, dataVersion: 7 });
+      host.remove();
+      document.getElementById('appShell').style.display = '';
+      this.settings = await DB.getSettings();
+      await this.loadUsers();
+      await this.refreshRoutine();
+      UI.toast(`¡Listo, ${user.name}!`);
+      this.go('week', {}, true);
+    });
   },
 
-  renderDay() {
-    const d = PLAN_DATA.days.find(day => day.id === this.currentDay);
-    if (!d) return '<p>Día no encontrado</p>';
+  // ---- Menú de usuario (desde el chip) ----
+  openUserMenu() {
+    const others = Object.values(this.usersById).filter(u => !u.isMain);
+    UI.modal({
+      title: 'Perfil activo',
+      bodyHTML: `
+        <div class="user-menu-active">${UI.avatar(this.activeUser, 44)}<div><strong>${UI.esc(this.activeUser.name)}</strong><span class="dim">Usuario principal</span></div></div>
+        <p class="modal-text dim">En el uso diario la app trabaja siempre con tu perfil principal. Los perfiles invitados sirven para importar datos a su nombre y comparar progreso.</p>
+        <div class="menu-list">
+          <button class="menu-row" data-act="profiles"><span>👥 Gestionar perfiles</span><span class="chev">›</span></button>
+          <button class="menu-row" data-act="settings"><span>⚙️ Editar perfil principal</span><span class="chev">›</span></button>
+        </div>
+        ${others.length ? `<div class="field-label" style="margin-top:14px">Perfiles invitados</div>${others.map(u => `<div class="user-menu-active small">${UI.avatar(u, 30)}<div><strong>${UI.esc(u.name)}</strong><span class="dim">Invitado</span></div></div>`).join('')}` : ''}
+      `,
+      actions: [{ label: 'Cerrar', kind: 'ghost' }],
+      onMount: (root) => {
+        root.querySelector('[data-act="profiles"]').addEventListener('click', () => { UI.closeModal(); this.go('profiles'); });
+        root.querySelector('[data-act="settings"]').addEventListener('click', () => { UI.closeModal(); this.go('settings'); });
+      },
+    });
+  },
 
-    if (d.isRest) {
-      return `
-        <div class="detail-hero">
-          <span class="day-tag tag-${d.type}">${d.typeLabel}</span>
-          <h2>${d.name}</h2>
-          <div class="focus">${d.focus}</div>
-        </div>
-        <div class="rest-display">
-          <span class="x">×</span>
-          <div class="lead">Recuperación total</div>
-          <div class="small">Sin entreno · Sin culpa</div>
-        </div>
-        <p style="font-size: 13px; color: var(--ink-soft); line-height: 1.5; margin-top: 20px;">
-          El viernes está fijo como descanso por dos motivos: <strong>fisiológico</strong> (tu cuerpo necesita recuperación total para asimilar los estímulos antes del sábado fuerte) y <strong>vital</strong> (necesitas un día para vida social, descanso mental, lo que sea que no sea entrenar).
-        </p>
-        <p style="font-size: 13px; color: var(--ink-soft); line-height: 1.5; margin-top: 10px;">
-          Sí puedes: estiramientos suaves si te apetece, cuidados de lipedema si los necesitas, vida normal.
-        </p>
-      `;
+  // ---- Vista MÁS ----
+  renderMore() {
+    const rows = [
+      { v: 'guides', icon: '📖', label: 'Guías', sub: 'Documentación del plan' },
+      { v: 'exercises', icon: '🏷️', label: 'Ejercicios', sub: 'Catálogo editable' },
+      { v: 'info', icon: 'ℹ️', label: 'El plan', sub: 'Información general' },
+      { v: 'profiles', icon: '👥', label: 'Perfiles', sub: 'Principal e invitados' },
+      { v: 'data', icon: '↕️', label: 'Importar / Exportar', sub: 'Copias y traspasos JSON' },
+      { v: 'settings', icon: '⚙️', label: 'Ajustes', sub: 'Perfil principal y app' },
+    ];
+    return `<div class="section">
+      ${rows.map(r => `<button class="big-row" data-link="${r.v}"><span class="big-row-icon">${r.icon}</span><span class="big-row-text"><strong>${r.label}</strong><span class="dim">${r.sub}</span></span><span class="chev">›</span></button>`).join('')}
+      <p class="version-foot">Traindía · v2.0 · ${Object.keys(this.usersById).length} perfil(es)</p>
+    </div>`;
+  },
+  bindMore() {},
+
+  // ---- Vista PERFILES ----
+  async renderProfiles() {
+    const users = await DB.getUsers();
+    const counts = {};
+    for (const u of users) {
+      const s = await DB.sessionsOf(u.id);
+      counts[u.id] = s.length;
     }
-
-    const blocks = d.blocks.map(b => {
-      const items = b.exercises.map(ex => {
-        const cls = (ex.optional ? 'optional ' : '') + (ex.priority ? '' : '');
-        const nameCls = ex.priority ? 'ex-name priority' : 'ex-name';
-        return `<li class="${cls}"><span class="${nameCls}">${ex.name}</span><span class="ex-sets">${ex.sets}</span></li>`;
-      }).join('');
-      const labelCls = b.optional ? 'block-label optional' : 'block-label';
-      const labelText = b.optional ? `${b.label} · si hay tiempo` : b.label;
-      return `
-        <div class="block">
-          <div class="${labelCls}">${labelText}</div>
-          <ul class="ex-list">${items}</ul>
+    const cards = users.map(u => `
+      <div class="profile-card">
+        ${UI.avatar(u, 40)}
+        <div class="profile-meta">
+          <strong>${UI.esc(u.name)} ${u.isMain ? '<span class="badge">Principal</span>' : '<span class="badge guest">Invitado</span>'}</strong>
+          <span class="dim">${counts[u.id]} sesión(es) registradas</span>
         </div>
-      `;
-    }).join('');
-
-    let substitutes = '';
-    if (d.substitutes && d.substitutes.length > 0) {
-      const subTitle = d.substitutesTitle || 'Suplentes';
-      const subItems = d.substitutes.map(s => `
-        <li><span class="sub-orig">${s.orig}</span><span class="arrow">→</span>${s.sub}</li>
-      `).join('');
-      substitutes = `
-        <div class="substitutes">
-          <div class="substitutes-title">${subTitle}</div>
-          <ul class="sub-list">${subItems}</ul>
+        <div class="profile-actions">
+          <button class="icon-btn" data-edit="${u.id}" title="Editar">✏️</button>
+          ${u.isMain ? '' : `<button class="icon-btn danger" data-del="${u.id}" title="Eliminar">🗑️</button>`}
         </div>
-      `;
+      </div>`).join('');
+    return `<div class="section">
+      <p class="section-intro">El <strong>perfil principal</strong> es el dueño del dispositivo y el usuario activo siempre. Los <strong>invitados</strong> son perfiles de referencia: sirven para importar datos a su nombre y comparar progreso, pero no se usan como sesión activa.</p>
+      ${cards}
+      <button class="btn primary block" id="addGuest">+ Crear perfil invitado</button>
+    </div>`;
+  },
+
+  bindProfiles(root) {
+    root.querySelector('#addGuest').addEventListener('click', () => this.editUserModal(null));
+    root.querySelectorAll('[data-edit]').forEach(b => b.addEventListener('click', () => this.editUserModal(b.dataset.edit)));
+    root.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', () => this.deleteGuest(b.dataset.del)));
+  },
+
+  editUserModal(userId) {
+    const u = userId ? this.usersById[userId] : null;
+    const isNew = !u;
+    UI.modal({
+      title: isNew ? 'Nuevo perfil invitado' : (u.isMain ? 'Editar perfil principal' : 'Editar invitado'),
+      bodyHTML: `<div id="userForm">
+        ${UI.field('Nombre', UI.input('name', u ? u.name : '', { placeholder: 'Nombre' }))}
+        ${UI.field('Color', UI.colorPicker('color', u ? u.color : UI.COLORS[1]))}
+      </div>`,
+      actions: [
+        { label: 'Cancelar', kind: 'ghost' },
+        { label: 'Guardar', kind: 'primary', onClick: async (root) => {
+          const data = UI.readForm(root.querySelector('#userForm'));
+          if (!data.name || !data.name.trim()) { UI.toast('Escribe un nombre', 'err'); return false; }
+          if (isNew) {
+            await DB.createUser({ name: data.name, color: data.color, isGuest: true });
+          } else {
+            await DB.put('users', { ...u, name: data.name.trim(), color: data.color });
+          }
+          await this.loadUsers();
+          this.render();
+          UI.toast('Perfil guardado');
+        }},
+      ],
+      onMount: (root) => UI.bindColorPicker(root),
+    });
+  },
+
+  async deleteGuest(userId) {
+    const u = this.usersById[userId];
+    if (!u || u.isMain) return;
+    const ok = await UI.confirm({
+      title: `Eliminar a ${u.name}`,
+      message: 'Se borrarán también todas sus sesiones, progreso y diario importados. Esta acción no se puede deshacer.',
+      confirmLabel: 'Eliminar', danger: true,
+    });
+    if (!ok) return;
+    for (const store of ['exercises', 'routines', 'sessions', 'progress', 'journal']) {
+      const items = await DB.byIndex(store, 'userId', userId);
+      for (const it of items) await DB.del(store, it.id);
     }
+    await DB.del('users', userId);
+    await this.loadUsers();
+    this.render();
+    UI.toast('Perfil eliminado');
+  },
 
-    let related = '';
-    if (d.relatedGuides && d.relatedGuides.length > 0) {
-      const links = d.relatedGuides.map(gid => {
-        const g = PLAN_DATA.guides.find(x => x.id === gid);
-        if (!g) return '';
-        return `
-          <a class="guide-link" data-link="guide" data-id="${g.id}">
-            <span>${g.title}</span>
-            <span class="guide-link-arrow">›</span>
-          </a>
-        `;
-      }).join('');
-      related = `
-        <div class="related-guides">
-          <div class="block-label">Guías relacionadas</div>
-          ${links}
+  // ---- Vista AJUSTES ----
+  renderSettings() {
+    const u = this.mainUser;
+    return `<div class="section">
+      <div class="card">
+        <div class="card-label">Perfil principal</div>
+        <div id="mainForm">
+          ${UI.field('Nombre', UI.input('name', u.name))}
+          ${UI.field('Color', UI.colorPicker('color', u.color))}
         </div>
-      `;
-    }
-
-    const placeClass = d.placeAccent ? 'parque' : '';
-    return `
-      <div class="detail-hero">
-        <span class="day-tag tag-${d.type}">${d.typeLabel}</span>
-        <h2>${d.name}</h2>
-        <div class="focus">${d.focus}</div>
-        <div class="meta">
-          <span class="${placeClass}">📍 ${d.place}</span>
-          <span>⏱ ${d.duration}</span>
-        </div>
+        <button class="btn primary" id="saveMain">Guardar perfil</button>
       </div>
-      ${blocks}
-      ${substitutes}
-      ${related}
-    `;
+      <div class="card">
+        <div class="card-label">Datos predefinidos</div>
+        <p class="field-hint" style="margin-top:0;margin-bottom:10px">Los ejercicios predefinidos nunca se borran. Si has cambiado tu rutina, puedes volver al plan original.</p>
+        <button class="btn ghost block" id="restorePlan">Restaurar plan original</button>
+      </div>
+      <div class="card">
+        <div class="card-label">Datos de la app</div>
+        <button class="btn ghost block" data-link="data">Importar / Exportar datos</button>
+        <button class="btn danger block" id="resetApp">Borrar todos los datos</button>
+        <p class="field-hint">Restablece la app al estado inicial (se borran todos los perfiles, sesiones y progreso).</p>
+      </div>
+      <p class="version-foot">Traindía · v2.0</p>
+    </div>`;
   },
 
-  renderGuides() {
-    const cards = PLAN_DATA.guides.map(g => `
-      <a class="guide-card" data-link="guide" data-id="${g.id}">
-        <div class="num">GUÍA ${g.number}</div>
-        <h3>${g.title}</h3>
-        <p>${g.summary}</p>
-      </a>
-    `).join('');
-
-    return `
-      <div class="week-intro">
-        <div class="eyebrow">Documentación detallada</div>
-        <h2>Guías</h2>
-        <p>Información completa sobre cada parte del plan.</p>
-      </div>
-      <div class="guides-list">${cards}</div>
-    `;
+  bindSettings(root) {
+    UI.bindColorPicker(root);
+    root.querySelector('#saveMain').addEventListener('click', async () => {
+      const data = UI.readForm(root.querySelector('#mainForm'));
+      if (!data.name || !data.name.trim()) { UI.toast('Escribe un nombre', 'err'); return; }
+      await DB.put('users', { ...this.mainUser, name: data.name.trim(), color: data.color });
+      await this.loadUsers();
+      UI.toast('Perfil actualizado');
+      this.render();
+    });
+    root.querySelector('#restorePlan').addEventListener('click', async () => {
+      const ok = await UI.confirm({
+        title: '⚠️ Restaurar plan original',
+        message: 'CUIDADO: esto SOBREESCRIBE los 7 días con el plan predefinido y BORRA todas las ediciones que hayas hecho en tu rutina (ejercicios, series, orden…). No se puede deshacer. Tus sesiones registradas y tu progreso NO se tocan.',
+        confirmLabel: 'Sí, restaurar plan', danger: true, requireText: 'RESTAURAR',
+      });
+      if (!ok) return;
+      await DB.restoreDefaultRoutine(this.mainUser.id);
+      await this.refreshRoutine();
+      UI.toast('Plan restaurado');
+    });
+    root.querySelector('#resetApp').addEventListener('click', async () => {
+      const ok = await UI.confirm({
+        title: '⚠️ Borrar todos los datos',
+        message: 'CUIDADO: esto elimina PERMANENTEMENTE todos los perfiles, sesiones, progreso, diario y rutinas. La app volverá a la pantalla inicial. No se puede deshacer.',
+        confirmLabel: 'Borrar todo', danger: true, requireText: 'BORRAR',
+      });
+      if (!ok) return;
+      for (const store of Object.keys(DB.STORES)) await DB.clearStore(store);
+      UI.toast('Datos borrados');
+      setTimeout(() => location.reload(), 700);
+    });
   },
-
-  renderGuide() {
-    const g = PLAN_DATA.guides.find(x => x.id === this.currentGuide);
-    if (!g) return '<p>Guía no encontrada</p>';
-    return `
-      <div class="guide-content">
-        <div style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 0.18em; color: var(--ink-dim); text-transform: uppercase; margin-bottom: 8px; font-weight: 500;">GUÍA ${g.number}</div>
-        <h2>${g.title}</h2>
-        ${g.content}
-      </div>
-    `;
-  },
-
-  renderInfo() {
-    return `
-      <div class="week-intro">
-        <div class="eyebrow">Sobre el plan</div>
-        <h2>Plan CNP — Fase 1</h2>
-        <p>Información general y datos del plan.</p>
-      </div>
-
-      <div class="block">
-        <div class="block-label">Datos atleta</div>
-        <ul class="ex-list">
-          <li><span class="ex-name">Altura</span><span class="ex-sets">168 cm</span></li>
-          <li><span class="ex-name">Peso</span><span class="ex-sets">60-65 kg</span></li>
-          <li><span class="ex-name">Sede actual</span><span class="ex-sets">Basic Fit</span></li>
-          <li><span class="ex-name">Sede junio</span><span class="ex-sets">Go Fit</span></li>
-        </ul>
-      </div>
-
-      <div class="block">
-        <div class="block-label">Objetivos prioritarios</div>
-        <ul class="ex-list">
-          <li><span class="ex-name priority">Dominadas</span><span class="ex-sets">★ alta</span></li>
-          <li><span class="ex-name priority">Suspensión supina</span><span class="ex-sets">★ alta</span></li>
-          <li><span class="ex-name">1 km carrera</span><span class="ex-sets">media</span></li>
-          <li><span class="ex-name">Agilidad / circuito</span><span class="ex-sets">media</span></li>
-          <li><span class="ex-name">Fuerza general</span><span class="ex-sets">base</span></li>
-        </ul>
-      </div>
-
-      <div class="block">
-        <div class="block-label">Estructura</div>
-        <ul class="ex-list">
-          <li><span class="ex-name">Días entreno</span><span class="ex-sets">5</span></li>
-          <li><span class="ex-name">Días ligeros</span><span class="ex-sets">1</span></li>
-          <li><span class="ex-name">Descanso</span><span class="ex-sets">1 (vie)</span></li>
-          <li><span class="ex-name">Duración fase</span><span class="ex-sets">8-10 sem</span></li>
-        </ul>
-      </div>
-
-      <div class="related-guides">
-        <div class="block-label">Guías clave</div>
-        <a class="guide-link" data-link="guide" data-id="logica-semana">
-          <span>Lógica de la semana</span>
-          <span class="guide-link-arrow">›</span>
-        </a>
-        <a class="guide-link" data-link="guide" data-id="analisis-nivel">
-          <span>Análisis de tu nivel</span>
-          <span class="guide-link-arrow">›</span>
-        </a>
-        <a class="guide-link" data-link="guide" data-id="progresion-dominadas">
-          <span>Progresión de dominadas</span>
-          <span class="guide-link-arrow">›</span>
-        </a>
-      </div>
-
-      <p style="font-size: 11px; color: var(--ink-dim); text-align: center; margin-top: 30px; font-family: 'IBM Plex Mono', monospace; letter-spacing: 0.05em;">
-        Plan CNP · Fase 1 · v1.0
-      </p>
-    `;
-  }
 };
 
 document.addEventListener('DOMContentLoaded', () => app.init());

@@ -3,11 +3,11 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
-<meta name="theme-color" content="#2d6a4f">
+<meta name="theme-color" content="#4f46e5">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="apple-mobile-web-app-title" content="Plan CNP">
-<title>Plan CNP — Fase 1</title>
+<meta name="apple-mobile-web-app-title" content="Traindía">
+<title>Traindía</title>
 <link rel="manifest" href="manifest.json">
 <link rel="icon" type="image/svg+xml" href="icon.svg">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -16,28 +16,29 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg: #f6f4ee;
+    /* Paleta Pulse — índigo & frío */
+    --bg: #f4f5f8;
     --bg-2: #ffffff;
     --bg-card: #ffffff;
-    --ink: #1a1a1a;
-    --ink-soft: #3d3d3d;
-    --ink-dim: #7a7a7a;
-    --line: #e3dfd5;
-    --line-soft: #efebe1;
+    --ink: #15161c;
+    --ink-soft: #3a3d49;
+    --ink-dim: #82869a;
+    --line: #e4e6ee;
+    --line-soft: #eef0f5;
 
-    --strong: #2d6a4f;
-    --strong-bg: #e8f1ec;
-    --moderate: #b8860b;
-    --moderate-bg: #f7efd9;
-    --light: #2c6e7a;
-    --light-bg: #e3f0f2;
-    --rest: #6c6c6c;
-    --rest-bg: #ececec;
+    --strong: #4f46e5;
+    --strong-bg: #e9e8fb;
+    --moderate: #d97706;
+    --moderate-bg: #fbeed6;
+    --light: #0e9aae;
+    --light-bg: #d8f1f5;
+    --rest: #64748b;
+    --rest-bg: #eaeef3;
 
-    --priority: #c14a1f;
-    --priority-bg: #fbeee5;
-    --sub-accent: #5e4a8a;
-    --sub-bg: #f1edf7;
+    --priority: #e11d48;
+    --priority-bg: #fde4ec;
+    --sub-accent: #7c3aed;
+    --sub-bg: #f1eafd;
 
     --nav-h: 64px;
     --header-h: 56px;
@@ -558,6 +559,11 @@
     font-size: 20px;
     line-height: 1;
   }
+  .nav-ic {
+    width: 23px;
+    height: 23px;
+    display: block;
+  }
   .nav-btn.active { color: var(--strong); }
   .nav-btn:active { opacity: 0.6; }
 
@@ -616,16 +622,19 @@
     .app-header h1 { max-width: 540px; margin: 0 auto; width: 100%; }
   }
 </style>
+<link rel="stylesheet" href="styles.css">
 </head>
 <body>
 
+<div id="appShell">
 <!-- HEADER -->
 <header class="app-header" id="appHeader">
   <button class="back-btn" id="backBtn" style="display:none">←</button>
   <div style="flex:1">
-    <h1 id="headerTitle">Plan CNP</h1>
+    <h1 id="headerTitle">Traindía</h1>
   </div>
-  <div class="header-meta" id="headerMeta">Fase 1</div>
+  <button class="header-btn" id="dataBtn" aria-label="Compartir / Datos" title="Importar / Exportar">⇅</button>
+  <button class="user-chip" id="userChip" aria-label="Perfil"></button>
 </header>
 
 <main id="mainContent">
@@ -635,18 +644,27 @@
 <!-- NAVEGACION INFERIOR -->
 <nav class="bottom-nav">
   <button class="nav-btn active" data-view="week">
-    <span class="icon">📅</span>
+    <svg class="nav-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="16" rx="2.5"/><path d="M3 9.5h18M8 2.5v4M16 2.5v4"/></svg>
     Semana
   </button>
-  <button class="nav-btn" data-view="guides">
-    <span class="icon">📖</span>
-    Guías
+  <button class="nav-btn" data-view="sessions">
+    <svg class="nav-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9.5v5M6 7.5v9M18 7.5v9M21 9.5v5M6 12h12"/></svg>
+    Sesiones
   </button>
-  <button class="nav-btn" data-view="info">
-    <span class="icon">ℹ️</span>
-    Plan
+  <button class="nav-btn" data-view="progress">
+    <svg class="nav-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4v16h16"/><path d="M7.5 14.5l3.5-4 3 2 4.5-6"/></svg>
+    Progreso
+  </button>
+  <button class="nav-btn" data-view="journal">
+    <svg class="nav-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3.5" width="14" height="17" rx="2"/><path d="M9 3.5v17M12.5 9h4M12.5 13h4"/></svg>
+    Diario
+  </button>
+  <button class="nav-btn" data-view="more">
+    <svg class="nav-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="7" height="7" rx="1.6"/><rect x="13" y="4" width="7" height="7" rx="1.6"/><rect x="4" y="13" width="7" height="7" rx="1.6"/><rect x="13" y="13" width="7" height="7" rx="1.6"/></svg>
+    Más
   </button>
 </nav>
+</div>
 
 <!-- INSTALL PROMPT -->
 <div class="install-prompt" id="installPrompt">
@@ -656,6 +674,13 @@
 </div>
 
 <script src="data.js"></script>
+<script src="db.js"></script>
+<script src="ui.js"></script>
+<script src="views-plan.js"></script>
+<script src="views-sessions.js"></script>
+<script src="views-progress.js"></script>
+<script src="views-journal.js"></script>
+<script src="views-data.js"></script>
 <script src="app.js"></script>
 <script>
   // Service Worker

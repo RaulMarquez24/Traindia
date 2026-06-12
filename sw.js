@@ -1,9 +1,17 @@
-// Service Worker - Plan CNP
-const CACHE_NAME = 'plan-cnp-v1';
+// Service Worker - Traindía
+const CACHE_NAME = 'traindia-v8';
 const ASSETS = [
   './',
   './index.html',
+  './styles.css',
   './data.js',
+  './db.js',
+  './ui.js',
+  './views-plan.js',
+  './views-sessions.js',
+  './views-progress.js',
+  './views-journal.js',
+  './views-data.js',
   './app.js',
   './manifest.json',
   './icon.svg',
