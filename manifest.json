@@ -1,13 +1,13 @@
 {
-  "name": "Plan CNP - Fase 1",
-  "short_name": "Plan CNP",
-  "description": "Plan de entrenamiento para pruebas fisicas CNP",
+  "name": "Traindía",
+  "short_name": "Traindía",
+  "description": "Tu plan de entrenamiento: rutinas, sesiones, progreso y diario.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#f6f4ee",
-  "theme_color": "#2d6a4f",
+  "background_color": "#f4f5f8",
+  "theme_color": "#4f46e5",
   "lang": "es",
   "icons": [
     {
