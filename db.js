@@ -101,6 +101,29 @@ const DB = (() => {
     return next;
   }
 
+  // ---- Lugares de entreno (en settings: [{name, special}]) ----
+  async function getPlaces() {
+    const s = await getSettings();
+    return (s && Array.isArray(s.places)) ? s.places : [];
+  }
+  async function savePlaces(list) { await saveSettings({ places: list }); return list; }
+  // Siembra la lista de lugares desde los días de la rutina si aún no existe.
+  async function ensurePlaces(routine) {
+    const s = await getSettings();
+    if (s && Array.isArray(s.places)) return s.places;
+    const map = new Map();
+    (routine?.days || []).forEach(d => {
+      const p = (d.place || '').trim();
+      if (!p || p === '— libre —') return;
+      const k = p.toLowerCase();
+      if (!map.has(k)) map.set(k, { name: p, special: !!d.placeAccent });
+      else if (d.placeAccent) map.get(k).special = true;
+    });
+    const list = [...map.values()];
+    await savePlaces(list);
+    return list;
+  }
+
   // ---- Usuarios ----
   async function getUsers() {
     return (await getAll('users')).sort((a, b) => {
@@ -265,13 +288,55 @@ const DB = (() => {
   const PLAN_NAME = 'Plan CNP María';
   function routineName() { return PLAN_NAME; }
 
-  // ---- Semilla inicial (primer arranque) ----
-  async function seedForUser(userId) {
+  const WEEKDAYS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+  const TYPE_LABELS_DB = { strong: 'Día fuerte', moderate: 'Día moderado', light: 'Día ligero', rest: 'Descanso' };
+  // 7 días vacíos editables para un plan personalizado (sin guías ni contenido CNP).
+  function buildEmptyDays() {
+    return WEEKDAYS.map((name, i) => ({
+      id: uid('day'), name, type: 'moderate', typeLabel: TYPE_LABELS_DB.moderate,
+      focus: '', place: '', placeAccent: false, duration: '', isRest: false,
+      order: i, blocks: [], substitutes: [], substitutesTitle: '', planB: [], relatedGuides: [],
+    }));
+  }
+
+  // Crea un plan (rutina). type: 'cnp' (todo el contenido) | 'custom' (7 días vacíos).
+  // Ambos conservan el catálogo de ejercicios. Si activate, pasa a ser el plan activo.
+  async function createPlan(userId, type = 'cnp', { name, activate = true } = {}) {
     const { map } = await ensureDefaultExercises(userId);
-    const routine = { id: uid('rt'), userId, name: routineName(), days: buildDefaultDays(map), order: 0, createdAt: Date.now(), isPrimary: true };
+    const isCustom = type === 'custom';
+    const routine = {
+      id: uid('rt'), userId, planType: isCustom ? 'custom' : 'cnp',
+      name: name || (isCustom ? 'Mi plan' : routineName()),
+      days: isCustom ? buildEmptyDays() : buildDefaultDays(map),
+      order: Date.now(), createdAt: Date.now(), isPrimary: false,
+    };
+    if (activate) {
+      const others = await routinesOf(userId);
+      for (const r of others) { if (r.isPrimary) { r.isPrimary = false; await put('routines', r); } }
+      routine.isPrimary = true;
+    }
     await put('routines', routine);
-    await seedSubstitutes(userId);
+    if (!isCustom) await seedSubstitutes(userId);
     return routine;
+  }
+
+  // ---- Semilla inicial (primer arranque) — envoltura CNP por compatibilidad ----
+  async function seedForUser(userId) {
+    return createPlan(userId, 'cnp', { activate: true });
+  }
+
+  // Conmuta el plan activo (mueve el flag isPrimary).
+  async function setActivePlan(userId, routineId) {
+    const rts = await routinesOf(userId);
+    for (const r of rts) {
+      const should = r.id === routineId;
+      if (!!r.isPrimary !== should) { r.isPrimary = should; await put('routines', r); }
+    }
+  }
+
+  // Elimina un plan (rutina). No toca sesiones ni progreso.
+  async function deletePlan(routineId) {
+    return del('routines', routineId);
   }
 
   // Restaura ejercicios predefinidos que falten (no duplica). Devuelve nº añadidos.
@@ -391,7 +456,7 @@ const DB = (() => {
   // Migración idempotente: corrige tipos mal puestos en predefinidos y rellena type en rutinas.
   async function migrate() {
     const s = await getSettings();
-    if (!s || (s.dataVersion || 0) >= 7) return;
+    if (!s || (s.dataVersion || 0) >= 8) return;
     const defaults = defaultTypeByName();
     const users = await getAll('users');
     for (const u of users) {
@@ -429,11 +494,19 @@ const DB = (() => {
         });
         // renombrar el plan principal al nombre actual (si conserva el nombre sembrado)
         if (rt.isPrimary && /^Plan CNP/.test(rt.name || '')) rt.name = PLAN_NAME;
+        // tipo de plan: las rutinas antiguas son el plan CNP
+        if (!rt.planType) { rt.planType = 'cnp'; }
         await put('routines', rt);
+      }
+      // garantizar exactamente un plan activo por usuario
+      const after = await routinesOf(u.id);
+      if (after.length && !after.some(r => r.isPrimary)) {
+        after.sort((a, b) => (a.order || 0) - (b.order || 0));
+        after[0].isPrimary = true; await put('routines', after[0]);
       }
       await seedSubstitutes(u.id); // vincula suplentes a los ya sembrados (idempotente)
     }
-    await saveSettings({ dataVersion: 7 });
+    await saveSettings({ dataVersion: 8 });
   }
 
   // ---- Consultas por usuario ----
@@ -453,8 +526,9 @@ const DB = (() => {
     open, uid, todayISO,
     get, getAll, put, del, byIndex, clearStore,
     getSettings, saveSettings,
+    getPlaces, savePlaces, ensurePlaces,
     getUsers, getMainUser, createUser,
-    seedForUser, restoreDefaultExercises, restoreDefaultRoutine, restoreDefaultDay, updateExercise, migrate, classifyType,
+    seedForUser, createPlan, setActivePlan, deletePlan, restoreDefaultExercises, restoreDefaultRoutine, restoreDefaultDay, updateExercise, migrate, classifyType,
     exercisesOf, routinesOf, sessionsOf, progressOf, journalOf, primaryRoutineOf,
     STORES,
   };

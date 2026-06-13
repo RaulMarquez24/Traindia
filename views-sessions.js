@@ -6,9 +6,49 @@ const VSessions = (() => {
 
   // -------- helpers de modelo --------
   function emptySet(type) {
-    if (type === 'time') return { time: '', done: false };
+    if (type === 'time') return { time: '', speed: '', incline: '', level: '', done: false };
     if (type === 'reps') return { reps: '', done: false };
     return { reps: '', weight: '', done: false };
+  }
+
+  function setHasData(s) { return s.reps || s.weight || s.time || s.speed || s.level || s.incline; }
+
+  // Texto de contexto para preguntar a una IA sobre un ejercicio (en curso o ya hecho).
+  function buildExerciseContext(session, entry, opts) {
+    const past = opts && opts.past;
+    const lines = [];
+    lines.push(past
+      ? `He hecho este ejercicio en mi entreno${session.name ? ` "${session.name}"` : ''}${session.date ? ` el ${UI.fmtDate(session.date)}` : ''}.`
+      : `Estoy entrenando${session.name ? ` (${session.name})` : ''}.`);
+    let l = `Ejercicio: ${entry.name}`;
+    if (entry.target) l += ` — objetivo ${entry.target}`;
+    lines.push(l);
+    const setsTxt = (entry.sets || []).map(s => {
+      if ((entry.type || 'weight') === 'time') {
+        const t = fmtTime(s.time); if (!t && !cardioExtra(s)) return '';
+        const ex = cardioExtra(s); return (t || '—') + (ex ? ` (${ex})` : '');
+      }
+      if (entry.type === 'reps') return s.reps ? `${s.reps} reps` : '';
+      return (s.reps || s.weight) ? `${s.reps || '?'}×${s.weight || '?'} kg` : '';
+    }).filter(Boolean);
+    if (setsTxt.length) lines.push(`Series realizadas: ${setsTxt.join(', ')}.`);
+    lines.push('');
+    lines.push('Mi duda: ');
+    return lines.join('\n');
+  }
+
+  function fmtTime(sec) {
+    const t = parseInt(sec); if (isNaN(t) || t === 0 && sec === '') return '';
+    const m = Math.floor(t / 60), s = t % 60;
+    return m ? `${m}:${String(s).padStart(2, '0')} min` : `${s}s`;
+  }
+  // Texto compacto de los datos opcionales de un set de tiempo
+  function cardioExtra(s) {
+    const parts = [];
+    if (s.speed) parts.push(`${s.speed} km/h`);
+    if (s.incline) parts.push(`${s.incline}%`);
+    if (s.level) parts.push(`niv ${s.level}`);
+    return parts.join(' · ');
   }
 
   function entryFromExercise(ex) {
@@ -41,23 +81,38 @@ const VSessions = (() => {
   function setRowsHTML(entry, ei, mode) {
     const type = entry.type || 'weight';
     return (entry.sets || []).map((s, si) => {
-      let fields = '';
+      const done = mode === 'live'
+        ? `<button class="set-done${s.done ? ' on' : ''}" data-done data-ei="${ei}" data-si="${si}" title="Serie hecha">${UI.icon('check', 16)}</button>`
+        : '';
+      const rm = `<button class="icon-btn danger" data-rm-set data-ei="${ei}" data-si="${si}">×</button>`;
+
       if (type === 'time') {
-        fields = `<input class="inp set-f" data-f="time" data-ei="${ei}" data-si="${si}" type="number" min="0" value="${UI.esc(s.time)}" placeholder="seg"><span class="set-unit">s</span>`;
-      } else if (type === 'reps') {
+        const total = parseInt(s.time);
+        const hasT = s.time !== '' && s.time != null && !isNaN(total);
+        const mm = hasT ? Math.floor(total / 60) : '';
+        const ss = hasT ? total % 60 : '';
+        return `<div class="set-wrap${s.done ? ' done' : ''}">
+          <div class="set-row">
+            <span class="set-n">${si + 1}</span>
+            <input class="inp set-f" data-f="timemin" data-ei="${ei}" data-si="${si}" type="number" min="0" value="${mm}" placeholder="min"><span class="set-unit">m</span>
+            <input class="inp set-f" data-f="timesec" data-ei="${ei}" data-si="${si}" type="number" min="0" max="59" value="${ss}" placeholder="seg"><span class="set-unit">s</span>
+            ${done}${rm}
+          </div>
+          <div class="set-extra">
+            <input class="inp set-f" data-f="speed" data-ei="${ei}" data-si="${si}" type="number" min="0" step="0.1" value="${UI.esc(s.speed)}" placeholder="km/h">
+            <input class="inp set-f" data-f="incline" data-ei="${ei}" data-si="${si}" type="number" step="0.5" value="${UI.esc(s.incline)}" placeholder="incl %">
+            <input class="inp set-f" data-f="level" data-ei="${ei}" data-si="${si}" type="number" min="0" value="${UI.esc(s.level)}" placeholder="nivel">
+          </div>
+        </div>`;
+      }
+
+      let fields;
+      if (type === 'reps') {
         fields = `<input class="inp set-f" data-f="reps" data-ei="${ei}" data-si="${si}" type="number" min="0" value="${UI.esc(s.reps)}" placeholder="reps"><span class="set-unit">reps</span>`;
       } else {
         fields = `<input class="inp set-f" data-f="reps" data-ei="${ei}" data-si="${si}" type="number" min="0" value="${UI.esc(s.reps)}" placeholder="reps"><span class="set-x">×</span><input class="inp set-f" data-f="weight" data-ei="${ei}" data-si="${si}" type="number" min="0" step="0.5" value="${UI.esc(s.weight)}" placeholder="kg"><span class="set-unit">kg</span>`;
       }
-      const done = mode === 'live'
-        ? `<button class="set-done${s.done ? ' on' : ''}" data-done data-ei="${ei}" data-si="${si}" title="Serie hecha">✓</button>`
-        : '';
-      return `<div class="set-row${s.done ? ' done' : ''}">
-        <span class="set-n">${si + 1}</span>
-        ${fields}
-        ${done}
-        <button class="icon-btn danger" data-rm-set data-ei="${ei}" data-si="${si}">×</button>
-      </div>`;
+      return `<div class="set-row${s.done ? ' done' : ''}"><span class="set-n">${si + 1}</span>${fields}${done}${rm}</div>`;
     }).join('');
   }
 
@@ -65,7 +120,12 @@ const VSessions = (() => {
     return `<div class="ex-card" data-ei="${ei}">
       <div class="ex-card-head">
         <div><strong>${UI.esc(entry.name)}</strong>${entry.target ? `<span class="ex-target">obj: ${UI.esc(entry.target)}</span>` : ''}</div>
-        <button class="icon-btn danger" data-rm-ex data-ei="${ei}">🗑️</button>
+        <span class="ex-card-actions">
+          ${mode === 'live' ? `<button class="icon-btn" data-ai-ex data-ei="${ei}" title="Consultar a una IA sobre este ejercicio">${UI.icon('chat', 17)}</button>` : ''}
+          <button class="icon-btn" data-mv-ex="up" data-ei="${ei}" title="Subir">${UI.icon('chevronUp', 18)}</button>
+          <button class="icon-btn" data-mv-ex="down" data-ei="${ei}" title="Bajar">${UI.icon('chevronDown', 18)}</button>
+          <button class="icon-btn danger" data-rm-ex data-ei="${ei}">${UI.icon('trash', 17)}</button>
+        </span>
       </div>
       <div class="set-list">${setRowsHTML(entry, ei, mode)}</div>
       <button class="btn ghost small" data-add-set data-ei="${ei}">+ Serie</button>
@@ -76,9 +136,19 @@ const VSessions = (() => {
   function syncEntries(root, session) {
     root.querySelectorAll('.set-f').forEach(inp => {
       const ei = +inp.dataset.ei, si = +inp.dataset.si, f = inp.dataset.f;
-      if (session.entries[ei] && session.entries[ei].sets[si]) {
-        session.entries[ei].sets[si][f] = inp.value;
-      }
+      const set = session.entries[ei] && session.entries[ei].sets[si];
+      if (set) set[f] = inp.value;
+    });
+    // los sets de tiempo guardan los segundos totales a partir de min:seg
+    (session.entries || []).forEach(e => {
+      if ((e.type || 'weight') !== 'time') return;
+      (e.sets || []).forEach(s => {
+        if (s.timemin !== undefined || s.timesec !== undefined) {
+          const m = parseInt(s.timemin) || 0, sec = parseInt(s.timesec) || 0;
+          s.time = (m || sec) ? (m * 60 + sec) : '';
+          delete s.timemin; delete s.timesec;
+        }
+      });
     });
   }
 
@@ -142,21 +212,31 @@ const VSessions = (() => {
       timerEl.textContent = fmtClock(Math.floor((Date.now() - s.startTs) / 1000));
     }, 1000);
 
-    const rerender = () => { syncLive(root, s); app.render(); };
+    const sync = () => syncLive(root, s);
+    const redraw = () => app.render();
 
     root.querySelectorAll('[data-add-set]').forEach(b => b.addEventListener('click', () => {
-      const e = s.entries[+b.dataset.ei]; e.sets.push(emptySet(e.type)); rerender();
+      sync(); const e = s.entries[+b.dataset.ei]; e.sets.push(emptySet(e.type)); redraw();
     }));
     root.querySelectorAll('[data-rm-set]').forEach(b => b.addEventListener('click', () => {
-      s.entries[+b.dataset.ei].sets.splice(+b.dataset.si, 1); rerender();
+      sync(); s.entries[+b.dataset.ei].sets.splice(+b.dataset.si, 1); redraw();
     }));
     root.querySelectorAll('[data-rm-ex]').forEach(b => b.addEventListener('click', () => {
-      s.entries.splice(+b.dataset.ei, 1); rerender();
+      sync(); s.entries.splice(+b.dataset.ei, 1); redraw();
+    }));
+    root.querySelectorAll('[data-mv-ex]').forEach(b => b.addEventListener('click', () => {
+      sync(); const ei = +b.dataset.ei, arr = s.entries;
+      if (b.dataset.mvEx === 'up' && ei > 0) { [arr[ei - 1], arr[ei]] = [arr[ei], arr[ei - 1]]; }
+      else if (b.dataset.mvEx === 'down' && ei < arr.length - 1) { [arr[ei + 1], arr[ei]] = [arr[ei], arr[ei + 1]]; }
+      redraw();
     }));
     root.querySelectorAll('[data-done]').forEach(b => b.addEventListener('click', () => {
-      const set = s.entries[+b.dataset.ei].sets[+b.dataset.si]; set.done = !set.done; rerender();
+      sync(); const set = s.entries[+b.dataset.ei].sets[+b.dataset.si]; set.done = !set.done; redraw();
     }));
-    root.querySelector('#liveAddEx').addEventListener('click', () => addExerciseToSession(app, s, () => rerender()));
+    root.querySelectorAll('[data-ai-ex]').forEach(b => b.addEventListener('click', () => {
+      sync(); UI.askAI(buildExerciseContext(s, s.entries[+b.dataset.ei]));
+    }));
+    root.querySelector('#liveAddEx').addEventListener('click', () => { sync(); addExerciseToSession(app, s, () => app.render()); });
     root.querySelector('#liveCancel').addEventListener('click', async () => {
       const ok = await UI.confirm({ title: 'Descartar entreno', message: 'Se perderá lo registrado en esta sesión.', confirmLabel: 'Descartar', danger: true });
       if (!ok) return;
@@ -166,7 +246,7 @@ const VSessions = (() => {
     root.querySelector('#liveFinish').addEventListener('click', async () => {
       syncLive(root, s);
       // limpiar series vacías y entradas sin series
-      s.entries.forEach(e => { e.sets = e.sets.filter(set => set.reps || set.weight || set.time); });
+      s.entries.forEach(e => { e.sets = e.sets.filter(setHasData); });
       s.entries = s.entries.filter(e => e.sets.length > 0);
       if (s.entries.length === 0) { UI.toast('Registra al menos una serie', 'err'); return; }
       s.durationSec = Math.floor((Date.now() - s.startTs) / 1000);
@@ -188,7 +268,8 @@ const VSessions = (() => {
   // Añade un ejercicio (del catálogo o nuevo) a una sesión, vía buscador
   async function addExerciseToSession(app, session, onAdded) {
     const catalog = await DB.exercisesOf(app.activeUser.id);
-    UI.pickExercise({ exercises: catalog, onPick: async (picked) => {
+    const categories = [...new Set(catalog.map(e => e.muscleGroup || 'General'))].sort((a, b) => a.localeCompare(b));
+    UI.pickExercise({ exercises: catalog, categories, onPick: async (picked) => {
       let ex = picked;
       if (picked.isNew) {
         ex = { id: DB.uid('ex'), userId: app.activeUser.id, name: picked.name, muscleGroup: picked.muscleGroup, type: picked.type, createdAt: Date.now() };
@@ -272,7 +353,7 @@ const VSessions = (() => {
       <div class="chips-row">${chips}</div>
       <div class="date-filters">${yearSel}${monthSel}${daySel}${anyDateFilter ? '<button class="btn ghost small" id="clearDates">✕ Limpiar</button>' : ''}</div>
       <div class="sessions-cta">
-        <button class="btn primary" id="startFromDay">▶ Registrar entreno</button>
+        <button class="btn primary" id="startFromDay">${UI.icon('play', 15)} Registrar entreno</button>
         <button class="btn ghost" id="addManual">+ Añadir manual</button>
       </div>
       ${sessions.length ? body : emptyMsg}
@@ -317,15 +398,18 @@ const VSessions = (() => {
     const author = app.userById(s.userId);
     const vol = sessionVolume(s);
 
-    const entries = (s.entries || []).map(e => {
+    const entries = (s.entries || []).map((e, ei) => {
       const rows = (e.sets || []).map((set, i) => {
         let v;
-        if (e.type === 'time') v = `${set.time || 0} s`;
-        else if (e.type === 'reps') v = `${set.reps || 0} reps`;
+        if (e.type === 'time') {
+          v = fmtTime(set.time) || '0s';
+          const extra = cardioExtra(set);
+          if (extra) v += ` · ${extra}`;
+        } else if (e.type === 'reps') v = `${set.reps || 0} reps`;
         else v = `${set.reps || 0} × ${set.weight || 0} kg`;
-        return `<li><span class="set-n-sm">${i + 1}</span><span>${v}</span></li>`;
+        return `<li><span class="set-n-sm">${i + 1}</span><span>${UI.esc(v)}</span></li>`;
       }).join('');
-      return `<div class="block"><div class="block-label">${UI.esc(e.name)}</div><ul class="set-detail-list">${rows}</ul></div>`;
+      return `<div class="block"><div class="block-label detail-ex-head"><span>${UI.esc(e.name)}</span><button class="icon-btn" data-ai-done data-ei="${ei}" title="Consultar a una IA sobre este ejercicio">${UI.icon('chat', 16)}</button></div><ul class="set-detail-list">${rows}</ul></div>`;
     }).join('');
 
     return `<div class="section">
@@ -333,16 +417,17 @@ const VSessions = (() => {
         <div class="session-author">${author ? UI.avatar(author, 24) + `<span>${UI.esc(author.name)}</span>` : ''}</div>
         <h2>${UI.esc(s.name || 'Sesión')}</h2>
         <div class="meta">
-          <span>📅 ${UI.fmtDate(s.date)}</span>
-          ${s.durationSec ? `<span>⏱ ${fmtClock(s.durationSec)}</span>` : ''}
-          ${vol ? `<span>🏋️ ${vol} kg vol.</span>` : ''}
+          <span>${UI.icon('calendar', 13)} ${UI.fmtDate(s.date)}</span>
+          ${s.durationSec ? `<span>${UI.icon('clock', 13)} ${fmtClock(s.durationSec)}</span>` : ''}
+          ${vol ? `<span>${UI.icon('dumbbell', 13)} ${vol} kg vol.</span>` : ''}
         </div>
       </div>
       ${entries || '<p class="dim">Sin ejercicios.</p>'}
       ${s.notes ? `<div class="note-box"><div class="block-label">Notas</div><p>${UI.esc(s.notes)}</p></div>` : ''}
       <div class="detail-toolbar">
-        <button class="btn ghost" data-act="edit">✏️ Editar</button>
-        <button class="btn ghost danger" data-act="del">🗑️ Eliminar</button>
+        <button class="btn ghost" data-act="edit">${UI.icon('edit', 16)} Editar</button>
+        <button class="btn ghost" data-act="share">${UI.icon('upload', 16)} Compartir</button>
+        <button class="btn ghost danger" data-act="del">${UI.icon('trash', 16)} Eliminar</button>
       </div>
     </div>`;
   }
@@ -352,6 +437,11 @@ const VSessions = (() => {
       const s = await DB.get('sessions', params.sessionId);
       sessionEditor(app, s);
     });
+    root.querySelector('[data-act="share"]').addEventListener('click', () => VData.exportSession(app, params.sessionId));
+    root.querySelectorAll('[data-ai-done]').forEach(b => b.addEventListener('click', async () => {
+      const s = await DB.get('sessions', params.sessionId);
+      if (s) UI.askAI(buildExerciseContext(s, s.entries[+b.dataset.ei], { past: true }));
+    }));
     root.querySelector('[data-act="del"]').addEventListener('click', async () => {
       const ok = await UI.confirm({ title: 'Eliminar sesión', message: 'Se borrará esta sesión permanentemente.', confirmLabel: 'Eliminar', danger: true });
       if (!ok) return;
@@ -399,6 +489,12 @@ const VSessions = (() => {
       root.querySelectorAll('[data-add-set]').forEach(b => b.addEventListener('click', () => { syncMeta(root); draft.entries[+b.dataset.ei].sets.push(emptySet(draft.entries[+b.dataset.ei].type)); render(root); }));
       root.querySelectorAll('[data-rm-set]').forEach(b => b.addEventListener('click', () => { syncMeta(root); draft.entries[+b.dataset.ei].sets.splice(+b.dataset.si, 1); render(root); }));
       root.querySelectorAll('[data-rm-ex]').forEach(b => b.addEventListener('click', () => { syncMeta(root); draft.entries.splice(+b.dataset.ei, 1); render(root); }));
+      root.querySelectorAll('[data-mv-ex]').forEach(b => b.addEventListener('click', () => {
+        syncMeta(root); const ei = +b.dataset.ei, arr = draft.entries;
+        if (b.dataset.mvEx === 'up' && ei > 0) { [arr[ei - 1], arr[ei]] = [arr[ei], arr[ei - 1]]; }
+        else if (b.dataset.mvEx === 'down' && ei < arr.length - 1) { [arr[ei + 1], arr[ei]] = [arr[ei], arr[ei + 1]]; }
+        render(root);
+      }));
       root.querySelector('#sesAddEx').addEventListener('click', () => { syncMeta(root); addExerciseToSession(app, draft, () => render(root)); });
     };
 
@@ -409,7 +505,7 @@ const VSessions = (() => {
         { label: 'Guardar', kind: 'primary', onClick: async (root) => {
           syncMeta(root);
           if (!draft.name.trim()) draft.name = 'Sesión';
-          draft.entries.forEach(e => { e.sets = e.sets.filter(set => set.reps || set.weight || set.time); });
+          draft.entries.forEach(e => { e.sets = e.sets.filter(setHasData); });
           draft.entries = draft.entries.filter(e => e.sets.length > 0);
           await DB.put('sessions', draft);
           UI.toast('Sesión guardada');

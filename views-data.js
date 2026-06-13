@@ -46,6 +46,7 @@ const VData = (() => {
         <button class="btn primary block" id="expProfile">Perfil completo (${UI.esc(app.mainUser.name)})</button>
         <button class="btn ghost block" id="expDay">Un día concreto</button>
         <button class="btn ghost block" id="expSessions">Sesiones (individuales o por fechas)</button>
+        <button class="btn ghost block" id="expProgress">Progreso</button>
         <button class="btn ghost block" id="expRoutines">Rutinas específicas</button>
         <p class="field-hint">Se descarga un archivo JSON que puedes guardar o compartir con un compañero.</p>
       </div>
@@ -65,6 +66,7 @@ const VData = (() => {
     });
     root.querySelector('#expDay').addEventListener('click', () => exportDay(app));
     root.querySelector('#expSessions').addEventListener('click', () => exportSessions(app));
+    root.querySelector('#expProgress').addEventListener('click', () => exportProgress(app));
     root.querySelector('#expRoutines').addEventListener('click', () => exportRoutines(app));
     root.querySelector('#impBtn').addEventListener('click', () => triggerImport(app));
   }
@@ -74,11 +76,12 @@ const VData = (() => {
     UI.modal({
       title: 'Compartir / Datos',
       bodyHTML: `<div class="menu-list">
-        <button class="menu-row" data-act="exp-day"><span>📤 Exportar un día</span><span class="chev">›</span></button>
-        <button class="menu-row" data-act="exp-profile"><span>📤 Exportar perfil completo</span><span class="chev">›</span></button>
-        <button class="menu-row" data-act="exp-sessions"><span>📤 Exportar sesiones</span><span class="chev">›</span></button>
-        <button class="menu-row" data-act="exp-routines"><span>📤 Exportar rutinas</span><span class="chev">›</span></button>
-        <button class="menu-row" data-act="import"><span>📥 Importar archivo</span><span class="chev">›</span></button>
+        <button class="menu-row" data-act="exp-day"><span>${UI.icon('upload', 17)} Exportar un día</span><span class="chev">›</span></button>
+        <button class="menu-row" data-act="exp-profile"><span>${UI.icon('upload', 17)} Exportar perfil completo</span><span class="chev">›</span></button>
+        <button class="menu-row" data-act="exp-sessions"><span>${UI.icon('upload', 17)} Exportar sesiones</span><span class="chev">›</span></button>
+        <button class="menu-row" data-act="exp-progress"><span>${UI.icon('upload', 17)} Exportar progreso</span><span class="chev">›</span></button>
+        <button class="menu-row" data-act="exp-routines"><span>${UI.icon('upload', 17)} Exportar rutinas</span><span class="chev">›</span></button>
+        <button class="menu-row" data-act="import"><span>${UI.icon('swap', 17)} Importar archivo</span><span class="chev">›</span></button>
       </div>
       <p class="field-hint">Para entrenar juntos: exporta un día y pásaselo a tu compañero; al importarlo podrá reemplazar su día o añadir solo lo que le falte.</p>`,
       actions: [{ label: 'Cerrar', kind: 'ghost' }],
@@ -90,6 +93,7 @@ const VData = (() => {
           UI.toast('Perfil exportado');
         }));
         root.querySelector('[data-act="exp-sessions"]').addEventListener('click', () => go(() => exportSessions(app)));
+        root.querySelector('[data-act="exp-progress"]').addEventListener('click', () => go(() => exportProgress(app)));
         root.querySelector('[data-act="exp-routines"]').addEventListener('click', () => go(() => exportRoutines(app)));
         root.querySelector('[data-act="import"]').addEventListener('click', () => go(() => triggerImport(app)));
       },
@@ -148,16 +152,63 @@ const VData = (() => {
             selected = sessions.filter(s => (!r.from || s.date >= r.from) && (!r.to || s.date <= r.to));
           }
           if (selected.length === 0) { UI.toast('Nada que exportar con ese filtro', 'err'); return false; }
-          const refIds = selected.flatMap(s => (s.entries || []).map(e => e.exerciseId));
-          download({
-            format: FORMAT, version: 2, kind: 'sessions', exportedAt: new Date().toISOString(),
-            user: { name: app.mainUser.name, color: app.mainUser.color },
-            data: { exercises: exercisesByIds(allEx, refIds), routines: [], sessions: selected, progress: [], journal: [] },
-          }, `traindia-sesiones-${stamp()}.json`);
-          UI.toast(`${selected.length} sesión(es) exportadas`);
+          await doExportSessions(app, selected, allEx);
         }},
       ],
     });
+  }
+
+  // Descarga un conjunto de sesiones (con sus ejercicios referenciados).
+  async function doExportSessions(app, sessions, allEx) {
+    allEx = allEx || await DB.exercisesOf(app.mainUser.id);
+    const refIds = sessions.flatMap(s => (s.entries || []).map(e => e.exerciseId));
+    download({
+      format: FORMAT, version: 2, kind: 'sessions', exportedAt: new Date().toISOString(),
+      user: { name: app.mainUser.name, color: app.mainUser.color },
+      data: { exercises: exercisesByIds(allEx, refIds), routines: [], sessions, progress: [], journal: [] },
+    }, sessions.length === 1 ? `traindia-sesion-${stamp()}.json` : `traindia-sesiones-${stamp()}.json`);
+    UI.toast(`${sessions.length} sesión(es) exportadas`);
+  }
+
+  // Exporta una sola sesión (desde su propia pantalla).
+  async function exportSession(app, sessionId) {
+    const s = await DB.get('sessions', sessionId);
+    if (!s) { UI.toast('Sesión no encontrada', 'err'); return; }
+    await doExportSessions(app, [s]);
+  }
+
+  // ---------- EXPORTAR PROGRESO ----------
+  async function exportProgress(app) {
+    const entries = (await DB.progressOf(app.mainUser.id)).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    if (entries.length === 0) { UI.toast('No hay progreso que exportar', 'err'); return; }
+    UI.modal({
+      title: 'Exportar progreso', size: 'wide',
+      bodyHTML: `<p class="field-hint">Marca registros concretos o deja todo sin marcar para exportarlos todos.</p>
+        <div class="check-list">
+          ${entries.map(e => `<label class="check-row"><input type="checkbox" data-prg="${e.id}"><span>${UI.fmtDateShort(e.date)}${e.weight ? ` · ${e.weight} kg` : ''}</span></label>`).join('')}
+        </div>`,
+      actions: [
+        { label: 'Cancelar', kind: 'ghost' },
+        { label: 'Exportar', kind: 'primary', onClick: async (root) => {
+          const checked = [...root.querySelectorAll('[data-prg]:checked')].map(c => c.dataset.prg);
+          const sel = checked.length ? entries.filter(e => checked.includes(e.id)) : entries;
+          doExportProgress(app, sel);
+        }},
+      ],
+    });
+  }
+  function doExportProgress(app, entries) {
+    download({
+      format: FORMAT, version: 2, kind: 'progress', exportedAt: new Date().toISOString(),
+      user: { name: app.mainUser.name, color: app.mainUser.color },
+      data: { exercises: [], routines: [], sessions: [], progress: entries, journal: [] },
+    }, entries.length === 1 ? `traindia-progreso-${stamp()}.json` : `traindia-progresos-${stamp()}.json`);
+    UI.toast(`${entries.length} registro(s) exportados`);
+  }
+  async function exportProgressEntry(app, entryId) {
+    const e = await DB.get('progress', entryId);
+    if (!e) { UI.toast('Registro no encontrado', 'err'); return; }
+    doExportProgress(app, [e]);
   }
 
   // ---------- EXPORTAR RUTINAS ----------
@@ -192,26 +243,30 @@ const VData = (() => {
   async function importFlow(app, payload) {
     const users = await DB.getUsers();
     const counts = payload.data;
-    const summary = [
-      counts.exercises?.length ? `${counts.exercises.length} ejercicios` : '',
-      counts.routines?.length ? `${counts.routines.length} rutinas` : '',
-      counts.sessions?.length ? `${counts.sessions.length} sesiones` : '',
-      counts.progress?.length ? `${counts.progress.length} registros de progreso` : '',
-      counts.journal?.length ? `${counts.journal.length} entradas de diario` : '',
-    ].filter(Boolean).join(' · ') || 'sin contenido';
+    const SECTIONS = [
+      { key: 'exercises', label: 'Ejercicios' },
+      { key: 'routines', label: 'Rutinas' },
+      { key: 'sessions', label: 'Sesiones' },
+      { key: 'progress', label: 'Progreso' },
+      { key: 'journal', label: 'Diario' },
+    ].filter(s => (counts[s.key] || []).length);
 
     const targetOpts = users.map(u => ({ value: u.id, label: u.name + (u.isMain ? ' (principal)' : ' (invitado)') }))
-      .concat([{ value: '__new__', label: '➕ Crear nuevo invitado' }]);
+      .concat([{ value: '__new__', label: '+ Crear nuevo invitado' }]);
 
     UI.modal({
       title: 'Importar datos',
       bodyHTML: `
-        <p class="modal-text">Archivo de <strong>${UI.esc(payload.user?.name || 'desconocido')}</strong>.<br><span class="dim">Contiene: ${summary}.</span></p>
+        <p class="modal-text">Archivo de <strong>${UI.esc(payload.user?.name || 'desconocido')}</strong>.</p>
         <div id="impForm">
           ${UI.field('Asignar a perfil', UI.select('target', targetOpts, users[0].id))}
           <div id="newGuestBox" style="display:none">
             ${UI.field('Nombre del invitado', UI.input('guestName', payload.user?.name || '', { placeholder: 'Nombre' }))}
-            ${UI.field('Color', UI.colorPicker('guestColor', payload.user?.color || UI.COLORS[1]))}
+            ${UI.field('Color', UI.colorPicker('guestColor', payload.user?.color || UI.ESSENTIALS[1]))}
+          </div>
+          <span class="field-label">Qué importar</span>
+          <div class="check-list" style="max-height:none;margin-bottom:12px">
+            ${SECTIONS.length ? SECTIONS.map(s => `<label class="check-row"><input type="checkbox" data-sec="${s.key}" checked><span>${s.label} <span class="dim">(${counts[s.key].length})</span></span></label>`).join('') : '<p class="dim" style="padding:2px">El archivo no tiene datos.</p>'}
           </div>
           ${UI.field('Si hay conflictos de id', UI.select('policy', [
             { value: 'duplicate', label: 'Duplicar (crear copias nuevas)' },
@@ -222,13 +277,15 @@ const VData = (() => {
         { label: 'Cancelar', kind: 'ghost' },
         { label: 'Importar', kind: 'primary', onClick: async (root) => {
           const d = UI.readForm(root.querySelector('#impForm'));
+          const sections = new Set([...root.querySelectorAll('[data-sec]:checked')].map(c => c.dataset.sec));
+          if (sections.size === 0) { UI.toast('Marca al menos una sección', 'err'); return false; }
           let targetUserId = d.target;
           if (d.target === '__new__') {
             if (!d.guestName || !d.guestName.trim()) { UI.toast('Escribe el nombre del invitado', 'err'); return false; }
             const guest = await DB.createUser({ name: d.guestName, color: d.guestColor, isGuest: true });
             targetUserId = guest.id;
           }
-          await applyImport(app, payload, targetUserId, d.policy);
+          await applyImport(app, payload, targetUserId, d.policy, sections);
           await app.loadUsers();
           await app.refreshRoutine();
           app.render();
@@ -244,13 +301,14 @@ const VData = (() => {
     });
   }
 
-  async function applyImport(app, payload, targetUserId, policy) {
+  async function applyImport(app, payload, targetUserId, policy, sections) {
     const data = payload.data || {};
     const duplicate = policy === 'duplicate';
+    const want = sections || new Set(['exercises', 'routines', 'sessions', 'progress', 'journal']);
     const exMap = {}; // oldId -> newId (para reescribir referencias)
 
     // 1) Ejercicios
-    for (const ex of (data.exercises || [])) {
+    if (want.has('exercises')) for (const ex of (data.exercises || [])) {
       const oldId = ex.id;
       const newId = duplicate ? DB.uid('ex') : ex.id;
       exMap[oldId] = newId;
@@ -259,7 +317,7 @@ const VData = (() => {
     const remapEx = (id) => (id && exMap[id]) ? exMap[id] : (id || null);
 
     // 2) Rutinas (reescribe exerciseId en bloques)
-    for (const rt of (data.routines || [])) {
+    if (want.has('routines')) for (const rt of (data.routines || [])) {
       const days = (rt.days || []).map(day => ({
         ...day,
         blocks: (day.blocks || []).map(b => ({
@@ -271,18 +329,18 @@ const VData = (() => {
     }
 
     // 3) Sesiones (reescribe exerciseId en entries)
-    for (const s of (data.sessions || [])) {
+    if (want.has('sessions')) for (const s of (data.sessions || [])) {
       const entries = (s.entries || []).map(e => ({ ...e, exerciseId: remapEx(e.exerciseId) }));
       await DB.put('sessions', { ...s, id: duplicate ? DB.uid('ses') : s.id, userId: targetUserId, entries, draft: false });
     }
 
     // 4) Progreso
-    for (const p of (data.progress || [])) {
+    if (want.has('progress')) for (const p of (data.progress || [])) {
       await DB.put('progress', { ...p, id: duplicate ? DB.uid('prg') : p.id, userId: targetUserId });
     }
 
     // 5) Diario
-    for (const j of (data.journal || [])) {
+    if (want.has('journal')) for (const j of (data.journal || [])) {
       await DB.put('journal', { ...j, id: duplicate ? DB.uid('jrn') : j.id, userId: targetUserId });
     }
   }
@@ -415,5 +473,5 @@ const VData = (() => {
     return added;
   }
 
-  return { render, bind, openMenu, exportDay, importDay };
+  return { render, bind, openMenu, exportDay, importDay, exportSession, exportProgressEntry, routeImport };
 })();

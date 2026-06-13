@@ -87,7 +87,7 @@ const VProgress = (() => {
       return `<div class="prog-row">
         <div class="prog-date">${UI.fmtDateShort(e.date)}</div>
         <div class="prog-vals">${vals || '<span class="dim">—</span>'}${e.notes ? `<span class="dim block-note">${UI.esc(e.notes)}</span>` : ''}</div>
-        <span class="prog-actions"><button class="icon-btn" data-edit="${e.id}">✏️</button><button class="icon-btn danger" data-del="${e.id}">🗑️</button></span>
+        <span class="prog-actions"><button class="icon-btn" data-share="${e.id}" title="Compartir">${UI.icon('upload', 17)}</button><button class="icon-btn" data-edit="${e.id}">${UI.icon('edit', 17)}</button><button class="icon-btn danger" data-del="${e.id}">${UI.icon('trash', 17)}</button></span>
       </div>`;
     }).join('');
 
@@ -101,6 +101,7 @@ const VProgress = (() => {
 
     host.querySelectorAll('[data-metric]').forEach(c => c.addEventListener('click', () => { host._metric = c.dataset.metric; renderBody(app, host); }));
     host.querySelector('#addProg').addEventListener('click', () => editProgress(app, null, () => renderBody(app, host)));
+    host.querySelectorAll('[data-share]').forEach(b => b.addEventListener('click', () => VData.exportProgressEntry(app, b.dataset.share)));
     host.querySelectorAll('[data-edit]').forEach(b => b.addEventListener('click', async () => editProgress(app, await DB.get('progress', b.dataset.edit), () => renderBody(app, host))));
     host.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', async () => {
       const ok = await UI.confirm({ title: 'Eliminar registro', message: '¿Borrar este registro de progreso?', confirmLabel: 'Eliminar', danger: true });
@@ -150,13 +151,18 @@ const VProgress = (() => {
 
     host.innerHTML = `
       <div class="card">
-        ${UI.field('Ejercicio', UI.select('exSel', catalog.map(c => ({ value: c.id, label: c.name })), ex.id))}
+        ${UI.field('Ejercicio', UI.selectButton('exSelBtn', ex.name))}
         <div class="chips-row small">${metrics.map(m => `<button class="chip${m.key === metric ? ' on' : ''}" data-metric="${m.key}">${m.label}</button>`).join('')}</div>
         ${UI.lineChart([{ label: ex.name, color: app.activeUser.color, points }], { width: 320, height: 150 })}
       </div>
       ${points.length ? `<div class="block"><div class="block-label">Últimos registros</div><ul class="kv-list">${recent}</ul></div>` : '<div class="empty-state"><p class="dim">Aún no has registrado este ejercicio en ninguna sesión.</p></div>'}`;
 
-    host.querySelector('select[name="exSel"]').addEventListener('change', (ev) => { host._exId = ev.target.value; host._metric = null; renderExercise(app, host, params); });
+    host.querySelector('#exSelBtn').addEventListener('click', () => UI.pickFromList({
+      title: 'Elegir ejercicio',
+      options: catalog.map(c => ({ value: c.id, label: c.name })),
+      value: ex.id,
+      onPick: (val) => { host._exId = val; host._metric = null; renderExercise(app, host, params); },
+    }));
     host.querySelectorAll('[data-metric]').forEach(c => c.addEventListener('click', () => { host._metric = c.dataset.metric; host._exId = ex.id; renderExercise(app, host, params); }));
   }
 
@@ -204,14 +210,19 @@ const VProgress = (() => {
     host.innerHTML = `
       <div class="card">
         ${UI.field('Comparar con', UI.select('guestSel', guests.map(g => ({ value: g.id, label: g.name })), guestId))}
-        ${UI.field('Métrica', UI.select('subjectSel', subjectOptions, subjectKey))}
+        ${UI.field('Métrica', UI.selectButton('subjectSelBtn', (subjectOptions.find(o => o.value === subjectKey) || subjectOptions[0]).label))}
         ${showExMetric ? `<div class="chips-row small">${EX_METRICS.map(m => `<button class="chip${(host._exMetric || 'maxWeight') === m.key ? ' on' : ''}" data-exmetric="${m.key}">${m.label}</button>`).join('')}</div>` : ''}
         <div class="chart-title">${UI.esc(unit)}</div>
         ${UI.lineChart(series, { width: 320, height: 160 })}
       </div>`;
 
     host.querySelector('select[name="guestSel"]').addEventListener('change', e => { host._guestId = e.target.value; renderCompare(app, host, params); });
-    host.querySelector('select[name="subjectSel"]').addEventListener('change', e => { host._subject = e.target.value; renderCompare(app, host, params); });
+    host.querySelector('#subjectSelBtn').addEventListener('click', () => UI.pickFromList({
+      title: 'Elegir métrica',
+      options: subjectOptions,
+      value: subjectKey,
+      onPick: (val) => { host._subject = val; renderCompare(app, host, params); },
+    }));
     host.querySelectorAll('[data-exmetric]').forEach(c => c.addEventListener('click', () => { host._exMetric = c.dataset.exmetric; renderCompare(app, host, params); }));
     app.bindLinks(host);
   }

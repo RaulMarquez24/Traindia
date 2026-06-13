@@ -23,7 +23,7 @@ const VJournal = (() => {
         <div class="journal-top">
           <span class="journal-date">${UI.fmtDate(e.date)}</span>
           ${m ? `<span class="journal-mood" title="${m.label}">${m.emoji}</span>` : ''}
-          <span class="journal-actions"><button class="icon-btn" data-edit="${e.id}">✏️</button><button class="icon-btn danger" data-del="${e.id}">🗑️</button></span>
+          <span class="journal-actions"><button class="icon-btn" data-edit="${e.id}">${UI.icon('edit', 17)}</button><button class="icon-btn danger" data-del="${e.id}">${UI.icon('trash', 17)}</button></span>
         </div>
         <p class="journal-text">${UI.esc(e.text).replace(/\n/g, '<br>')}</p>
       </div>`;

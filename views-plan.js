@@ -24,7 +24,7 @@ const VPlan = (() => {
       title: 'Categoría',
       bodyHTML: `<div class="menu-list">
         ${avail.length ? avail.map(c => `<button class="menu-row" data-cat="${UI.esc(c)}"><span>${UI.esc(c)}</span><span class="chev">›</span></button>`).join('') : '<p class="dim" style="padding:4px 2px">No quedan categorías sin usar. Crea una nueva.</p>'}
-        <button class="menu-row" data-cat-new="1"><span>➕ Nueva categoría…</span></button>
+        <button class="menu-row" data-cat-new="1"><span>${UI.icon('plus', 16)} Nueva categoría…</span></button>
       </div>`,
       actions: [{ label: 'Cancelar', kind: 'ghost' }],
       onMount: (root) => {
@@ -32,6 +32,43 @@ const VPlan = (() => {
         root.querySelector('[data-cat-new]').addEventListener('click', async () => {
           const name = await UI.prompt({ title: 'Nueva categoría', label: 'Nombre de la categoría', placeholder: 'Ej: Cardio', confirmLabel: 'Crear' });
           if (name && name.trim()) { UI.closeModal(); onPick(name.trim()); }
+        });
+      },
+    });
+  }
+
+  // Selector de lugar: reusar uno existente o crear uno nuevo (especial o no).
+  function pickPlace({ places, onPick }) {
+    let overlay;
+    overlay = UI.modal({
+      title: 'Lugar de entreno',
+      bodyHTML: `<div class="menu-list">
+        ${places.map(p => `<button class="menu-row" data-place="${UI.esc(p.name)}"><span>${UI.esc(p.name)}${p.special ? ' <span class="badge soon">especial</span>' : ''}</span><span class="chev">›</span></button>`).join('')}
+        <button class="menu-row" data-place-new="1"><span>${UI.icon('plus', 16)} Nueva ubicación…</span></button>
+      </div>`,
+      actions: [{ label: 'Cancelar', kind: 'ghost' }],
+      onMount: (root) => {
+        root.querySelectorAll('[data-place]').forEach(b => b.addEventListener('click', () => {
+          const p = places.find(x => x.name === b.dataset.place);
+          UI.closeModal(overlay); onPick(p);
+        }));
+        root.querySelector('[data-place-new]').addEventListener('click', () => {
+          UI.modal({
+            title: 'Nueva ubicación',
+            bodyHTML: `<div id="newPlaceForm">
+              ${UI.field('Nombre', UI.input('name', '', { placeholder: 'Ej: Parque' }))}
+              <label class="mini-check"><input type="checkbox" name="special"> Lugar especial (se resalta en rojo)</label>
+            </div>`,
+            actions: [
+              { label: 'Cancelar', kind: 'ghost' },
+              { label: 'Crear', kind: 'primary', onClick: (r2) => {
+                const d = UI.readForm(r2.querySelector('#newPlaceForm'));
+                if (!d.name.trim()) { UI.toast('Escribe un nombre', 'err'); return false; }
+                UI.closeModal(overlay);
+                onPick({ name: d.name.trim(), special: !!d.special });
+              }},
+            ],
+          });
         });
       },
     });
@@ -70,13 +107,13 @@ const VPlan = (() => {
   async function day(app, params) {
     const d = (app.routine?.days || []).find(x => x.id === params.dayId);
     if (!d) return `<div class="empty-state"><p>Día no encontrado.</p></div>`;
-    const restoreBtn = isDefaultDay(d) ? `<button class="btn ghost" data-act="restore-day">🔄 Restaurar día</button>` : '';
+    const restoreBtn = (isDefaultDay(d) && app.isCnp()) ? `<button class="btn ghost" data-act="restore-day">${UI.icon('refresh', 16)} Restaurar día</button>` : '';
     const byId = {};
     (await DB.exercisesOf(app.activeUser.id)).forEach(e => { byId[e.id] = e; });
     const subsLine = (ex) => {
       const ids = (ex.exerciseId && byId[ex.exerciseId] && byId[ex.exerciseId].substitutes) || [];
       const names = ids.map(id => byId[id] && byId[id].name).filter(Boolean);
-      return names.length ? `<span class="ex-subs">↻ ${names.map(UI.esc).join(' · ')}</span>` : '';
+      return names.length ? `<span class="ex-subs">${UI.icon('repeat', 12)} ${names.map(UI.esc).join(' · ')}</span>` : '';
     };
 
     if (d.isRest) {
@@ -92,7 +129,8 @@ const VPlan = (() => {
           <div class="small">Sin entreno</div>
         </div>
         <div class="detail-toolbar">
-          <button class="btn ghost" data-act="edit-day">✏️ Editar día</button>
+          <button class="btn ghost" data-act="edit-day">${UI.icon('edit', 16)} Editar día</button>
+          <button class="btn ghost" data-act="swap-day">${UI.icon('swap', 16)} Intercambiar</button>
           ${restoreBtn}
         </div>`;
     }
@@ -117,7 +155,7 @@ const VPlan = (() => {
     }
 
     let related = '';
-    if (d.relatedGuides && d.relatedGuides.length) {
+    if (app.isCnp() && d.relatedGuides && d.relatedGuides.length) {
       const links = d.relatedGuides.map(gid => {
         const g = PLAN_DATA.guides.find(x => x.id === gid);
         if (!g) return '';
@@ -133,17 +171,18 @@ const VPlan = (() => {
         <h2>${UI.esc(d.name)}</h2>
         <div class="focus">${UI.esc(d.focus || '')}</div>
         <div class="meta">
-          ${d.place ? `<span class="${placeClass}">📍 ${UI.esc(d.place)}</span>` : ''}
-          ${d.duration ? `<span>⏱ ${UI.esc(d.duration)}</span>` : ''}
+          ${d.place ? `<span class="${placeClass}">${UI.icon('pin', 13)} ${UI.esc(d.place)}</span>` : ''}
+          ${d.duration ? `<span>${UI.icon('clock', 13)} ${UI.esc(d.duration)}</span>` : ''}
         </div>
       </div>
-      <button class="btn primary block" data-act="start">▶ Empezar entreno</button>
+      <button class="btn primary block" data-act="start">${UI.icon('play', 15)} Empezar entreno</button>
       ${blocks}
       ${substitutes}
       ${related}
       <div class="detail-toolbar">
-        <button class="btn ghost" data-act="edit-day">✏️ Editar día</button>
-        <button class="btn ghost" data-act="share-day">📤 Compartir</button>
+        <button class="btn ghost" data-act="edit-day">${UI.icon('edit', 16)} Editar día</button>
+        <button class="btn ghost" data-act="share-day">${UI.icon('upload', 16)} Compartir</button>
+        <button class="btn ghost" data-act="swap-day">${UI.icon('swap', 16)} Intercambiar</button>
         ${restoreBtn}
       </div>`;
   }
@@ -156,10 +195,12 @@ const VPlan = (() => {
     root.querySelector('[data-act="edit-day"]').addEventListener('click', () => editDay(app, d));
     const share = root.querySelector('[data-act="share-day"]');
     if (share) share.addEventListener('click', () => VData.exportDay(app, d.id));
+    const swap = root.querySelector('[data-act="swap-day"]');
+    if (swap) swap.addEventListener('click', () => swapDayFlow(app, d));
     const restore = root.querySelector('[data-act="restore-day"]');
     if (restore) restore.addEventListener('click', async () => {
       const ok = await UI.confirm({
-        title: `⚠️ Restaurar ${d.name}`,
+        title: `Restaurar ${d.name}`,
         message: `CUIDADO: esto devuelve SOLO el día "${d.name}" al entrenamiento predefinido y BORRA tus cambios en este día (ejercicios, series, orden…). No se puede deshacer. No afecta a los demás días, ni a tus sesiones o progreso.`,
         confirmLabel: 'Sí, restaurar día', danger: true, requireText: 'RESTAURAR',
       });
@@ -171,12 +212,47 @@ const VPlan = (() => {
     });
   }
 
+  // Intercambia el CONTENIDO de dos días (mantiene id, nombre y posición/semana).
+  const SWAP_FIELDS = ['type', 'typeLabel', 'focus', 'place', 'placeAccent', 'duration', 'isRest', 'blocks', 'substitutes', 'substitutesTitle', 'planB', 'relatedGuides'];
+  function swapDayContent(a, b) {
+    SWAP_FIELDS.forEach(f => { const tmp = a[f]; a[f] = b[f]; b[f] = tmp; });
+  }
+  function swapDayFlow(app, d) {
+    const others = (app.routine?.days || []).filter(x => x.id !== d.id).sort((a, b) => (a.order || 0) - (b.order || 0));
+    UI.modal({
+      title: `Intercambiar ${d.name}`,
+      bodyHTML: `<p class="modal-text dim">Elige con qué día intercambiar el contenido de <strong>${UI.esc(d.name)}</strong>. Los nombres de los días no cambian, solo su entrenamiento.</p>
+        <div class="menu-list">
+          ${others.map(o => `<button class="menu-row" data-other="${o.id}"><span><strong>${UI.esc(o.name)}</strong> — ${UI.esc(o.focus || (o.isRest ? 'Descanso' : ''))}</span><span class="chev">›</span></button>`).join('')}
+        </div>`,
+      actions: [{ label: 'Cancelar', kind: 'ghost' }],
+      onMount: (root) => root.querySelectorAll('[data-other]').forEach(b => b.addEventListener('click', async () => {
+        const other = app.routine.days.find(x => x.id === b.dataset.other);
+        UI.closeModal();
+        const ok = await UI.confirm({
+          title: `Intercambiar ${d.name} ↔ ${other.name}`,
+          message: `Vas a intercambiar el entrenamiento de "${d.name}" y "${other.name}". Tras esto, "${d.name}" tendrá lo que ahora hay en "${other.name}" y viceversa. Tus sesiones registradas no se tocan.`,
+          confirmLabel: 'Sí, intercambiar', danger: true,
+        });
+        if (!ok) return;
+        swapDayContent(d, other);
+        d.typeLabel = TYPE_LABELS[d.type] || d.typeLabel;
+        other.typeLabel = TYPE_LABELS[other.type] || other.typeLabel;
+        await saveRoutine(app);
+        await app.refreshRoutine();
+        app.go('day', { dayId: d.id }, true);
+        UI.toast(`${d.name} y ${other.name} intercambiados`);
+      })),
+    });
+  }
+
   // ---- Editor de día (modal grande, con buscador de ejercicios) ----
   const EX_TYPE_SHORT = { weight: 'peso+reps', reps: 'reps', time: 'tiempo' };
 
   async function editDay(app, d) {
     const catalog = await DB.exercisesOf(app.activeUser.id); // lista mutable
     const categories = categoriesFrom(catalog); // establecidas; se amplían al crear nuevas
+    const places = await DB.getPlaces(); // lugares establecidos (mutable)
     const draft = JSON.parse(JSON.stringify(d));
     let rerender;
 
@@ -186,7 +262,7 @@ const VPlan = (() => {
         <input type="hidden" data-f="name" value="${UI.esc(ex.name || '')}">
         <input type="hidden" data-f="type" value="${UI.esc(ex.type || 'weight')}">
         <div class="ed-ex-top">
-          <button type="button" class="ed-ex-pick${ex.name ? '' : ' empty'}" data-pick>${ex.name ? UI.esc(ex.name) : '➕ Elegir ejercicio'}</button>
+          <button type="button" class="ed-ex-pick${ex.name ? '' : ' empty'}" data-pick>${ex.name ? UI.esc(ex.name) : UI.icon('plus', 15) + ' Elegir ejercicio'}</button>
           <input class="inp narrow" data-f="sets" value="${UI.esc(ex.sets || '')}" placeholder="4×8">
         </div>
         <div class="ed-ex-bottom">
@@ -208,21 +284,36 @@ const VPlan = (() => {
           { value: 'strong', label: 'Día fuerte' }, { value: 'moderate', label: 'Día moderado' },
           { value: 'light', label: 'Día ligero' }, { value: 'rest', label: 'Descanso' }], draft.type))}
         ${UI.field('Enfoque', UI.input('focus', draft.focus || ''))}
-        ${UI.field('Lugar', UI.input('place', draft.place || ''))}
+        <span class="field-label">Lugar</span>
+        <button type="button" class="ed-cat-btn" id="dayPlaceBtn" style="width:100%;margin-bottom:14px">${draft.place ? UI.esc(draft.place) + (draft.placeAccent ? ' ' + UI.icon('star', 13) : '') : 'Elegir lugar'} ▾</button>
+        <input type="hidden" name="place" value="${UI.esc(draft.place || '')}">
+        <input type="hidden" name="placeAccent" value="${draft.placeAccent ? '1' : ''}">
         ${UI.field('Duración', UI.input('duration', draft.duration || ''))}
       </div>`;
-      if (draft.type === 'rest') return meta + `<p class="field-hint">Los días de descanso no tienen ejercicios.</p>`;
+      const planBHTML = `
+        <div class="catalog-title" style="font-size:15px">Plan B / alternativas</div>
+        <p class="field-hint" style="margin-top:0;margin-bottom:8px">Situaciones y su alternativa (ej. "Si llueve → cinta + susp. otro día").</p>
+        <div class="editor-planb">
+          ${(draft.planB || []).map((p, i) => `<div class="ed-planb" data-pb="${i}">
+            <input class="inp" data-pb-f="orig" value="${UI.esc(p.orig || '')}" placeholder="Si… / ejercicio">
+            <span class="arrow">→</span>
+            <input class="inp" data-pb-f="sub" value="${UI.esc(p.sub || '')}" placeholder="alternativa">
+            <button class="icon-btn danger" data-rm-pb="${i}">×</button>
+          </div>`).join('')}
+        </div>
+        <button class="btn ghost small" id="addPlanB">+ Añadir alternativa</button>`;
+      if (draft.type === 'rest') return meta + `<p class="field-hint">Los días de descanso no tienen ejercicios.</p>` + planBHTML;
       const blocks = (draft.blocks || []).map((b, bi) => `
         <div class="ed-block" data-block="${bi}">
           <div class="ed-block-head">
             <button type="button" class="ed-cat-btn" data-block-cat="${bi}">${UI.esc(b.label || 'Categoría')} ▾</button>
             <label class="mini-check"><input type="checkbox" data-block-opt="${bi}"${b.optional ? ' checked' : ''}> Opcional</label>
-            <button class="icon-btn danger" data-del-block="${bi}">🗑️</button>
+            <button class="icon-btn danger" data-del-block="${bi}">${UI.icon('trash', 17)}</button>
           </div>
           ${b.exercises.map((ex, ei) => rowHTML(ex, bi, ei)).join('')}
           <button class="btn ghost small" data-add-ex="${bi}">+ Ejercicio</button>
         </div>`).join('');
-      return meta + `<div class="editor-blocks">${blocks}</div><button class="btn ghost block" id="addBlock">+ Añadir categoría</button>`;
+      return meta + `<div class="editor-blocks">${blocks}</div><button class="btn ghost block" id="addBlock">+ Añadir categoría</button>` + planBHTML;
     };
 
     const readMeta = (root) => {
@@ -230,10 +321,16 @@ const VPlan = (() => {
       if (!m) return;
       const data = UI.readForm(m);
       draft.name = data.name.trim() || draft.name;
-      draft.type = data.type; draft.focus = data.focus; draft.place = data.place; draft.duration = data.duration;
+      draft.type = data.type; draft.focus = data.focus; draft.duration = data.duration;
+      draft.place = data.place; draft.placeAccent = data.placeAccent === '1';
     };
     const sync = (root) => {
       readMeta(root);
+      draft.planB = draft.planB || [];
+      root.querySelectorAll('.ed-planb').forEach(el => {
+        const i = +el.dataset.pb;
+        if (draft.planB[i]) { draft.planB[i].orig = el.querySelector('[data-pb-f="orig"]').value; draft.planB[i].sub = el.querySelector('[data-pb-f="sub"]').value; }
+      });
       root.querySelectorAll('.ed-ex').forEach(el => {
         const bi = +el.dataset.bi, ei = +el.dataset.ei;
         const ex = draft.blocks[bi] && draft.blocks[bi].exercises[ei];
@@ -302,6 +399,18 @@ const VPlan = (() => {
         const cat = draft.blocks[bi].label || 'General';
         openPicker(cat, (ex) => { const row = draft.blocks[bi].exercises[ei]; row.name = ex.name; row.exerciseId = ex.id; row.type = ex.type; rerender(root); });
       }));
+      const placeBtn = root.querySelector('#dayPlaceBtn');
+      if (placeBtn) placeBtn.addEventListener('click', () => {
+        syncSafe(root);
+        pickPlace({ places, onPick: (p) => {
+          draft.place = p.name; draft.placeAccent = !!p.special;
+          if (!places.find(x => x.name === p.name)) { places.push(p); DB.savePlaces(places); }
+          rerender(root);
+        } });
+      });
+      const addPlanB = root.querySelector('#addPlanB');
+      if (addPlanB) addPlanB.addEventListener('click', () => { sync(root); draft.planB = draft.planB || []; draft.planB.push({ orig: '', sub: '' }); rerender(root); });
+      root.querySelectorAll('[data-rm-pb]').forEach(b => b.addEventListener('click', () => { sync(root); draft.planB.splice(+b.dataset.rmPb, 1); rerender(root); }));
     };
 
     rerender = (root) => { root.querySelector('.modal-body').innerHTML = editorHTML(); bindBody(root); };
@@ -311,8 +420,9 @@ const VPlan = (() => {
       actions: [
         { label: 'Cancelar', kind: 'ghost' },
         { label: 'Guardar', kind: 'primary', onClick: async (root) => {
-          if (draft.type === 'rest') readMeta(root); else sync(root);
+          sync(root);
           (draft.blocks || []).forEach(b => { b.exercises = (b.exercises || []).filter(e => e.name && e.name.trim()); });
+          draft.planB = (draft.planB || []).filter(p => (p.orig && p.orig.trim()) || (p.sub && p.sub.trim()));
           Object.assign(d, draft);
           d.typeLabel = TYPE_LABELS[d.type] || d.typeLabel;
           d.isRest = d.type === 'rest';
@@ -342,34 +452,30 @@ const VPlan = (() => {
     return `<div class="guide-content"><div class="guide-eyebrow">GUÍA ${UI.esc(g.number)}</div><h2>${UI.esc(g.title)}</h2>${g.content}</div>`;
   }
 
-  // ---------- PLANES ----------
+  // ---------- PLANES (gestor de planes) ----------
+  const PLAN_TYPE_LABEL = { cnp: 'CNP', custom: 'Personalizado' };
+
   async function info(app) {
     const routines = (await DB.routinesOf(app.activeUser.id)).sort((a, b) => (a.order || 0) - (b.order || 0));
-    const active = routines.find(r => r.isPrimary) || routines[0];
-    const trainingDays = active ? active.days.filter(d => !d.isRest).length : 0;
+    const activeId = app.routine && app.routine.id;
 
     const planCards = routines.map(r => {
-      const tDays = r.days.filter(d => !d.isRest).length;
-      return `<div class="plan-card${r.id === (active && active.id) ? ' active' : ''}">
+      const tDays = (r.days || []).filter(d => !d.isRest).length;
+      const isActive = r.id === activeId;
+      const typeBadge = `<span class="badge${(r.planType === 'custom') ? ' guest' : ''}">${PLAN_TYPE_LABEL[r.planType] || 'CNP'}</span>`;
+      return `<div class="plan-card${isActive ? ' active' : ''}">
         <div class="plan-card-main">
-          <strong>${UI.esc(r.name)}</strong>
-          <span class="dim">${tDays} días de entreno${r.id === (active && active.id) ? ' · activo' : ''}</span>
+          <strong>${UI.esc(r.name)} ${typeBadge}${isActive ? ' <span class="badge">Activo</span>' : ''}</strong>
+          <span class="dim">${tDays} días de entreno</span>
         </div>
-        ${r.id === (active && active.id) ? '<span class="badge">Activo</span>' : ''}
+        <span class="plan-card-actions">
+          ${isActive ? '' : `<button class="btn ghost small" data-activate="${r.id}">Activar</button>`}
+          ${isActive ? '' : `<button class="icon-btn danger" data-del-plan="${r.id}" title="Eliminar plan">${UI.icon('trash', 17)}</button>`}
+        </span>
       </div>`;
     }).join('');
 
-    return `
-      <div class="week-intro"><div class="eyebrow">Tus planes</div><h2>Planes</h2><p>Tu plan de entrenamiento. Pronto podrás tener varios.</p></div>
-      ${planCards}
-      <button class="plan-card new" id="newPlan">
-        <div class="plan-card-main">
-          <strong>➕ Crear nuevo plan</strong>
-          <span class="dim">Crea planes distintos y cambia entre ellos</span>
-        </div>
-        <span class="badge soon">Próximamente</span>
-      </button>
-
+    const cnpInfo = app.isCnp() ? `
       <div class="catalog-title" style="margin-top:8px">Sobre este plan</div>
       <div class="block"><div class="block-label">Datos atleta</div>
         <ul class="ex-list">
@@ -397,18 +503,61 @@ const VPlan = (() => {
         <a class="guide-link" data-link="guide" data-params='${JSON.stringify({ guideId: 'logica-semana' })}'><span>Lógica de la semana</span><span class="guide-link-arrow">›</span></a>
         <a class="guide-link" data-link="guide" data-params='${JSON.stringify({ guideId: 'analisis-nivel' })}'><span>Análisis de tu nivel</span><span class="guide-link-arrow">›</span></a>
         <a class="guide-link" data-link="guide" data-params='${JSON.stringify({ guideId: 'progresion-dominadas' })}'><span>Progresión de dominadas</span><span class="guide-link-arrow">›</span></a>
-      </div>
-      <p class="version-foot">Traindía · v2.0</p>`;
+      </div>` : '';
+
+    return `
+      <div class="week-intro"><div class="eyebrow">Tus planes</div><h2>Planes</h2><p>Cambia entre planes o crea uno nuevo. El plan activo decide qué guías y contenido ves.</p></div>
+      ${planCards}
+      <button class="btn ghost block" id="newPlan">${UI.icon('plus', 16)} Crear plan</button>
+      ${cnpInfo}
+      <p class="version-foot">Traindía · v2.1.0</p>`;
   }
 
   function infoBind(app, root) {
+    root.querySelectorAll('[data-activate]').forEach(b => b.addEventListener('click', async () => {
+      await DB.setActivePlan(app.activeUser.id, b.dataset.activate);
+      await app.refreshRoutine();
+      app.render();
+      UI.toast('Plan activado');
+    }));
+    root.querySelectorAll('[data-del-plan]').forEach(b => b.addEventListener('click', async () => {
+      const ok = await UI.confirm({ title: 'Eliminar plan', message: 'Se borra este plan (sus días y rutina). Tus sesiones y progreso NO se tocan.', confirmLabel: 'Eliminar', danger: true });
+      if (!ok) return;
+      await DB.deletePlan(b.dataset.delPlan);
+      app.render();
+      UI.toast('Plan eliminado');
+    }));
     const newPlan = root.querySelector('#newPlan');
-    if (newPlan) newPlan.addEventListener('click', () => {
-      UI.modal({
-        title: 'Crear nuevo plan',
-        bodyHTML: `<p class="modal-text">Pronto podrás crear varios planes de entrenamiento (por ejemplo una nueva fase) y cambiar entre ellos.</p><p class="modal-text dim">De momento trabajas sobre <strong>${UI.esc((app.routine && app.routine.name) || 'tu plan')}</strong>, donde está todo lo actual.</p>`,
-        actions: [{ label: 'Entendido', kind: 'primary' }],
-      });
+    if (newPlan) newPlan.addEventListener('click', () => createPlanModal(app));
+  }
+
+  function createPlanModal(app) {
+    let type = 'cnp';
+    UI.modal({
+      title: 'Crear plan',
+      bodyHTML: `<div id="newPlanForm">
+        ${UI.field('Nombre', UI.input('name', '', { placeholder: 'Ej: Mi plan' }))}
+        <span class="field-label">Tipo de plan</span>
+        <div class="plan-choices" id="planChoices">
+          <button type="button" class="plan-choice sel" data-plan="cnp"><strong>Plan CNP (mujer)</strong><span class="dim">Rutina completa, guías y contenido CNP.</span></button>
+          <button type="button" class="plan-choice" data-plan="custom"><strong>Plan personalizado</strong><span class="dim">7 días vacíos. Sin guías ni contenido CNP.</span></button>
+          <div class="plan-choice disabled"><strong>Más planes <span class="badge soon">Próximamente</span></strong></div>
+        </div>
+      </div>`,
+      actions: [
+        { label: 'Cancelar', kind: 'ghost' },
+        { label: 'Crear y activar', kind: 'primary', onClick: async (rootEl) => {
+          const d = UI.readForm(rootEl.querySelector('#newPlanForm'));
+          await DB.createPlan(app.activeUser.id, type, { name: d.name.trim() || undefined, activate: true });
+          await app.refreshRoutine();
+          app.go('info', {}, true);
+          UI.toast('Plan creado y activado');
+        }},
+      ],
+      onMount: (rootEl) => rootEl.querySelectorAll('.plan-choice[data-plan]').forEach(b => b.addEventListener('click', () => {
+        rootEl.querySelectorAll('.plan-choice').forEach(x => x.classList.remove('sel'));
+        b.classList.add('sel'); type = b.dataset.plan;
+      })),
     });
   }
 
@@ -467,8 +616,8 @@ const VPlan = (() => {
         </span>
         <span class="ex-actions">
           <span class="ex-type">${TYPE_NAME[e.type] || e.type}</span>
-          <button class="icon-btn" data-edit="${e.id}">✏️</button>
-          ${deletable ? `<button class="icon-btn danger" data-del="${e.id}">🗑️</button>` : ''}
+          <button class="icon-btn" data-edit="${e.id}">${UI.icon('edit', 17)}</button>
+          ${deletable ? `<button class="icon-btn danger" data-del="${e.id}">${UI.icon('trash', 17)}</button>` : ''}
         </span></li>`;
     };
 
@@ -481,7 +630,7 @@ const VPlan = (() => {
 
     return `<div class="section">
       <p class="section-intro">Catálogo de <strong>${UI.esc(app.activeUser.name)}</strong>. Los ejercicios están vinculados a los días de tu rutina: si quitas uno de todos tus días pasa a <strong>desuso</strong>. Los predefinidos <span class="badge def">def</span> no se pueden borrar (siempre están disponibles); los tuyos en desuso sí.</p>
-      <input class="inp" id="exCatalogSearch" placeholder="🔎 Buscar ejercicio…" autocomplete="off" style="margin-bottom:14px">
+      <input class="inp" id="exCatalogSearch" placeholder="Buscar ejercicio…" autocomplete="off" style="margin-bottom:14px">
       <div id="catalogBody">
       <div class="catalog-title">En uso (${inUse.length})</div>
       ${inUse.length ? inUseHTML : '<p class="dim" style="padding:2px 0 14px">Ningún ejercicio en uso.</p>'}
@@ -602,9 +751,87 @@ const VPlan = (() => {
     });
   }
 
+  // ---------- LUGARES ----------
+  async function places(app) {
+    const list = await DB.getPlaces();
+    const rows = list.map((p, i) => `<div class="profile-card">
+      <div class="profile-meta">
+        <strong>${UI.esc(p.name)} ${p.special ? '<span class="badge soon">especial</span>' : ''}</strong>
+        <span class="dim">${p.special ? 'Se resalta en rojo' : 'Normal'}</span>
+      </div>
+      <div class="profile-actions">
+        <button class="icon-btn" data-edit-place="${i}">${UI.icon('edit', 17)}</button>
+        <button class="icon-btn danger" data-del-place="${i}">${UI.icon('trash', 17)}</button>
+      </div>
+    </div>`).join('');
+    return `<div class="section">
+      <p class="section-intro">Lugares donde entrenas. Los <strong>especiales</strong> se resaltan en rojo (como el parque). Se usan al elegir el lugar de un día.</p>
+      ${rows || '<div class="empty-state"><p>Aún no hay lugares.</p></div>'}
+      <button class="btn primary block" id="addPlace">+ Nueva ubicación</button>
+    </div>`;
+  }
+
+  function placesBind(app, root) {
+    root.querySelector('#addPlace').addEventListener('click', () => editPlace(app, null, -1));
+    root.querySelectorAll('[data-edit-place]').forEach(b => b.addEventListener('click', async () => {
+      const list = await DB.getPlaces(); const i = +b.dataset.editPlace;
+      editPlace(app, list[i], i);
+    }));
+    root.querySelectorAll('[data-del-place]').forEach(b => b.addEventListener('click', async () => {
+      const list = await DB.getPlaces(); const i = +b.dataset.delPlace; const p = list[i];
+      const ok = await UI.confirm({ title: `Eliminar ${p.name}`, message: 'Se quita de la lista de lugares. Los días que ya lo usan conservan su texto.', confirmLabel: 'Eliminar', danger: true });
+      if (!ok) return;
+      list.splice(i, 1); await DB.savePlaces(list); app.render(); UI.toast('Lugar eliminado');
+    }));
+  }
+
+  // Propaga un cambio de lugar a los días de la rutina que lo usaban.
+  async function applyPlaceToDays(app, oldName, newName, special) {
+    const rts = await DB.routinesOf(app.activeUser.id);
+    for (const rt of rts) {
+      let changed = false;
+      (rt.days || []).forEach(d => { if ((d.place || '') === oldName) { d.place = newName; d.placeAccent = special; changed = true; } });
+      if (changed) await DB.put('routines', rt);
+    }
+    await app.refreshRoutine();
+  }
+
+  function editPlace(app, existing, index) {
+    const isNew = !existing;
+    UI.modal({
+      title: isNew ? 'Nueva ubicación' : 'Editar ubicación',
+      bodyHTML: `<div id="placeForm">
+        ${UI.field('Nombre', UI.input('name', existing ? existing.name : '', { placeholder: 'Ej: Parque' }))}
+        <label class="mini-check"><input type="checkbox" name="special"${existing && existing.special ? ' checked' : ''}> Lugar especial (se resalta en rojo)</label>
+      </div>`,
+      actions: [
+        { label: 'Cancelar', kind: 'ghost' },
+        { label: 'Guardar', kind: 'primary', onClick: async (root) => {
+          const d = UI.readForm(root.querySelector('#placeForm'));
+          if (!d.name.trim()) { UI.toast('Escribe un nombre', 'err'); return false; }
+          const name = d.name.trim(), special = !!d.special;
+          const list = await DB.getPlaces();
+          const dup = list.findIndex(p => p.name.toLowerCase() === name.toLowerCase());
+          if (isNew) {
+            if (dup !== -1) { UI.toast('Ya existe esa ubicación', 'err'); return false; }
+            list.push({ name, special });
+          } else {
+            const old = list[index];
+            if (dup !== -1 && dup !== index) { UI.toast('Ya existe esa ubicación', 'err'); return false; }
+            list[index] = { name, special };
+            await applyPlaceToDays(app, old.name, name, special);
+          }
+          await DB.savePlaces(list);
+          app.render();
+          UI.toast('Ubicación guardada');
+        }},
+      ],
+    });
+  }
+
   function emptyRoutine() {
     return `<div class="empty-state"><p>No hay rutina configurada.</p></div>`;
   }
 
-  return { week, weekBind, day, dayBind, guides, guide, info, infoBind, exercises, exercisesBind };
+  return { week, weekBind, day, dayBind, guides, guide, info, infoBind, exercises, exercisesBind, places, placesBind };
 })();
