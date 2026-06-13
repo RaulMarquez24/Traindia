@@ -32,15 +32,18 @@ Nació como un plan de entrenamiento concreto y evolucionó a una herramienta ge
 ## ✨ Funcionalidades
 
 #### 🗓️ Planes y rutina
-- **Varios planes** por perfil, con uno activo; cambia entre ellos cuando quieras.
-- Semana de días editables: **bloques, ejercicios, orden, series objetivo**, prioritarios y opcionales.
-- **Intercambiar días**, **lugares de entreno** (con lugares "especiales" destacados) y **restaurar** un día o el plan original.
-- **Suplentes**: define para cada ejercicio sus alternativas (“el sustituto de X es Y o Z”).
+- **Varios planes** por perfil, con uno activo; **crea, cambia y elimina** planes.
+- Al empezar eliges plantilla: **plan CNP** (completo, con guías) o **plan personalizado** (en blanco).
+- Semana de días editables: **bloques/categorías, ejercicios, orden, series objetivo**, marcando prioritarios y opcionales.
+- **Intercambiar días**, **lugares de entreno** (con lugares “especiales” destacados) y **restaurar** un día o el plan original.
+- **Suplentes** por ejercicio (“el sustituto de X es Y o Z”) y **Plan B** por día (alternativas según la situación: “si llueve…”).
 
 #### 🏋️ Sesiones
 - Registro **en vivo** con cronómetro y marcado de series, o **manual** indicando la duración.
 - Campos según el tipo de ejercicio: **peso + reps**, **reps** (peso corporal) o **tiempo**.
 - Soporte de **cardio**: velocidad (km/h), inclinación (%) y nivel.
+- **🤖 Pregunta a una IA:** genera un resumen del ejercicio/serie y lo abre en **ChatGPT, Gemini o Claude** para resolver dudas al instante.
+- **Volumen** (reps × kg) y **duración** calculados solos; reordena ejercicios y añade **notas**.
 - Historial **agrupado por día** con **filtros por año / mes / día** y por autor.
 
 #### 📈 Progreso
@@ -60,11 +63,14 @@ Nació como un plan de entrenamiento concreto y evolucionó a una herramienta ge
 - Los ejercicios **predefinidos no se borran** (siempre disponibles).
 
 #### 📓 Diario
-- Entradas con **texto y estado de ánimo**, vinculadas a tu perfil.
+- Entradas con **texto y estado de ánimo** (5 emojis), vinculadas a tu perfil.
+
+#### 📚 Guías
+- Documentación incluida en el plan CNP (técnica, progresiones, lógica de la semana…), **enlazada desde cada día**.
 
 #### ↕️ Importar / Exportar
 - Granular: **perfil completo, un día, sesiones (rango o concretas), rutinas, progreso** → JSON.
-- Al importar eliges **a qué perfil** se asigna y cómo resolver conflictos (**reemplazar** o **añadir lo que falte**).
+- Al importar eliges **a qué perfil** se asigna, **qué secciones** traer y cómo resolver conflictos (**reemplazar** o **añadir lo que falte**, con re-mapeo de referencias).
 
 #### 📲 PWA
 - Instalable en pantalla de inicio, **100 % offline** tras la primera carga, icono y tema propios.
@@ -162,16 +168,29 @@ Publicado con **GitHub Pages** desde `main` (`/root`). Cada push redespliega sol
 
 ## 📸 Capturas
 
-> _Añade tus capturas en `docs/` y descomenta la tabla._
+<div align="center">
 
-<!--
-| Semana | Registro en vivo | Progreso |
-|:---:|:---:|:---:|
-| ![](docs/semana.png) | ![](docs/live.png) | ![](docs/progreso.png) |
--->
+| Semana | Registro en vivo |
+|:---:|:---:|
+| <img src="docs/semana.png" width="240" alt="Vista semanal"> | <img src="docs/sesiones.png" width="240" alt="Registro en vivo"> |
+| **Progreso** | **Pregunta a una IA** |
+| <img src="docs/progreso.png" width="240" alt="Progreso"> | <img src="docs/ia.png" width="240" alt="Preguntar a una IA"> |
+
+</div>
+
+## 📄 Derechos
+
+**© 2026 Raúl Márquez. Todos los derechos reservados.**
+
+Este repositorio es **público con fines de demostración y portafolio**. Puedes
+ver el código y la app, pero **no está permitido copiarlo, reutilizarlo,
+redistribuirlo ni publicarlo** (total o parcialmente) sin permiso expreso del autor.
+Al no incluir una licencia de código abierto, se aplican los derechos de autor por
+defecto (*all rights reserved*).
 
 ---
 
 <div align="center">
-<sub>Hecho con vanilla JS · PWA offline-first · sin dependencias · ♥</sub>
+<sub>Hecho con vanilla JS · PWA offline-first · sin dependencias · ♥</sub><br>
+<sub>© 2026 Raúl Márquez · Todos los derechos reservados</sub>
 </div>
