@@ -1,5 +1,5 @@
 // Service Worker - Traindía
-const CACHE_NAME = 'traindia-v8';
+const CACHE_NAME = 'traindia-v2.1.0';
 const ASSETS = [
   './',
   './index.html',

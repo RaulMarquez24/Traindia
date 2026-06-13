@@ -16,6 +16,44 @@ const UI = (() => {
     return String(str == null ? '' : str).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
   }
 
+  // ---- Iconos SVG inline (sin dependencias, offline, currentColor) ----
+  const ICONS = {
+    calendar: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
+    dumbbell: '<path d="M6 7v10M18 7v10M3 9v6M21 9v6M6 12h12"/>',
+    activity: '<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>',
+    notebook: '<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 3v18M11 8h5M11 12h5M11 16h5"/>',
+    more: '<circle cx="5" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.6" fill="currentColor" stroke="none"/>',
+    edit: '<path d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
+    trash: '<path d="M3 6h18M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6"/>',
+    plus: '<path d="M12 5v14M5 12h14"/>',
+    search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+    chat: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+    x: '<path d="M18 6 6 18M6 6l12 12"/>',
+    check: '<path d="M20 6 9 17l-5-5"/>',
+    chevronRight: '<path d="m9 18 6-6-6-6"/>',
+    chevronUp: '<path d="m18 15-6-6-6 6"/>',
+    chevronDown: '<path d="m6 9 6 6 6-6"/>',
+    play: '<path d="M6 4v16l14-8z" fill="currentColor" stroke="none"/>',
+    refresh: '<path d="M3 12a9 9 0 0 1 15-6.7L21 8M21 3v5h-5M21 12a9 9 0 0 1-15 6.7L3 16M3 21v-5h5"/>',
+    pin: '<path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/>',
+    settings: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/>',
+    users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>',
+    book: '<path d="M12 7v14M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/>',
+    tag: '<path d="M12.6 2.6A2 2 0 0 0 11.2 2H4a2 2 0 0 0-2 2v7.2a2 2 0 0 0 .6 1.4l8.7 8.7a2.4 2.4 0 0 0 3.4 0l6.6-6.6a2.4 2.4 0 0 0 0-3.4z"/><circle cx="7.5" cy="7.5" r="1" fill="currentColor" stroke="none"/>',
+    info: '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>',
+    clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+    swap: '<path d="M7 21V3M3 7l4-4 4 4M17 3v18M21 17l-4 4-4-4"/>',
+    upload: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/>',
+    warning: '<path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/>',
+    star: '<path d="M12 2l3.1 6.3 6.9 1-5 4.9 1.2 6.9L12 17.8l-6.2 3.3L7 14.1l-5-4.9 6.9-1z"/>',
+    repeat: '<path d="m17 2 4 4-4 4M3 11v-1a4 4 0 0 1 4-4h14M7 22l-4-4 4-4M21 13v1a4 4 0 0 1-4 4H3"/>',
+    palette: '<circle cx="13.5" cy="6.5" r=".6" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".6" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".6" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".6" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.9 0 1.65-.75 1.65-1.69 0-.44-.18-.83-.44-1.12-.29-.29-.44-.65-.44-1.13a1.64 1.64 0 0 1 1.67-1.67h2c3.05 0 5.55-2.5 5.55-5.55C22 6 17.5 2 12 2Z"/>',
+  };
+  function icon(name, size = 20) {
+    const inner = ICONS[name] || '';
+    return `<svg class="ic" viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${inner}</svg>`;
+  }
+
   // ---- Toast ----
   let toastTimer = null;
   function toast(msg, type = 'ok') {
@@ -111,6 +149,65 @@ const UI = (() => {
     });
   }
 
+  // Copia texto al portapapeles. Usa la Clipboard API (NO roba el foco), para no
+  // invalidar la activación del usuario al abrir luego un enlace (clave en Android).
+  function copyText(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).catch(() => { /* noop */ });
+      return true;
+    }
+    // Fallback solo si no hay Clipboard API (puede robar foco; raro en móvil moderno).
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text; ta.style.position = 'fixed'; ta.style.top = '-1000px'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.focus(); ta.select();
+      document.execCommand('copy'); document.body.removeChild(ta);
+      return true;
+    } catch (e) { return false; }
+  }
+
+  // Abre una URL externa de forma fiable (mejor que window.open en PWA/móvil).
+  function openUrl(url) {
+    const a = document.createElement('a');
+    a.href = url; a.target = '_blank'; a.rel = 'noopener noreferrer';
+    document.body.appendChild(a); a.click(); a.remove();
+  }
+
+  // ---- Preguntar a una IA (abre ChatGPT/Gemini/Claude con el contexto) ----
+  // copyOnly: la IA no admite prerrellenar por URL, así que se copia y se pega.
+  const AI_PROVIDERS = [
+    { key: 'chatgpt', label: 'ChatGPT', url: (t) => 'https://chatgpt.com/?q=' + encodeURIComponent(t) },
+    { key: 'gemini', label: 'Gemini', url: (t) => 'https://gemini.google.com/app?q=' + encodeURIComponent(t) },
+    { key: 'claude', label: 'Claude', url: (t) => 'https://claude.ai/new?q=' + encodeURIComponent(t) },
+  ];
+  function askAI(initialText) {
+    modal({
+      title: 'Preguntar a una IA',
+      bodyHTML: `<p class="field-hint" style="margin-top:0">Edita el texto si quieres y elige con qué IA abrir. En Gemini se copia el texto para que lo pegues.</p>
+        ${textarea('aiPrompt', initialText, '', 7)}
+        <div class="ai-providers" id="aiProviders"></div>`,
+      actions: [{ label: 'Cerrar', kind: 'ghost' }],
+      onMount: (root) => {
+        const ta = root.querySelector('textarea[name="aiPrompt"]');
+        const box = root.querySelector('#aiProviders');
+        AI_PROVIDERS.forEach(p => {
+          const b = document.createElement('button');
+          b.className = 'btn ghost block';
+          b.textContent = `Abrir en ${p.label}`;
+          b.addEventListener('click', () => {
+            const text = ta.value;
+            copyText(text); // respaldo en portapapeles (no roba foco), por si la IA no prerrellena
+            openUrl(p.url(text));
+            toast(`Abriendo ${p.label}…`);
+            closeModal();
+          });
+          box.appendChild(b);
+        });
+        setTimeout(() => { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }, 120);
+      },
+    });
+  }
+
   // ---- Prompt de texto ----
   function prompt({ title = '', label = '', value = '', placeholder = '', confirmLabel = 'Aceptar' }) {
     return new Promise((resolve) => {
@@ -156,30 +253,49 @@ const UI = (() => {
   }
 
   // ---- Selector de color ----
-  // Paleta amplia: muchos colores para elegir tocando, sin complicaciones.
+  // ESSENTIALS: colores principales (una fila). COLORS: paleta completa.
+  const ESSENTIALS = ['#4f46e5', '#2563eb', '#0e9aae', '#16a34a', '#eab308', '#ea580c', '#dc2626', '#ec4899'];
   const COLORS = [
-    '#4f46e5', '#7c3aed', '#2457d6', '#0e9aae', '#178a8a', '#14b8a6',
-    '#2d6a4f', '#40916c', '#1b9e77', '#6a8a2d', '#9bbf3a', '#d97706',
-    '#b8860b', '#d4a017', '#f08c00', '#e8590c', '#c14a1f', '#d64545',
-    '#e11d48', '#c2477f', '#e0559b', '#ff7ab6', '#9b59b6', '#5e4a8a',
-    '#3d5a80', '#5a7bd8', '#6d4c41', '#64748b', '#3a3a3a',
+    '#4f46e5', '#7c3aed', '#2457d6', '#2563eb', '#0e9aae', '#178a8a', '#14b8a6',
+    '#16a34a', '#2d6a4f', '#40916c', '#1b9e77', '#6a8a2d', '#9bbf3a', '#eab308',
+    '#d97706', '#b8860b', '#d4a017', '#f08c00', '#ea580c', '#e8590c', '#c14a1f',
+    '#dc2626', '#d64545', '#e11d48', '#c2477f', '#e0559b', '#ec4899', '#ff7ab6',
+    '#9b59b6', '#5e4a8a', '#3d5a80', '#5a7bd8', '#6d4c41', '#64748b', '#3a3a3a',
   ];
-  function colorPicker(name, value = COLORS[0]) {
+
+  // Layout: [seleccionado] | [colores principales] [icono paleta]
+  function colorPicker(name, value = ESSENTIALS[0]) {
     return `<div class="color-picker" data-color-field="${esc(name)}">
-      ${COLORS.map(c => `<button type="button" class="color-dot${c === value ? ' sel' : ''}" data-color="${c}" style="background:${c}"></button>`).join('')}
+      <span class="color-current" data-current style="background:${esc(value)}" title="Color seleccionado"></span>
+      <span class="color-sep"></span>
+      ${ESSENTIALS.map(c => `<button type="button" class="color-dot${c === value ? ' sel' : ''}" data-color="${c}" style="background:${c}"></button>`).join('')}
+      <button type="button" class="color-dot color-palette" data-more title="Seleccionar de la paleta">${icon('palette', 18)}</button>
       <input type="hidden" name="${esc(name)}" value="${esc(value)}">
     </div>`;
   }
+
+  // Modal con la paleta completa (solo tocar, sin sliders)
+  function openPalette(current, onPick) {
+    modal({
+      title: 'Seleccionar de la paleta',
+      bodyHTML: `<div class="color-picker palette-grid">${COLORS.map(c => `<button type="button" class="color-dot${c === current ? ' sel' : ''}" data-color="${c}" style="background:${c}"></button>`).join('')}</div>`,
+      actions: [{ label: 'Cerrar', kind: 'ghost' }],
+      onMount: (root) => root.querySelectorAll('[data-color]').forEach(d => d.addEventListener('click', () => { closeModal(); onPick(d.dataset.color); })),
+    });
+  }
+
   function bindColorPicker(scope) {
     scope.querySelectorAll('[data-color-field]').forEach(pic => {
       const hidden = pic.querySelector('input[type="hidden"]');
-      pic.querySelectorAll('.color-dot[data-color]').forEach(dot => {
-        dot.addEventListener('click', () => {
-          pic.querySelectorAll('.color-dot').forEach(d => d.classList.remove('sel'));
-          dot.classList.add('sel');
-          hidden.value = dot.dataset.color;
-        });
-      });
+      const current = pic.querySelector('[data-current]');
+      const setVal = (c) => {
+        hidden.value = c;
+        if (current) current.style.background = c;
+        pic.querySelectorAll('.color-dot[data-color]').forEach(d => d.classList.toggle('sel', d.dataset.color === c));
+      };
+      pic.querySelectorAll('.color-dot[data-color]').forEach(dot => dot.addEventListener('click', () => setVal(dot.dataset.color)));
+      const palette = pic.querySelector('.color-palette');
+      if (palette) palette.addEventListener('click', () => openPalette(hidden.value, setVal));
     });
   }
 
@@ -237,7 +353,7 @@ const UI = (() => {
   // ---- Selector de ejercicios con buscador (móvil-friendly) ----
   // pickExercise({ exercises, title, allowNew, onPick }) → onPick(ex) o onPick({isNew, name, muscleGroup, type})
   const TYPE_SHORT = { weight: 'peso+reps', reps: 'reps', time: 'tiempo' };
-  function pickExercise({ exercises, title = 'Elegir ejercicio', allowNew = true, onPick, lockGroup = null }) {
+  function pickExercise({ exercises, title = 'Elegir ejercicio', allowNew = true, onPick, lockGroup = null, categories = null }) {
     const sorted = [...exercises].sort((a, b) => a.name.localeCompare(b.name));
     modal({
       title, size: 'wide',
@@ -256,7 +372,7 @@ const UI = (() => {
           listEl.querySelectorAll('[data-id]').forEach(b => b.addEventListener('click', () => { closeModal(); onPick(sorted.find(e => e.id === b.dataset.id)); }));
           const nb = listEl.querySelector('[data-new]');
           if (nb) nb.addEventListener('click', async () => {
-            const nu = await newExercisePrompt(q.trim(), lockGroup);
+            const nu = await newExercisePrompt(q.trim(), lockGroup, categories);
             if (nu) { closeModal(); onPick({ isNew: true, ...nu }); }
           });
         };
@@ -267,13 +383,51 @@ const UI = (() => {
     });
   }
 
-  function newExercisePrompt(name, lockedGroup) {
+  // Selector con buscador reutilizable (sustituye a <select> largos en móvil).
+  // pickFromList({ title, options:[{value,label}]|string[], value, onPick(value,opt) })
+  function pickFromList({ title = 'Elegir', options, value, onPick }) {
+    const opts = (options || []).map(o => (typeof o === 'object' ? o : { value: o, label: o }));
+    const searchable = opts.length > 8;
+    modal({
+      title, size: 'wide',
+      bodyHTML: `${searchable ? '<input class="inp" id="listSearch" placeholder="Buscar…" autocomplete="off">' : ''}<div class="picker-list" id="listResults"></div>`,
+      actions: [{ label: 'Cerrar', kind: 'ghost' }],
+      onMount: (root) => {
+        const listEl = root.querySelector('#listResults');
+        const draw = (q) => {
+          const ql = norm(q || '');
+          const items = opts.filter(o => !ql || norm(o.label).includes(ql));
+          listEl.innerHTML = items.map(o => `<button class="picker-row${String(o.value) === String(value) ? ' sel' : ''}" data-val="${esc(o.value)}"><span class="picker-name">${esc(o.label)}</span></button>`).join('') || '<div class="empty-state"><p class="dim">Sin resultados.</p></div>';
+          listEl.querySelectorAll('[data-val]').forEach(b => b.addEventListener('click', () => { closeModal(); onPick(b.dataset.val, opts.find(o => String(o.value) === b.dataset.val)); }));
+        };
+        const search = root.querySelector('#listSearch');
+        if (search) { search.addEventListener('input', () => draw(search.value)); setTimeout(() => search.focus(), 120); }
+        draw('');
+      },
+    });
+  }
+  // Botón con aspecto de select que abre el buscador.
+  function selectButton(id, label) {
+    return `<button type="button" class="select-btn" id="${esc(id)}">${esc(label)}<span class="select-caret">▾</span></button>`;
+  }
+
+  function newExercisePrompt(name, lockedGroup, categories) {
+    const cats = Array.isArray(categories) ? categories : null;
+    let groupHTML;
+    if (lockedGroup) {
+      groupHTML = `<p class="field-hint" style="margin-top:0">Categoría: <strong>${esc(lockedGroup)}</strong></p>`;
+    } else if (cats && cats.length) {
+      groupHTML = field('Categoría', `<select class="inp" name="muscleGroup" id="npCat">${cats.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('')}<option value="__new__">➕ Otra categoría…</option></select>`)
+        + `<div id="npNewCat" style="display:none">${field('Nueva categoría', input('newCat', '', { placeholder: 'Ej: Cardio' }))}</div>`;
+    } else {
+      groupHTML = field('Grupo muscular', input('muscleGroup', '', { placeholder: 'Ej: Pecho, Cardio…' }));
+    }
     return new Promise((resolve) => {
       modal({
         title: 'Nuevo ejercicio',
         bodyHTML: `<div id="npForm">
           ${field('Nombre', input('name', name))}
-          ${lockedGroup ? `<p class="field-hint" style="margin-top:0">Categoría: <strong>${esc(lockedGroup)}</strong></p>` : field('Grupo muscular', input('muscleGroup', '', { placeholder: 'Ej: Pecho, Cardio…' }))}
+          ${groupHTML}
           ${field('Tipo', select('type', [
             { value: 'weight', label: 'Peso + repeticiones' },
             { value: 'reps', label: 'Repeticiones (peso corporal)' },
@@ -284,9 +438,15 @@ const UI = (() => {
           { label: 'Crear', kind: 'primary', onClick: (root) => {
             const d = readForm(root.querySelector('#npForm'));
             if (!d.name.trim()) { toast('Escribe un nombre', 'err'); return false; }
-            resolve({ name: d.name.trim(), muscleGroup: lockedGroup || (d.muscleGroup.trim() || 'General'), type: d.type });
+            let group = lockedGroup || d.muscleGroup || 'General';
+            if (!lockedGroup && cats && d.muscleGroup === '__new__') group = (d.newCat || '').trim() || 'General';
+            resolve({ name: d.name.trim(), muscleGroup: group.trim ? group.trim() : group, type: d.type });
           }},
         ],
+        onMount: (cats && !lockedGroup) ? (root) => {
+          const sel = root.querySelector('#npCat'); const box = root.querySelector('#npNewCat');
+          sel.addEventListener('change', () => { box.style.display = sel.value === '__new__' ? '' : 'none'; });
+        } : undefined,
       });
     });
   }
@@ -306,8 +466,8 @@ const UI = (() => {
   return {
     esc, norm, toast, modal, closeModal, confirm,
     field, input, textarea, select, readForm,
-    colorPicker, bindColorPicker, avatar, COLORS,
-    pickExercise, newExercisePrompt, prompt,
+    colorPicker, bindColorPicker, avatar, COLORS, ESSENTIALS,
+    pickExercise, newExercisePrompt, prompt, askAI, icon, pickFromList, selectButton,
     lineChart, fmtDate, fmtDateShort,
   };
 })();
