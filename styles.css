@@ -56,7 +56,9 @@
   font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: var(--ink-dim);
   letter-spacing: 0.12em; text-transform: uppercase; font-weight: 600; margin-bottom: 8px; display: block;
 }
-.version-foot { font-size: 11px; color: var(--ink-dim); text-align: center; margin-top: 28px; font-family: 'IBM Plex Mono', monospace; letter-spacing: 0.05em; }
+.version-foot { font-size: 11px; color: var(--ink-dim); text-align: center; margin-top: 28px; font-family: 'IBM Plex Mono', monospace; letter-spacing: 0.05em; line-height: 1.7; }
+.foot-link { color: var(--strong); text-decoration: none; }
+.foot-link:active { opacity: .6; }
 .note-box { background: var(--bg-card); border: 1px solid var(--line); border-radius: 12px; padding: 14px; margin: 12px 0; }
 .note-box p { font-size: 13px; color: var(--ink-soft); line-height: 1.5; white-space: pre-wrap; }
 
@@ -106,8 +108,11 @@ textarea.inp { resize: vertical; line-height: 1.4; }
   display: flex; align-items: center; gap: 14px; width: 100%; text-align: left;
   background: var(--bg-card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px;
   margin-bottom: 10px; cursor: pointer;
+  color: var(--ink); text-decoration: none;
 }
 .big-row:active { background: var(--line-soft); }
+.big-row-text strong { color: var(--ink); }
+.big-row-text .dim { color: var(--ink-dim); }
 .big-row-icon { font-size: 22px; }
 .big-row-icon.tile { width: 38px; height: 38px; border-radius: 10px; display: flex; align-items: center; justify-content: center; color: #fff; flex-shrink: 0; }
 .big-row-text { flex: 1; display: flex; flex-direction: column; }
