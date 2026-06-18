@@ -32,6 +32,26 @@ const app = {
     await this.refreshRoutine();
     await DB.ensurePlaces(this.routine);
     this.go('week', {}, true);
+    await VSessions.checkResume(this);
+  },
+
+  // ---- Sesión en curso (autoguardado + indicador) ----
+  _live: null,
+  persistLive() {
+    if (!this._live) return;
+    this._live.draft = true;
+    DB.put('sessions', this._live).catch(() => {});
+  },
+  updateActiveBar() {
+    const bar = document.getElementById('activeBar');
+    if (!bar) return;
+    if (this._live && this.currentView !== 'live') {
+      bar.style.display = 'flex';
+      const t = bar.querySelector('.ab-text');
+      if (t) t.textContent = 'Entreno en curso' + (this._live.name ? ' · ' + this._live.name : '');
+    } else {
+      bar.style.display = 'none';
+    }
   },
 
   registerViews() {
@@ -66,6 +86,11 @@ const app = {
     document.getElementById('userChip').addEventListener('click', () => this.openUserMenu());
     const dataBtn = document.getElementById('dataBtn');
     if (dataBtn) dataBtn.addEventListener('click', () => VData.openMenu(this));
+    const activeBar = document.getElementById('activeBar');
+    if (activeBar) activeBar.addEventListener('click', () => { if (this._live) this.go('live', { dayId: this._live.dayId }); });
+    // Autoguardado extra al ocultar/cerrar la app
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') this.persistLive(); });
+    window.addEventListener('pagehide', () => this.persistLive());
   },
 
   async loadUsers() {
@@ -119,6 +144,7 @@ const app = {
     main.innerHTML = `<div class="view active">${html}</div>`;
     this.bindLinks(main);
     if (def.bind) { try { def.bind(this, main, this.params); } catch (e) { console.error(e); } }
+    this.updateActiveBar();
   },
 
   bindLinks(scope) {

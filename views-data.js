@@ -52,8 +52,8 @@ const VData = (() => {
       </div>
       <div class="card">
         <div class="card-label">Importar</div>
-        <button class="btn primary block" id="impBtn">Importar archivo JSON</button>
-        <p class="field-hint">Al importar verás de qué perfil viene y elegirás cómo aplicarlo (reemplazar o añadir lo diferente).</p>
+        <button class="btn primary block" id="impBtn">Importar (archivo o pegar JSON)</button>
+        <p class="field-hint">Pega el JSON o elige un archivo. Podrás elegir a qué perfil(es) asignarlo y qué partes importar.</p>
       </div>
     </div>`;
   }
@@ -68,7 +68,7 @@ const VData = (() => {
     root.querySelector('#expSessions').addEventListener('click', () => exportSessions(app));
     root.querySelector('#expProgress').addEventListener('click', () => exportProgress(app));
     root.querySelector('#expRoutines').addEventListener('click', () => exportRoutines(app));
-    root.querySelector('#impBtn').addEventListener('click', () => triggerImport(app));
+    root.querySelector('#impBtn').addEventListener('click', () => startImport(app));
   }
 
   // ---- Menú global (botón de cabecera, disponible en cualquier sección) ----
@@ -81,7 +81,7 @@ const VData = (() => {
         <button class="menu-row" data-act="exp-sessions"><span>${UI.icon('upload', 17)} Exportar sesiones</span><span class="chev">›</span></button>
         <button class="menu-row" data-act="exp-progress"><span>${UI.icon('upload', 17)} Exportar progreso</span><span class="chev">›</span></button>
         <button class="menu-row" data-act="exp-routines"><span>${UI.icon('upload', 17)} Exportar rutinas</span><span class="chev">›</span></button>
-        <button class="menu-row" data-act="import"><span>${UI.icon('swap', 17)} Importar archivo</span><span class="chev">›</span></button>
+        <button class="menu-row" data-act="import"><span>${UI.icon('swap', 17)} Importar (archivo o pegar)</span><span class="chev">›</span></button>
       </div>
       <p class="field-hint">Para entrenar juntos: exporta un día y pásaselo a tu compañero; al importarlo podrá reemplazar su día o añadir solo lo que le falte.</p>`,
       actions: [{ label: 'Cerrar', kind: 'ghost' }],
@@ -95,26 +95,45 @@ const VData = (() => {
         root.querySelector('[data-act="exp-sessions"]').addEventListener('click', () => go(() => exportSessions(app)));
         root.querySelector('[data-act="exp-progress"]').addEventListener('click', () => go(() => exportProgress(app)));
         root.querySelector('[data-act="exp-routines"]').addEventListener('click', () => go(() => exportRoutines(app)));
-        root.querySelector('[data-act="import"]').addEventListener('click', () => go(() => triggerImport(app)));
+        root.querySelector('[data-act="import"]').addEventListener('click', () => go(() => startImport(app)));
       },
     });
   }
 
-  // ---- Lectura de archivo + enrutado por tipo ----
-  function triggerImport(app) {
-    const inp = document.createElement('input');
-    inp.type = 'file'; inp.accept = 'application/json,.json';
-    inp.addEventListener('change', () => {
-      const f = inp.files[0]; if (!f) return;
-      const reader = new FileReader();
-      reader.onload = () => {
-        let parsed;
-        try { parsed = JSON.parse(reader.result); } catch (e) { UI.toast('Archivo JSON inválido', 'err'); return; }
-        routeImport(app, parsed);
-      };
-      reader.readAsText(f);
+  // ---- Importar: pegar texto JSON o elegir archivo ----
+  function startImport(app) {
+    UI.modal({
+      title: 'Importar datos', size: 'wide',
+      bodyHTML: `
+        <p class="field-hint" style="margin-top:0">Pega aquí el texto JSON exportado, o elige un archivo.</p>
+        <textarea class="inp" id="impText" rows="6" placeholder='Pega el JSON aquí… (empieza por {"format":"cnp-export"…})'></textarea>
+        <button class="btn ghost block" id="impFileBtn" style="margin-top:8px">${UI.icon('upload', 15)} …o elegir un archivo</button>`,
+      actions: [
+        { label: 'Cancelar', kind: 'ghost' },
+        { label: 'Continuar', kind: 'primary', onClick: (root) => {
+          const txt = (root.querySelector('#impText').value || '').trim();
+          if (!txt) { UI.toast('Pega el JSON o elige un archivo', 'err'); return false; }
+          let parsed;
+          try { parsed = JSON.parse(txt); } catch (e) { UI.toast('El texto no es un JSON válido', 'err'); return false; }
+          if (!parsed || parsed.format !== FORMAT || !parsed.data) { UI.toast('No es un export de Traindía', 'err'); return false; }
+          routeImport(app, parsed);
+        }},
+      ],
+      onMount: (root) => {
+        root.querySelector('#impFileBtn').addEventListener('click', () => {
+          const inp = document.createElement('input');
+          inp.type = 'file'; inp.accept = 'application/json,.json';
+          inp.addEventListener('change', () => {
+            const f = inp.files[0]; if (!f) return;
+            const reader = new FileReader();
+            reader.onload = () => { root.querySelector('#impText').value = reader.result; };
+            reader.readAsText(f);
+          });
+          inp.click();
+        });
+        setTimeout(() => root.querySelector('#impText').focus(), 120);
+      },
     });
-    inp.click();
   }
 
   function routeImport(app, payload) {
@@ -240,6 +259,15 @@ const VData = (() => {
   }
 
   // ---------- IMPORTAR ----------
+  function importItemLabel(key, it) {
+    if (key === 'exercises') return UI.esc(it.name || 'Ejercicio');
+    if (key === 'routines') return UI.esc(it.name || 'Plan');
+    if (key === 'sessions') return `${UI.fmtDateShort(it.date)} · ${UI.esc(it.name || 'Sesión')}`;
+    if (key === 'progress') return `${UI.fmtDateShort(it.date)}${it.weight ? ` · ${it.weight} kg` : ''}`;
+    if (key === 'journal') return `${UI.fmtDateShort(it.date)}`;
+    return UI.esc(String(it.id));
+  }
+
   async function importFlow(app, payload) {
     const users = await DB.getUsers();
     const counts = payload.data;
@@ -251,52 +279,105 @@ const VData = (() => {
       { key: 'journal', label: 'Diario' },
     ].filter(s => (counts[s.key] || []).length);
 
-    const targetOpts = users.map(u => ({ value: u.id, label: u.name + (u.isMain ? ' (principal)' : ' (invitado)') }))
-      .concat([{ value: '__new__', label: '+ Crear nuevo invitado' }]);
+    // sección con checkbox global + lista de elementos editable (para quitar lo que no quieras)
+    const sectionHTML = (s) => {
+      const items = counts[s.key];
+      const editable = items.length > 1 && items.length <= 60;
+      return `<div class="imp-sec">
+        <label class="check-row imp-sec-head"><input type="checkbox" data-sec="${s.key}" checked><span>${s.label} <span class="dim">(${items.length})</span></span>${editable ? `<button type="button" class="imp-toggle" data-toggle="${s.key}">editar</button>` : ''}</label>
+        ${editable ? `<div class="imp-items" data-items="${s.key}" style="display:none">${items.map(it => `<label class="check-row sub"><input type="checkbox" data-item="${s.key}" data-id="${UI.esc(String(it.id))}" checked><span>${importItemLabel(s.key, it)}</span></label>`).join('')}</div>` : ''}
+      </div>`;
+    };
 
     UI.modal({
-      title: 'Importar datos',
+      title: 'Importar datos', size: 'wide',
       bodyHTML: `
         <p class="modal-text">Archivo de <strong>${UI.esc(payload.user?.name || 'desconocido')}</strong>.</p>
         <div id="impForm">
-          ${UI.field('Asignar a perfil', UI.select('target', targetOpts, users[0].id))}
+          <span class="field-label">Asignar a perfil(es)</span>
+          <p class="field-hint" style="margin-top:0;margin-bottom:8px">Puedes marcar varios: se importan los mismos datos a cada uno (luego editas el de cada perfil por separado).</p>
+          <div class="check-list" style="max-height:none;margin-bottom:10px">
+            ${users.map((u, i) => `<label class="check-row"><input type="checkbox" data-user="${u.id}"${i === 0 ? ' checked' : ''}><span>${UI.esc(u.name)}${u.isMain ? ' (principal)' : ' (invitado)'}</span></label>`).join('')}
+            <label class="check-row"><input type="checkbox" data-newguest><span>+ Crear nuevo invitado</span></label>
+          </div>
           <div id="newGuestBox" style="display:none">
             ${UI.field('Nombre del invitado', UI.input('guestName', payload.user?.name || '', { placeholder: 'Nombre' }))}
             ${UI.field('Color', UI.colorPicker('guestColor', payload.user?.color || UI.ESSENTIALS[1]))}
           </div>
           <span class="field-label">Qué importar</span>
-          <div class="check-list" style="max-height:none;margin-bottom:12px">
-            ${SECTIONS.length ? SECTIONS.map(s => `<label class="check-row"><input type="checkbox" data-sec="${s.key}" checked><span>${s.label} <span class="dim">(${counts[s.key].length})</span></span></label>`).join('') : '<p class="dim" style="padding:2px">El archivo no tiene datos.</p>'}
+          <div style="margin-bottom:12px">
+            ${SECTIONS.length ? SECTIONS.map(sectionHTML).join('') : '<p class="dim" style="padding:2px">El archivo no tiene datos.</p>'}
           </div>
-          ${UI.field('Si hay conflictos de id', UI.select('policy', [
-            { value: 'duplicate', label: 'Duplicar (crear copias nuevas)' },
-            { value: 'overwrite', label: 'Sobreescribir (reemplazar existentes)' }], 'duplicate'),
-            'Duplicar evita pisar datos; sobreescribir actualiza registros con el mismo id.')}
+          <span class="field-label">Si ya tienes esos datos</span>
+          ${UI.select('policy', [
+            { value: 'duplicate', label: 'Añadir como copia nueva' },
+            { value: 'overwrite', label: 'Reemplazar lo que coincida' }], 'duplicate')}
+          <p class="field-hint" id="policyHint"></p>
         </div>`,
       actions: [
         { label: 'Cancelar', kind: 'ghost' },
         { label: 'Importar', kind: 'primary', onClick: async (root) => {
-          const d = UI.readForm(root.querySelector('#impForm'));
-          const sections = new Set([...root.querySelectorAll('[data-sec]:checked')].map(c => c.dataset.sec));
-          if (sections.size === 0) { UI.toast('Marca al menos una sección', 'err'); return false; }
-          let targetUserId = d.target;
-          if (d.target === '__new__') {
-            if (!d.guestName || !d.guestName.trim()) { UI.toast('Escribe el nombre del invitado', 'err'); return false; }
-            const guest = await DB.createUser({ name: d.guestName, color: d.guestColor, isGuest: true });
-            targetUserId = guest.id;
+          const targetIds = [...root.querySelectorAll('[data-user]:checked')].map(c => c.dataset.user);
+          const newGuest = root.querySelector('[data-newguest]').checked;
+          if (!targetIds.length && !newGuest) { UI.toast('Elige al menos un perfil', 'err'); return false; }
+
+          // secciones + filtrado por elemento
+          const chosen = new Set();
+          const filtered = {};
+          for (const s of SECTIONS) {
+            const secChk = root.querySelector(`[data-sec="${s.key}"]`);
+            if (!secChk || !secChk.checked) continue;
+            const itemsBox = root.querySelector(`[data-items="${s.key}"]`);
+            let sel;
+            if (itemsBox) {
+              const ids = new Set([...root.querySelectorAll(`[data-item="${s.key}"]:checked`)].map(c => c.dataset.id));
+              sel = (counts[s.key] || []).filter(it => ids.has(String(it.id)));
+            } else sel = (counts[s.key] || []);
+            if (sel.length) { filtered[s.key] = sel; chosen.add(s.key); }
           }
-          await applyImport(app, payload, targetUserId, d.policy, sections);
+          if (!chosen.size) { UI.toast('Marca al menos algo que importar', 'err'); return false; }
+
+          if (newGuest) {
+            const name = (root.querySelector('input[name="guestName"]').value || '').trim();
+            if (!name) { UI.toast('Escribe el nombre del invitado', 'err'); return false; }
+            const color = root.querySelector('input[name="guestColor"]').value;
+            const g = await DB.createUser({ name, color, isGuest: true });
+            targetIds.push(g.id);
+          }
+
+          // con varios perfiles se duplica siempre (un mismo id no puede ser de dos perfiles)
+          const policy = targetIds.length > 1 ? 'duplicate' : root.querySelector('select[name="policy"]').value;
+          const payload2 = { ...payload, data: { exercises: [], routines: [], sessions: [], progress: [], journal: [], ...filtered } };
+          for (const tid of targetIds) await applyImport(app, payload2, tid, policy, chosen);
+
           await app.loadUsers();
           await app.refreshRoutine();
           app.render();
-          UI.toast('Importación completada');
+          UI.toast(`Importado a ${targetIds.length} perfil(es)`);
         }},
       ],
       onMount: (root) => {
         UI.bindColorPicker(root);
-        const sel = root.querySelector('select[name="target"]');
+        const ng = root.querySelector('[data-newguest]');
         const box = root.querySelector('#newGuestBox');
-        sel.addEventListener('change', () => { box.style.display = sel.value === '__new__' ? '' : 'none'; });
+        ng.addEventListener('change', () => { box.style.display = ng.checked ? '' : 'none'; });
+        root.querySelectorAll('[data-toggle]').forEach(b => b.addEventListener('click', () => {
+          const items = root.querySelector(`[data-items="${b.dataset.toggle}"]`);
+          const open = items.style.display === 'none';
+          items.style.display = open ? '' : 'none';
+          b.textContent = open ? 'ocultar' : 'editar';
+        }));
+        root.querySelectorAll('[data-sec]').forEach(sc => sc.addEventListener('change', () => {
+          root.querySelectorAll(`[data-item="${sc.dataset.sec}"]`).forEach(ic => { ic.checked = sc.checked; });
+        }));
+        const pol = root.querySelector('select[name="policy"]');
+        const hint = root.querySelector('#policyHint');
+        const setHint = () => {
+          hint.textContent = pol.value === 'duplicate'
+            ? 'Recomendado. Se añade como entradas NUEVAS; nunca borra ni pisa lo que ya tienes (si ya lo tenías idéntico, quedará duplicado).'
+            : 'Si un dato coincide exactamente con uno tuyo (mismo identificador interno), lo actualiza con el del archivo; el resto se añade.';
+        };
+        pol.addEventListener('change', setHint); setHint();
       },
     });
   }
