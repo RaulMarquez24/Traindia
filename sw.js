@@ -2,7 +2,7 @@
 // La versión visible de la app es v2.2.0 (ver pie en la app).
 // CACHE_NAME es solo la clave de caché: súbele el número de build en cada deploy
 // (build-6, build-7, …) para que los cambios lleguen a las apps ya instaladas.
-const CACHE_NAME = 'traindia-build-13';
+const CACHE_NAME = 'traindia-build-14';
 const ASSETS = [
   './',
   './index.html',
@@ -46,23 +46,33 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  if (event.request.method !== 'GET') return;
-  event.respondWith(
-    caches.match(event.request).then((cached) => {
-      if (cached) return cached;
-      return fetch(event.request).then((response) => {
-        if (!response || response.status !== 200) return response;
-        const clone = response.clone();
-        caches.open(CACHE_NAME).then((cache) => {
-          cache.put(event.request, clone).catch(() => {});
-        });
-        return response;
-      }).catch(() => {
-        // Si no hay red y no esta cacheado, devuelve la pagina principal
-        if (event.request.mode === 'navigate') {
-          return caches.match('./index.html');
+  const req = event.request;
+  if (req.method !== 'GET') return;
+  const url = new URL(req.url);
+  const sameOrigin = url.origin === self.location.origin;
+
+  if (sameOrigin) {
+    // Archivos de la app: NETWORK-FIRST. Con red siempre sirve lo último
+    // (las actualizaciones se ven al recargar); sin red, tira de la caché.
+    event.respondWith(
+      fetch(req).then((response) => {
+        if (response && response.status === 200) {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(req, clone).catch(() => {}));
         }
-      });
-    })
-  );
+        return response;
+      }).catch(() => caches.match(req).then((cached) => cached || (req.mode === 'navigate' ? caches.match('./index.html') : undefined)))
+    );
+  } else {
+    // Recursos externos (fuentes): CACHE-FIRST (estáticos, más rápido).
+    event.respondWith(
+      caches.match(req).then((cached) => cached || fetch(req).then((response) => {
+        if (response && response.status === 200) {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(req, clone).catch(() => {}));
+        }
+        return response;
+      }).catch(() => undefined))
+    );
+  }
 });
