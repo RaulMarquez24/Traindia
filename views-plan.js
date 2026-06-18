@@ -156,12 +156,13 @@ const VPlan = (() => {
 
     let related = '';
     if (app.isCnp() && d.relatedGuides && d.relatedGuides.length) {
-      const links = d.relatedGuides.map(gid => {
-        const g = PLAN_DATA.guides.find(x => x.id === gid);
-        if (!g) return '';
-        return `<a class="guide-link" data-link="guide" data-params='${JSON.stringify({ guideId: g.id })}'><span>${UI.esc(g.title)}</span><span class="guide-link-arrow">›</span></a>`;
-      }).join('');
-      related = `<div class="related-guides"><div class="block-label">Guías relacionadas</div>${links}</div>`;
+      const found = d.relatedGuides
+        .map(gid => PLAN_DATA.guides.find(x => x.id === gid))
+        .filter(Boolean); // ignora guías que ya no existen (p.ej. la eliminada)
+      if (found.length) {
+        const links = found.map(g => `<a class="guide-link" data-link="guide" data-params='${JSON.stringify({ guideId: g.id })}'><span>${UI.esc(g.title)}</span><span class="guide-link-arrow">›</span></a>`).join('');
+        related = `<div class="related-guides"><div class="block-label">Guías relacionadas</div>${links}</div>`;
+      }
     }
 
     const placeClass = d.placeAccent ? 'parque' : '';
@@ -175,7 +176,7 @@ const VPlan = (() => {
           ${d.duration ? `<span>${UI.icon('clock', 13)} ${UI.esc(d.duration)}</span>` : ''}
         </div>
       </div>
-      <button class="btn primary block" data-act="start">${UI.icon('play', 15)} Empezar entreno</button>
+      <button class="btn primary block" data-act="start">${app._live ? (app._live.dayId === d.id ? UI.icon('play', 15) + ' Continuar entrenamiento' : UI.icon('clock', 15) + ' Entreno en curso (otro día)') : UI.icon('play', 15) + ' Empezar entreno'}</button>
       ${blocks}
       ${substitutes}
       ${related}
@@ -191,7 +192,14 @@ const VPlan = (() => {
     const d = (app.routine?.days || []).find(x => x.id === params.dayId);
     if (!d) return;
     const start = root.querySelector('[data-act="start"]');
-    if (start) start.addEventListener('click', () => app.go('live', { dayId: d.id }));
+    if (start) start.addEventListener('click', async () => {
+      if (app._live && app._live.dayId !== d.id) {
+        const ok = await UI.confirm({ title: 'Entreno en curso', message: `Tienes un entreno en curso (${app._live.name || 'sin nombre'}). Termínalo o descártalo antes de empezar otro.`, confirmLabel: 'Ir al entreno' });
+        if (ok) app.go('live', { dayId: app._live.dayId });
+        return;
+      }
+      app.go('live', { dayId: d.id });
+    });
     root.querySelector('[data-act="edit-day"]').addEventListener('click', () => editDay(app, d));
     const share = root.querySelector('[data-act="share-day"]');
     if (share) share.addEventListener('click', () => VData.exportDay(app, d.id));

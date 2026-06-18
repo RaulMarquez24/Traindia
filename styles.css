@@ -236,6 +236,31 @@ textarea.inp { resize: vertical; line-height: 1.4; }
 .set-unit { font-size: 11px; color: var(--ink-dim); flex-shrink: 0; }
 .set-done { width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--ink-dim); font-size: 15px; cursor: pointer; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
 .set-done.on { background: var(--strong); border-color: var(--strong); color: #fff; }
+/* reps con lastre/asistencia */
+.set-load-mode { flex: 0 0 auto; width: auto; font-size: 12px; padding: 8px 6px; padding-right: 22px; }
+.set-load { max-width: 64px; flex: 0 0 auto; }
+/* dropsets */
+.drop-row { display: flex; align-items: center; gap: 8px; padding-left: 22px; }
+.drop-tag { font-family: 'IBM Plex Mono', monospace; font-size: 9px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--sub-accent); background: var(--sub-bg); padding: 2px 6px; border-radius: 4px; flex-shrink: 0; }
+.set-foot { padding-left: 22px; }
+.set-drop-btn { background: none; border: none; color: var(--sub-accent); font-size: 12px; font-weight: 600; cursor: pointer; padding: 2px 0; }
+.set-drop-btn:active { opacity: .6; }
+
+/* ---- Barra de entreno activo ---- */
+.active-bar {
+  position: fixed; left: 12px; right: 12px;
+  bottom: calc(var(--nav-h) + var(--safe-bottom) + 10px);
+  z-index: 90; display: flex; align-items: center; gap: 10px;
+  background: var(--strong); color: #fff; border: none; cursor: pointer;
+  padding: 12px 16px; border-radius: 12px; box-shadow: 0 6px 20px rgba(0,0,0,0.2);
+  font-family: 'Inter Tight', sans-serif; text-align: left;
+}
+.active-bar:active { opacity: .85; }
+.ab-dot { width: 9px; height: 9px; border-radius: 50%; background: #fff; flex-shrink: 0; animation: abpulse 1.4s ease-in-out infinite; }
+@keyframes abpulse { 0%,100% { opacity: 1; } 50% { opacity: .3; } }
+.ab-text { flex: 1; font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ab-cta { font-size: 13px; font-weight: 700; flex-shrink: 0; }
+@media (min-width: 600px) { .active-bar { max-width: 540px; margin: 0 auto; } }
 
 /* ---- Progreso ---- */
 .prog-row { display: flex; align-items: center; gap: 12px; background: var(--bg-card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; margin-bottom: 8px; }
@@ -301,6 +326,14 @@ textarea.inp { resize: vertical; line-height: 1.4; }
 .check-list { max-height: 320px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; margin-top: 8px; }
 .check-row { display: flex; align-items: center; gap: 10px; padding: 8px 6px; font-size: 13px; color: var(--ink-soft); border-bottom: 1px solid var(--line-soft); }
 .check-row input { accent-color: var(--strong); width: 18px; height: 18px; }
+/* Importador: secciones editables */
+.imp-sec { border-bottom: 1px solid var(--line-soft); }
+.imp-sec-head { border-bottom: none; }
+.imp-sec-head span:first-of-type { flex: 1; }
+.imp-toggle { background: none; border: none; color: var(--strong); font-size: 12px; font-weight: 600; cursor: pointer; flex-shrink: 0; }
+.imp-toggle:active { opacity: .6; }
+.imp-items { max-height: 200px; overflow-y: auto; padding-left: 22px; margin-bottom: 4px; }
+.imp-items .check-row.sub { padding: 6px 4px; font-size: 12px; border-bottom: none; }
 
 /* ---- Selector de ejercicios con buscador ---- */
 .picker-list { margin-top: 10px; display: flex; flex-direction: column; gap: 4px; max-height: 60vh; overflow-y: auto; }

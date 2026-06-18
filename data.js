@@ -124,7 +124,7 @@ const PLAN_DATA = {
         { orig: "Curl barra", sub: "curl mancuerna o predicador" },
         { orig: "Curl martillo", sub: "curl cuerda polea" }
       ],
-      relatedGuides: ["progresion-dominadas", "barras-basicfit"]
+      relatedGuides: ["progresion-dominadas"]
     },
     {
       id: "jueves",
@@ -177,7 +177,7 @@ const PLAN_DATA = {
         { orig: "Crunch máquina", sub: "cable crunch de rodillas" },
         { orig: "Pallof press", sub: "leñador polea o plancha lateral" }
       ],
-      relatedGuides: ["barras-basicfit"]
+      relatedGuides: []
     },
     {
       id: "viernes",
@@ -235,7 +235,7 @@ const PLAN_DATA = {
         { orig: "Lesión leve pierna", sub: "solo susp. + cinta Z2 30'" }
       ],
       substitutesTitle: "Plan B",
-      relatedGuides: ["sabado-completo", "agilidad", "barras-basicfit"]
+      relatedGuides: ["sabado-completo", "agilidad"]
     },
     {
       id: "domingo",
@@ -628,38 +628,6 @@ const PLAN_DATA = {
           <li><strong>Junio (Go Fit):</strong> si la sala funcional permite agilidad, añadiremos un bloque entre semana.</li>
           <li><strong>Academia:</strong> te darán circuito específico y todo el plan se adapta a eso.</li>
         </ul>
-      `
-    },
-    {
-      id: "barras-basicfit",
-      number: "06",
-      title: "Barras del Basic Fit",
-      summary: "Por qué resbalan y cómo solucionarlo",
-      content: `
-        <p class="lead">Las barras del Basic Fit son anchas y de goma resbaladiza. Esto te perjudica para la prueba de suspensión supina del CNP, porque la barra del examen es metálica y de grosor estándar al que tu mano se debe adaptar.</p>
-
-        <h3>El problema concreto</h3>
-        <ul>
-          <li>Goma sudada → resbala.</li>
-          <li>Diámetro grueso → mano abierta de más, agarre más débil.</li>
-          <li>No replica la barra del examen.</li>
-        </ul>
-
-        <h3>Soluciones</h3>
-
-        <h4>Grips de calistenia (10-15€)</h4>
-        <p>Agarres de cuero o neopreno fino. Mejoran muchísimo la fricción en barras malas. <strong>NO uses guantes acolchados</strong>, eso empeora el agarre.</p>
-
-        <h4>Magnesio líquido</h4>
-        <p>En Basic Fit suelen permitirlo si es líquido (el polvo no). Lo aplicas en las manos, deja pasar unos segundos para que seque, y agarras.</p>
-
-        <h4>Suspensión real en parque cada sábado</h4>
-        <p>Aunque uses grips en gimnasio, una vez por semana tienes que entrenar en barra real. El sábado es ese día.</p>
-
-        <h4>Especificidad supina vía jalón los domingos</h4>
-        <p>El jalón supino mantiene el patrón muscular del examen aunque uses barra del gimnasio.</p>
-
-        <div class="note">En junio cuando cambies a Go Fit reevaluamos las barras. Suelen tener barras metálicas decentes y entonces puedes hacer suspensión también en gimnasio.</div>
       `
     },
     {
