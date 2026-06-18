@@ -315,8 +315,12 @@ const VPlan = (() => {
         <div class="ed-block" data-block="${bi}">
           <div class="ed-block-head">
             <button type="button" class="ed-cat-btn" data-block-cat="${bi}">${UI.esc(b.label || 'Categoría')} ▾</button>
-            <label class="mini-check"><input type="checkbox" data-block-opt="${bi}"${b.optional ? ' checked' : ''}> Opcional</label>
-            <button class="icon-btn danger" data-del-block="${bi}">${UI.icon('trash', 17)}</button>
+            <label class="mini-check"><input type="checkbox" data-block-opt="${bi}"${b.optional ? ' checked' : ''}> Opc.</label>
+            <span class="ed-block-moves">
+              <button class="icon-btn" data-mv-block="up" data-bi="${bi}" title="Subir sección">↑</button>
+              <button class="icon-btn" data-mv-block="down" data-bi="${bi}" title="Bajar sección">↓</button>
+              <button class="icon-btn danger" data-del-block="${bi}" title="Eliminar sección">${UI.icon('trash', 17)}</button>
+            </span>
           </div>
           ${b.exercises.map((ex, ei) => rowHTML(ex, bi, ei)).join('')}
           <button class="btn ghost small" data-add-ex="${bi}">+ Ejercicio</button>
@@ -383,16 +387,22 @@ const VPlan = (() => {
       root.querySelectorAll('[data-block-cat]').forEach(b => b.addEventListener('click', () => {
         sync(root);
         const bi = +b.dataset.blockCat;
-        const used = draft.blocks.map((bl, i) => i !== bi ? bl.label : null).filter(Boolean);
-        pickCategory({ categories, used, onPick: (cat) => { draft.blocks[bi].label = cat; if (!categories.includes(cat)) categories.push(cat); rerender(root); } });
+        // se permiten categorías repetidas en un mismo día (no se excluye ninguna)
+        pickCategory({ categories, used: [], onPick: (cat) => { draft.blocks[bi].label = cat; if (!categories.includes(cat)) categories.push(cat); rerender(root); } });
       }));
       const addBlock = root.querySelector('#addBlock');
       if (addBlock) addBlock.addEventListener('click', () => {
         sync(root);
-        const used = draft.blocks.map(bl => bl.label).filter(Boolean);
-        pickCategory({ categories, used, onPick: (cat) => { draft.blocks.push({ label: cat, optional: false, exercises: [] }); if (!categories.includes(cat)) categories.push(cat); rerender(root); } });
+        pickCategory({ categories, used: [], onPick: (cat) => { draft.blocks.push({ label: cat, optional: false, exercises: [] }); if (!categories.includes(cat)) categories.push(cat); rerender(root); } });
       });
       root.querySelectorAll('[data-del-block]').forEach(b => b.addEventListener('click', () => { sync(root); draft.blocks.splice(+b.dataset.delBlock, 1); rerender(root); }));
+      root.querySelectorAll('[data-mv-block]').forEach(b => b.addEventListener('click', () => {
+        sync(root);
+        const bi = +b.dataset.bi, arr = draft.blocks;
+        if (b.dataset.mvBlock === 'up' && bi > 0) { [arr[bi - 1], arr[bi]] = [arr[bi], arr[bi - 1]]; }
+        else if (b.dataset.mvBlock === 'down' && bi < arr.length - 1) { [arr[bi + 1], arr[bi]] = [arr[bi], arr[bi + 1]]; }
+        rerender(root);
+      }));
       root.querySelectorAll('[data-mv]').forEach(b => b.addEventListener('click', () => {
         sync(root);
         const w = b.closest('.ed-ex'); const bi = +w.dataset.bi, ei = +w.dataset.ei; const arr = draft.blocks[bi].exercises;
