@@ -353,13 +353,14 @@ const UI = (() => {
     const sx = (x) => padL + ((+new Date(x) - minX) / (maxX - minX)) * (W - padL - padR);
     const sy = (y) => H - padB - ((y - minY) / (maxY - minY)) * (H - padT - padB);
 
+    const fmtY = opts.fmtY || ((v) => Math.round(v));
     // grid horizontal (3 líneas)
     let grid = '';
     for (let i = 0; i <= 3; i++) {
       const yVal = minY + (i / 3) * (maxY - minY);
       const yy = sy(yVal);
       grid += `<line x1="${padL}" y1="${yy.toFixed(1)}" x2="${W - padR}" y2="${yy.toFixed(1)}" class="chart-grid"/>`;
-      grid += `<text x="2" y="${(yy + 3).toFixed(1)}" class="chart-axis">${Math.round(yVal)}</text>`;
+      grid += `<text x="2" y="${(yy + 3).toFixed(1)}" class="chart-axis">${esc(String(fmtY(yVal)))}</text>`;
     }
 
     const paths = series.map(s => {

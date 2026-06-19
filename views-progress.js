@@ -17,7 +17,17 @@ const VProgress = (() => {
     { key: 'volume', label: 'Volumen (kg)' },
     { key: 'maxReps', label: 'Reps máx' },
   ];
-  const TIME_METRIC = { key: 'maxTime', label: 'Tiempo máx (s)' };
+  const TIME_METRIC = { key: 'maxTime', label: 'Tiempo máx' };
+
+  // Formatea segundos: <60s → "45s"; <60min → "m:ss"; ≥60min → "h:mm:ss".
+  function fmtSecs(v) {
+    v = Math.max(0, Math.round(v || 0));
+    const h = Math.floor(v / 3600), m = Math.floor((v % 3600) / 60), s = v % 60;
+    const ss = String(s).padStart(2, '0');
+    if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${ss}`;
+    if (m > 0) return `${m}:${ss}`;
+    return `${s}s`;
+  }
 
   // ---- cálculo de series por ejercicio desde sesiones ----
   async function exerciseSeries(userId, exName, metric) {
@@ -149,16 +159,18 @@ const VProgress = (() => {
 
     const prMax = points.length ? Math.max(...points.map(p => p.y)) : null;
     const prPoint = points.length ? points.reduce((b, p) => (p.y > b.y ? p : b), points[0]) : null; // primera vez que alcanzaste el máximo
-    const unit = { maxWeight: ' kg', volume: ' kg', maxReps: ' reps', maxTime: ' s' }[metric] || '';
+    const isTime = metric === 'maxTime';
+    const unit = { maxWeight: ' kg', volume: ' kg', maxReps: ' reps' }[metric] || '';
+    const fmtVal = (v) => isTime ? fmtSecs(v) : `${v}${unit}`; // tiempo → m:ss / h:mm:ss
     const metricLabel = (metrics.find(m => m.key === metric) || {}).label || '';
-    const recent = points.slice(-8).reverse().map(p => `<li><span>${UI.fmtDateShort(p.x)}</span><strong>${p.y === prMax ? `${p.y}${unit} 🏆` : `${p.y}${unit}`}</strong></li>`).join('');
+    const recent = points.slice(-8).reverse().map(p => `<li><span>${UI.fmtDateShort(p.x)}</span><strong>${p.y === prMax ? `${fmtVal(p.y)} 🏆` : fmtVal(p.y)}</strong></li>`).join('');
 
     host.innerHTML = `
       <div class="card">
         ${UI.field('Ejercicio', UI.selectButton('exSelBtn', ex.name))}
         <div class="chips-row small">${metrics.map(m => `<button class="chip${m.key === metric ? ' on' : ''}" data-metric="${m.key}">${m.label}</button>`).join('')}</div>
-        ${prPoint ? `<div class="pr-stat">${UI.icon('star', 16)}<div class="pr-stat-text"><span class="pr-stat-label">Récord · ${UI.esc(metricLabel)}</span><span class="pr-stat-date">${UI.fmtDateShort(prPoint.x)}</span></div><span class="pr-stat-val">${prPoint.y}${unit}</span></div>` : ''}
-        ${UI.lineChart([{ label: ex.name, color: app.activeUser.color, points }], { width: 320, height: 150 })}
+        ${prPoint ? `<div class="pr-stat">${UI.icon('star', 16)}<div class="pr-stat-text"><span class="pr-stat-label">Récord · ${UI.esc(metricLabel)}</span><span class="pr-stat-date">${UI.fmtDateShort(prPoint.x)}</span></div><span class="pr-stat-val">${fmtVal(prPoint.y)}</span></div>` : ''}
+        ${UI.lineChart([{ label: ex.name, color: app.activeUser.color, points }], { width: 320, height: 150, fmtY: isTime ? fmtSecs : undefined })}
       </div>
       ${points.length ? `<div class="block"><div class="block-label">Últimos registros</div><ul class="kv-list">${recent}</ul></div>` : '<div class="empty-state"><p class="dim">Aún no has registrado este ejercicio en ninguna sesión.</p></div>'}`;
 
