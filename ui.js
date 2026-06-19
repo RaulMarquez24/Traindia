@@ -48,6 +48,8 @@ const UI = (() => {
     star: '<path d="M12 2l3.1 6.3 6.9 1-5 4.9 1.2 6.9L12 17.8l-6.2 3.3L7 14.1l-5-4.9 6.9-1z"/>',
     repeat: '<path d="m17 2 4 4-4 4M3 11v-1a4 4 0 0 1 4-4h14M7 22l-4-4 4-4M21 13v1a4 4 0 0 1-4 4H3"/>',
     palette: '<circle cx="13.5" cy="6.5" r=".6" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".6" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".6" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".6" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.9 0 1.65-.75 1.65-1.69 0-.44-.18-.83-.44-1.12-.29-.29-.44-.65-.44-1.13a1.64 1.64 0 0 1 1.67-1.67h2c3.05 0 5.55-2.5 5.55-5.55C22 6 17.5 2 12 2Z"/>',
+    grip: '<circle cx="9" cy="6" r="1.3" fill="currentColor" stroke="none"/><circle cx="15" cy="6" r="1.3" fill="currentColor" stroke="none"/><circle cx="9" cy="12" r="1.3" fill="currentColor" stroke="none"/><circle cx="15" cy="12" r="1.3" fill="currentColor" stroke="none"/><circle cx="9" cy="18" r="1.3" fill="currentColor" stroke="none"/><circle cx="15" cy="18" r="1.3" fill="currentColor" stroke="none"/>',
+    expand: '<path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M3 16v3a2 2 0 0 0 2 2h3"/>',
   };
   function icon(name, size = 20) {
     const inner = ICONS[name] || '';
@@ -488,11 +490,140 @@ const UI = (() => {
     return d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
   }
 
+  // ---- Reordenar arrastrando (touch + ratón) ----
+  // container: el contenedor cuyos hijos directos (itemSelector) se reordenan.
+  // handleSelector: el "agarrador"; solo al pulsarlo empieza el arrastre.
+  // onReorder(orderIds): recibe el array de data-sort-id en el nuevo orden.
+  function makeSortable(container, { itemSelector, handleSelector, onReorder }) {
+    if (!container) return;
+    const items = () => [...container.querySelectorAll(':scope > ' + itemSelector)];
+    let dragging = null, placeholder = null, moved = false;
+    let startY = 0, lastY = 0, rafId = 0, scrollEl = null, prevSB = '';
+
+    // Ancestro con scroll (p.ej. el cuerpo del modal); si no hay, se usa la ventana.
+    const findScroller = () => {
+      let el = container.parentElement;
+      while (el && el !== document.body) {
+        const oy = getComputedStyle(el).overflowY;
+        if ((oy === 'auto' || oy === 'scroll') && el.scrollHeight > el.clientHeight + 2) return el;
+        el = el.parentElement;
+      }
+      return null;
+    };
+
+    // Mueve el HUECO (placeholder) al sitio donde caería, según el centro del
+    // elemento que flota bajo el dedo.
+    const movePlaceholder = () => {
+      const rect = dragging.getBoundingClientRect(); // incluye el transform → posición flotante real
+      const centerY = rect.top + rect.height / 2;
+      let after = null;
+      for (const s of items()) {
+        if (s === dragging) continue;
+        const r = s.getBoundingClientRect();
+        if (centerY < r.top + r.height / 2) { after = s; break; }
+      }
+      if (after) { if (placeholder.nextElementSibling !== after) container.insertBefore(placeholder, after); }
+      else if (container.lastElementChild !== placeholder) container.appendChild(placeholder);
+    };
+
+    const follow = () => {
+      // El elemento flota pegado al dedo (translateY) + ligero "levantamiento" (scale).
+      dragging.style.transform = 'translateY(' + (lastY - startY) + 'px) scale(1.03)';
+    };
+
+    // Auto-scroll cuando el dedo se acerca al borde superior/inferior visible.
+    const EDGE = 70, MAX_SPEED = 16;
+    const tick = () => {
+      if (!dragging) return;
+      let top, bottom;
+      if (scrollEl) { const r = scrollEl.getBoundingClientRect(); top = r.top; bottom = r.bottom; }
+      else { top = 0; bottom = (window.visualViewport ? window.visualViewport.height : window.innerHeight); }
+      let dy = 0;
+      if (lastY < top + EDGE) dy = -MAX_SPEED * Math.min(1, (top + EDGE - lastY) / EDGE);
+      else if (lastY > bottom - EDGE) dy = MAX_SPEED * Math.min(1, (lastY - (bottom - EDGE)) / EDGE);
+      if (dy) {
+        // Escribir scrollTop directamente (instantáneo). Evita window.scrollBy(),
+        // que respeta `scroll-behavior: smooth` y haría el auto-scroll lentísimo.
+        const target = scrollEl || document.scrollingElement || document.documentElement;
+        target.scrollTop += dy;
+        movePlaceholder(); // el contenido se desplaza bajo el elemento flotante
+      }
+      rafId = requestAnimationFrame(tick);
+    };
+
+    const onMove = (e) => {
+      if (!dragging) return;
+      e.preventDefault();
+      moved = true;
+      lastY = e.clientY;
+      follow();
+      movePlaceholder();
+    };
+    const end = () => {
+      if (!dragging) return;
+      cancelAnimationFrame(rafId); rafId = 0;
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', end);
+      window.removeEventListener('pointercancel', end);
+      const d = dragging;
+      // Devolver el elemento al flujo, en la posición del hueco.
+      d.classList.remove('dragging');
+      ['position', 'left', 'top', 'width', 'zIndex', 'transform', 'margin', 'boxSizing', 'pointerEvents'].forEach(p => { d.style[p] = ''; });
+      if (placeholder && placeholder.parentElement === container) container.insertBefore(d, placeholder);
+      if (placeholder) placeholder.remove();
+      document.documentElement.style.scrollBehavior = prevSB;
+      document.body.classList.remove('dragging-active');
+      const order = items().map(el => el.dataset.sortId);
+      const wasMoved = moved;
+      dragging = null; placeholder = null; moved = false; scrollEl = null;
+      if (wasMoved && typeof onReorder === 'function') onReorder(order);
+    };
+
+    container.addEventListener('pointerdown', (e) => {
+      if (dragging) return;
+      const handle = e.target.closest(handleSelector);
+      if (!handle || !container.contains(handle)) return;
+      const item = handle.closest(itemSelector);
+      if (!item || item.parentElement !== container) return; // solo hijos directos de ESTE contenedor
+      e.preventDefault();
+      dragging = item; moved = false; startY = e.clientY; lastY = e.clientY;
+      scrollEl = findScroller();
+      // Desactivar scroll suave durante el arrastre: con `scroll-behavior: smooth`
+      // el auto-scroll por frames se vuelve lentísimo.
+      prevSB = document.documentElement.style.scrollBehavior;
+      document.documentElement.style.scrollBehavior = 'auto';
+      const rect = item.getBoundingClientRect();
+      const cs = getComputedStyle(item);
+      // Hueco que mantiene el espacio mientras el elemento flota.
+      placeholder = document.createElement('div');
+      placeholder.className = 'drag-placeholder';
+      placeholder.style.height = rect.height + 'px';
+      placeholder.style.marginBottom = cs.marginBottom;
+      container.insertBefore(placeholder, item.nextSibling);
+      // Sacar el elemento del flujo y dejarlo "flotando" en su posición actual.
+      item.style.position = 'fixed';
+      item.style.left = rect.left + 'px';
+      item.style.top = rect.top + 'px';
+      item.style.width = rect.width + 'px';
+      item.style.boxSizing = 'border-box';
+      item.style.margin = '0';
+      item.style.zIndex = '95'; // por debajo del header y la nav (z-index 100)
+      item.style.pointerEvents = 'none';
+      item.classList.add('dragging');
+      follow();
+      document.body.classList.add('dragging-active');
+      rafId = requestAnimationFrame(tick);
+      window.addEventListener('pointermove', onMove, { passive: false });
+      window.addEventListener('pointerup', end);
+      window.addEventListener('pointercancel', end);
+    });
+  }
+
   return {
     esc, norm, toast, modal, closeModal, confirm,
     field, input, textarea, select, readForm,
     colorPicker, bindColorPicker, avatar, COLORS, ESSENTIALS,
     pickExercise, newExercisePrompt, prompt, askAI, icon, pickFromList, selectButton,
-    lineChart, fmtDate, fmtDateShort,
+    lineChart, fmtDate, fmtDateShort, makeSortable,
   };
 })();

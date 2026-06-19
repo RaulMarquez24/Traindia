@@ -265,11 +265,12 @@ const VPlan = (() => {
     let rerender;
 
     const rowHTML = (ex, bi, ei) => `
-      <div class="ed-ex" data-bi="${bi}" data-ei="${ei}">
+      <div class="ed-ex" data-bi="${bi}" data-ei="${ei}" data-sort-id="${ei}">
         <input type="hidden" data-f="exerciseId" value="${UI.esc(ex.exerciseId || '')}">
         <input type="hidden" data-f="name" value="${UI.esc(ex.name || '')}">
         <input type="hidden" data-f="type" value="${UI.esc(ex.type || 'weight')}">
         <div class="ed-ex-top">
+          <button type="button" class="drag-handle" data-drag="ex" title="Arrastra para reordenar" aria-label="Arrastrar">${UI.icon('grip', 18)}</button>
           <button type="button" class="ed-ex-pick${ex.name ? '' : ' empty'}" data-pick>${ex.name ? UI.esc(ex.name) : UI.icon('plus', 15) + ' Elegir ejercicio'}</button>
           <input class="inp narrow" data-f="sets" value="${UI.esc(ex.sets || '')}" placeholder="4×8">
         </div>
@@ -278,8 +279,6 @@ const VPlan = (() => {
           <label class="mini-check"><input type="checkbox" data-f="priority"${ex.priority ? ' checked' : ''}> Prior.</label>
           <label class="mini-check"><input type="checkbox" data-f="optional"${ex.optional ? ' checked' : ''}> Opc.</label>
           <span class="ed-ex-moves">
-            <button class="icon-btn" data-mv="up">↑</button>
-            <button class="icon-btn" data-mv="down">↓</button>
             <button class="icon-btn danger" data-mv="del">×</button>
           </span>
         </div>
@@ -312,17 +311,16 @@ const VPlan = (() => {
         <button class="btn ghost small" id="addPlanB">+ Añadir alternativa</button>`;
       if (draft.type === 'rest') return meta + `<p class="field-hint">Los días de descanso no tienen ejercicios.</p>` + planBHTML;
       const blocks = (draft.blocks || []).map((b, bi) => `
-        <div class="ed-block" data-block="${bi}">
+        <div class="ed-block" data-block="${bi}" data-sort-id="${bi}">
           <div class="ed-block-head">
+            <button type="button" class="drag-handle" data-drag="block" title="Arrastra para reordenar la sección" aria-label="Arrastrar sección">${UI.icon('grip', 18)}</button>
             <button type="button" class="ed-cat-btn" data-block-cat="${bi}">${UI.esc(b.label || 'Categoría')} ▾</button>
             <label class="mini-check"><input type="checkbox" data-block-opt="${bi}"${b.optional ? ' checked' : ''}> Opc.</label>
             <span class="ed-block-moves">
-              <button class="icon-btn" data-mv-block="up" data-bi="${bi}" title="Subir sección">↑</button>
-              <button class="icon-btn" data-mv-block="down" data-bi="${bi}" title="Bajar sección">↓</button>
               <button class="icon-btn danger" data-del-block="${bi}" title="Eliminar sección">${UI.icon('trash', 17)}</button>
             </span>
           </div>
-          ${b.exercises.map((ex, ei) => rowHTML(ex, bi, ei)).join('')}
+          <div class="ed-ex-list" data-block="${bi}">${b.exercises.map((ex, ei) => rowHTML(ex, bi, ei)).join('')}</div>
           <button class="btn ghost small" data-add-ex="${bi}">+ Ejercicio</button>
         </div>`).join('');
       return meta + `<div class="editor-blocks">${blocks}</div><button class="btn ghost block" id="addBlock">+ Añadir categoría</button>` + planBHTML;
@@ -396,21 +394,25 @@ const VPlan = (() => {
         pickCategory({ categories, used: [], onPick: (cat) => { draft.blocks.push({ label: cat, optional: false, exercises: [] }); if (!categories.includes(cat)) categories.push(cat); rerender(root); } });
       });
       root.querySelectorAll('[data-del-block]').forEach(b => b.addEventListener('click', () => { sync(root); draft.blocks.splice(+b.dataset.delBlock, 1); rerender(root); }));
-      root.querySelectorAll('[data-mv-block]').forEach(b => b.addEventListener('click', () => {
+      root.querySelectorAll('[data-mv="del"]').forEach(b => b.addEventListener('click', () => {
         sync(root);
-        const bi = +b.dataset.bi, arr = draft.blocks;
-        if (b.dataset.mvBlock === 'up' && bi > 0) { [arr[bi - 1], arr[bi]] = [arr[bi], arr[bi - 1]]; }
-        else if (b.dataset.mvBlock === 'down' && bi < arr.length - 1) { [arr[bi + 1], arr[bi]] = [arr[bi], arr[bi + 1]]; }
+        const w = b.closest('.ed-ex'); const bi = +w.dataset.bi, ei = +w.dataset.ei;
+        draft.blocks[bi].exercises.splice(ei, 1);
         rerender(root);
       }));
-      root.querySelectorAll('[data-mv]').forEach(b => b.addEventListener('click', () => {
-        sync(root);
-        const w = b.closest('.ed-ex'); const bi = +w.dataset.bi, ei = +w.dataset.ei; const arr = draft.blocks[bi].exercises;
-        if (b.dataset.mv === 'del') arr.splice(ei, 1);
-        else if (b.dataset.mv === 'up' && ei > 0) { [arr[ei - 1], arr[ei]] = [arr[ei], arr[ei - 1]]; }
-        else if (b.dataset.mv === 'down' && ei < arr.length - 1) { [arr[ei + 1], arr[ei]] = [arr[ei], arr[ei + 1]]; }
-        rerender(root);
-      }));
+      // Reordenar secciones arrastrando
+      UI.makeSortable(root.querySelector('.editor-blocks'), {
+        itemSelector: '.ed-block', handleSelector: '[data-drag="block"]',
+        onReorder: (order) => { sync(root); draft.blocks = order.map(i => draft.blocks[+i]); rerender(root); },
+      });
+      // Reordenar ejercicios dentro de cada sección arrastrando
+      root.querySelectorAll('.ed-ex-list').forEach(list => {
+        const bi = +list.dataset.block;
+        UI.makeSortable(list, {
+          itemSelector: '.ed-ex', handleSelector: '[data-drag="ex"]',
+          onReorder: (order) => { sync(root); const arr = draft.blocks[bi].exercises; draft.blocks[bi].exercises = order.map(i => arr[+i]); rerender(root); },
+        });
+      });
       root.querySelectorAll('[data-pick]').forEach(b => b.addEventListener('click', () => {
         sync(root);
         const w = b.closest('.ed-ex'); const bi = +w.dataset.bi, ei = +w.dataset.ei;
