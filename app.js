@@ -33,6 +33,7 @@ const app = {
     await DB.ensurePlaces(this.routine);
     this.go('week', {}, true);
     await VSessions.checkResume(this);
+    VData.checkBackupReminder(this); // recordatorio semanal de copia (si procede)
   },
 
   // ---- Sesión en curso (autoguardado + indicador) ----
@@ -45,13 +46,16 @@ const app = {
   updateActiveBar() {
     const bar = document.getElementById('activeBar');
     if (!bar) return;
-    if (this._live && this.currentView !== 'live') {
+    const show = this._live && this.currentView !== 'live';
+    if (show) {
       bar.style.display = 'flex';
       const t = bar.querySelector('.ab-text');
       if (t) t.textContent = 'Entreno en curso' + (this._live.name ? ' · ' + this._live.name : '');
     } else {
       bar.style.display = 'none';
     }
+    // Marca para que el temporizador de descanso global se coloque encima y no se solape.
+    document.body.classList.toggle('has-active-bar', !!show);
   },
 
   registerViews() {
@@ -145,6 +149,7 @@ const app = {
     this.bindLinks(main);
     if (def.bind) { try { def.bind(this, main, this.params); } catch (e) { console.error(e); } }
     this.updateActiveBar();
+    try { VSessions.restEnsure(this); } catch (e) {} // mantiene el descanso global visible al navegar
   },
 
   bindLinks(scope) {
@@ -298,7 +303,7 @@ const app = {
     ].filter(r => !r.cnp || this.isCnp());
     return `<div class="section">
       ${rows.map(r => `<button class="big-row" data-link="${r.v}"><span class="big-row-icon tile" style="background:${r.color}">${UI.icon(r.icon, 20)}</span><span class="big-row-text"><strong>${r.label}</strong><span class="dim">${r.sub}</span></span><span class="chev">›</span></button>`).join('')}
-      <p class="version-foot">Traindía · v2.2.2 · ${Object.keys(this.usersById).length} perfil(es)<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
+      <p class="version-foot">Traindía · v2.3.0 · ${Object.keys(this.usersById).length} perfil(es)<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
     </div>`;
   },
   bindMore() {},
@@ -406,7 +411,7 @@ const app = {
         <button class="btn danger block" id="resetApp">Borrar todos los datos</button>
         <p class="field-hint">Restablece la app al estado inicial (se borran todos los perfiles, sesiones y progreso).</p>
       </div>
-      <p class="version-foot">Traindía · v2.2.2</p>
+      <p class="version-foot">Traindía · v2.3.0</p>
     </div>`;
   },
 

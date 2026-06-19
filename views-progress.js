@@ -147,12 +147,17 @@ const VProgress = (() => {
 
     const points = await exerciseSeries(app.activeUser.id, ex.name, metric);
 
-    const recent = points.slice(-8).reverse().map(p => `<li><span>${UI.fmtDateShort(p.x)}</span><strong>${p.y}</strong></li>`).join('');
+    const prMax = points.length ? Math.max(...points.map(p => p.y)) : null;
+    const prPoint = points.length ? points.reduce((b, p) => (p.y > b.y ? p : b), points[0]) : null; // primera vez que alcanzaste el máximo
+    const unit = { maxWeight: ' kg', volume: ' kg', maxReps: ' reps', maxTime: ' s' }[metric] || '';
+    const metricLabel = (metrics.find(m => m.key === metric) || {}).label || '';
+    const recent = points.slice(-8).reverse().map(p => `<li><span>${UI.fmtDateShort(p.x)}</span><strong>${p.y === prMax ? `${p.y}${unit} 🏆` : `${p.y}${unit}`}</strong></li>`).join('');
 
     host.innerHTML = `
       <div class="card">
         ${UI.field('Ejercicio', UI.selectButton('exSelBtn', ex.name))}
         <div class="chips-row small">${metrics.map(m => `<button class="chip${m.key === metric ? ' on' : ''}" data-metric="${m.key}">${m.label}</button>`).join('')}</div>
+        ${prPoint ? `<div class="pr-stat">${UI.icon('star', 16)}<div class="pr-stat-text"><span class="pr-stat-label">Récord · ${UI.esc(metricLabel)}</span><span class="pr-stat-date">${UI.fmtDateShort(prPoint.x)}</span></div><span class="pr-stat-val">${prPoint.y}${unit}</span></div>` : ''}
         ${UI.lineChart([{ label: ex.name, color: app.activeUser.color, points }], { width: 320, height: 150 })}
       </div>
       ${points.length ? `<div class="block"><div class="block-label">Últimos registros</div><ul class="kv-list">${recent}</ul></div>` : '<div class="empty-state"><p class="dim">Aún no has registrado este ejercicio en ninguna sesión.</p></div>'}`;

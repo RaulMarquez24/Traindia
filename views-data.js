@@ -38,6 +38,44 @@ const VData = (() => {
 
   function stamp() { return DB.todayISO(); }
 
+  // ---- Copia de seguridad completa (perfil principal) ----
+  async function backupProfile(app) {
+    download(await gatherProfile(app.mainUser.id, app.mainUser), `traindia-perfil-${app.mainUser.name}-${stamp()}.json`);
+    await DB.saveSettings({ lastBackupAt: Date.now() });
+    UI.toast('Copia descargada');
+  }
+
+  // Recordatorio semanal de copia de seguridad. Solo si hay datos nuevos desde la
+  // última copia; persiste mientras esté pendiente (te vuelve a avisar en siguientes
+  // aperturas aunque lo omitas o pases días sin entrar); como mucho un aviso al día.
+  async function checkBackupReminder(app) {
+    if (document.querySelector('.modal-overlay')) return; // no encimar otro modal (p.ej. reanudar entreno)
+    const s = (await DB.getSettings()) || {};
+    const now = Date.now(), DAY = 86400000;
+    const lastBackup = s.lastBackupAt || 0;
+    const lastReminder = s.lastBackupReminderAt || 0;
+    const [sessions, progress, journal] = await Promise.all([
+      DB.sessionsOf(app.mainUser.id), DB.progressOf(app.mainUser.id), DB.journalOf(app.mainUser.id),
+    ]);
+    const stamps = [...sessions.filter(x => !x.draft), ...progress, ...journal].map(x => x.createdAt || 0).filter(Boolean);
+    if (!stamps.length) return;
+    const newest = Math.max(...stamps);
+    if (newest <= lastBackup) return; // nada nuevo que respaldar
+    const since = lastBackup || Math.min(...stamps); // si nunca: cuenta desde el dato más antiguo
+    if (now - since < 7 * DAY) return; // cadencia semanal
+    if (lastReminder && now - lastReminder < 20 * 60 * 60 * 1000) return; // como mucho 1/día
+    await DB.saveSettings({ lastBackupReminderAt: now });
+    const daysAgo = lastBackup ? Math.floor((now - lastBackup) / DAY) : 0;
+    UI.modal({
+      title: 'Copia de seguridad',
+      bodyHTML: `<p class="modal-text">Tus entrenos se guardan solo en este dispositivo. ${lastBackup ? `Hace <strong>${daysAgo} día${daysAgo === 1 ? '' : 's'}</strong> que no haces una copia.` : 'Todavía no has hecho ninguna copia de seguridad.'} Descárgala para no perderlos si cambias de móvil o borras la app.</p>`,
+      actions: [
+        { label: 'Ahora no', kind: 'ghost' },
+        { label: 'Descargar copia', kind: 'primary', onClick: async () => { await backupProfile(app); } },
+      ],
+    });
+  }
+
   // ====================================================
   function render(app) {
     return `<div class="section">
@@ -59,11 +97,7 @@ const VData = (() => {
   }
 
   function bind(app, root) {
-    root.querySelector('#expProfile').addEventListener('click', async () => {
-      const data = await gatherProfile(app.mainUser.id, app.mainUser);
-      download(data, `traindia-perfil-${app.mainUser.name}-${stamp()}.json`);
-      UI.toast('Perfil exportado');
-    });
+    root.querySelector('#expProfile').addEventListener('click', () => backupProfile(app));
     root.querySelector('#expDay').addEventListener('click', () => exportDay(app));
     root.querySelector('#expSessions').addEventListener('click', () => exportSessions(app));
     root.querySelector('#expProgress').addEventListener('click', () => exportProgress(app));
@@ -88,10 +122,7 @@ const VData = (() => {
       onMount: (root) => {
         const go = (fn) => { UI.closeModal(); fn(); };
         root.querySelector('[data-act="exp-day"]').addEventListener('click', () => go(() => exportDay(app)));
-        root.querySelector('[data-act="exp-profile"]').addEventListener('click', () => go(async () => {
-          download(await gatherProfile(app.mainUser.id, app.mainUser), `traindia-perfil-${app.mainUser.name}-${stamp()}.json`);
-          UI.toast('Perfil exportado');
-        }));
+        root.querySelector('[data-act="exp-profile"]').addEventListener('click', () => go(() => backupProfile(app)));
         root.querySelector('[data-act="exp-sessions"]').addEventListener('click', () => go(() => exportSessions(app)));
         root.querySelector('[data-act="exp-progress"]').addEventListener('click', () => go(() => exportProgress(app)));
         root.querySelector('[data-act="exp-routines"]').addEventListener('click', () => go(() => exportRoutines(app)));
@@ -554,5 +585,5 @@ const VData = (() => {
     return added;
   }
 
-  return { render, bind, openMenu, exportDay, importDay, exportSession, exportProgressEntry, routeImport };
+  return { render, bind, openMenu, exportDay, importDay, exportSession, exportProgressEntry, routeImport, checkBackupReminder };
 })();

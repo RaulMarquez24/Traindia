@@ -46,6 +46,57 @@
 .icon-btn:active { background: var(--line-soft); }
 .icon-btn.danger { color: var(--priority); }
 
+/* Agarrador para reordenar arrastrando (touch + ratón) */
+.drag-handle {
+  background: none; border: none; padding: 4px 4px; margin: 0;
+  color: var(--ink-dim); cursor: grab; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  touch-action: none; /* clave: evita que el navegador haga scroll al arrastrar */
+  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+  border-radius: 6px;
+}
+.drag-handle:active { cursor: grabbing; background: var(--line-soft); }
+/* Elemento que flota bajo el dedo mientras se arrastra */
+.dragging { opacity: .96; box-shadow: 0 12px 30px rgba(0,0,0,.28); border-color: var(--strong) !important; will-change: transform; }
+/* Hueco que se abre donde caerá */
+.drag-placeholder { border: 2px dashed var(--line); border-radius: 10px; background: var(--line-soft); opacity: .5; box-sizing: border-box; }
+body.dragging-active { -webkit-user-select: none; user-select: none; cursor: grabbing; }
+body.dragging-active * { cursor: grabbing !important; }
+.ed-ex-list { display: block; }
+
+/* Temporizador de descanso (entreno en vivo) */
+.rest-timer {
+  position: fixed; right: 12px;
+  bottom: calc(var(--nav-h) + var(--safe-bottom) + 12px);
+  z-index: 90; display: flex; align-items: stretch;
+  background: var(--bg-2); border: 1px solid var(--line);
+  border-radius: 999px; box-shadow: 0 6px 20px rgba(0,0,0,0.18); overflow: hidden;
+}
+.rest-main {
+  display: flex; align-items: center; gap: 7px;
+  background: none; border: none; padding: 11px 16px; cursor: pointer;
+  font-family: inherit; font-weight: 600; font-size: 14px; color: var(--ink);
+}
+.rest-main:active { background: var(--line-soft); }
+.rest-count { font-variant-numeric: tabular-nums; font-size: 16px; min-width: 44px; text-align: left; }
+.rest-btn {
+  background: none; border: none; border-left: 1px solid var(--line);
+  padding: 0 14px; cursor: pointer; font-family: inherit; font-weight: 600; font-size: 13px; color: var(--ink-soft);
+}
+.rest-btn:active { background: var(--line-soft); }
+.rest-timer.running { background: var(--strong); border-color: var(--strong); animation: restPulse 1.6s ease-in-out infinite; }
+.rest-timer.running .rest-main, .rest-timer.running .rest-btn { color: #fff; }
+.rest-timer.running .rest-btn { border-left-color: rgba(255,255,255,0.3); }
+.rest-timer.running .rest-main:active, .rest-timer.running .rest-btn:active { background: rgba(255,255,255,0.15); }
+@keyframes restPulse { 0%,100% { box-shadow: 0 6px 20px rgba(0,0,0,0.18); } 50% { box-shadow: 0 6px 26px var(--strong); } }
+.live-rest-spacer { height: 76px; }
+/* Mientras hay un descanso en curso, el control de "empezar" de la vista en vivo
+   se oculta: manda la píldora global (#globalRest), visible en toda la app. */
+body.rest-running .rest-start { display: none; }
+/* Si la barra "Entreno en curso" está visible, el descanso global se coloca
+   justo encima para que no se solapen. */
+body.has-active-bar #globalRest { bottom: calc(var(--nav-h) + var(--safe-bottom) + 66px); }
+
 .chev { color: var(--ink-dim); font-size: 18px; }
 
 /* ---- Secciones genéricas ---- */
@@ -217,20 +268,82 @@ textarea.inp { resize: vertical; line-height: 1.4; }
 .live-actions { display: flex; gap: 8px; margin-top: 14px; }
 .live-actions .btn { flex: 1; }
 
-.ex-card { background: var(--bg-card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; margin-bottom: 10px; }
+/* La tarjeta es fila: [agarrador | cuerpo]. El agarrador es la columna fina de
+   la izquierda y TODO el contenido se alinea en una sola columna a su derecha. */
+.ex-card { display: flex; align-items: flex-start; gap: 6px; background: var(--bg-card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; margin-bottom: 10px; }
+.ex-card > .drag-handle { margin-top: 2px; }
+.ex-card-body { flex: 1; min-width: 0; }
+/* "+ Serie" vuelve al borde izquierdo (alineado con el agarrador y los números). */
+.ex-card-body > [data-add-set] { margin-left: -32px; }
 .ex-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
 .ex-card-head strong { font-size: 15px; }
+.ex-card-name { flex: 1; min-width: 0; }
 .ex-card-actions { display: flex; gap: 2px; flex-shrink: 0; }
+.last-time {
+  display: flex; align-items: center; gap: 5px; flex-wrap: wrap;
+  margin: 0 0 9px; padding: 6px 9px;
+  background: var(--line-soft); border-radius: 8px;
+  font-size: 12px; color: var(--ink-dim);
+}
+.last-time .ic { flex-shrink: 0; }
+.last-time span { color: var(--ink-soft); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* Récords personales (PR) */
+.pr-banner { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 14px; padding: 10px 12px; background: var(--strong-bg); border: 1px solid var(--strong); border-radius: 10px; color: var(--ink); }
+.pr-banner .ic { color: var(--strong); flex-shrink: 0; margin-top: 1px; }
+.pr-banner > div { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.pr-banner strong { color: var(--strong); font-size: 13px; }
+.pr-chip { font-size: 13px; color: var(--ink-soft); }
+.pr-chip b { color: var(--ink); font-variant-numeric: tabular-nums; }
+/* Franja de récord en Progreso › Por ejercicio */
+.pr-stat { display: flex; align-items: center; gap: 9px; margin: 12px 0 4px; padding: 10px 12px; background: var(--strong-bg); border-radius: 10px; }
+.pr-stat .ic { color: var(--strong); flex-shrink: 0; }
+.pr-stat-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.pr-stat-label { font-size: 11.5px; font-weight: 600; color: var(--ink-dim); }
+.pr-stat-date { font-size: 11px; color: var(--ink-dim); }
+.pr-stat-val { margin-left: auto; font-size: 22px; font-weight: 800; color: var(--strong); font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* Racha y heatmap de consistencia (vista Sesiones) */
+.streak-card { position: relative; background: var(--bg-card); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; margin-bottom: 12px; }
+.streak-expand { position: absolute; top: 7px; right: 7px; background: none; border: none; color: var(--ink-dim); cursor: pointer; padding: 4px; border-radius: 6px; display: inline-flex; }
+.streak-expand:active { background: var(--line-soft); color: var(--strong); }
+.streak-stats { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 8px; padding-right: 26px; }
+.streak-fig { display: flex; align-items: baseline; gap: 5px; }
+.streak-num { font-size: 16px; font-weight: 800; color: var(--ink); line-height: 1; }
+.streak-lbl { font-size: 10px; color: var(--ink-dim); text-transform: uppercase; letter-spacing: 0.04em; }
+.cal-arrow { background: none; border: none; color: var(--strong); font-size: 22px; line-height: 1; cursor: pointer; padding: 2px 12px; }
+.cal-arrow.disabled, .cal-arrow:disabled { color: var(--line); cursor: default; }
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; }
+.streak-card .cal-grid[data-hist] { cursor: pointer; }
+/* Modal de historial mensual */
+.hist-nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.hist-month { font-size: 15px; font-weight: 700; color: var(--ink); }
+.hist-grid { gap: 4px; }
+.hist-grid .cal-cell { height: 34px; font-size: 12.5px; border-radius: 7px; }
+.cal-cell.out { opacity: .3; }
+.hist-summary { margin: 12px 0 0; font-size: 13px; color: var(--ink-soft); text-align: center; }
+.cal-dow { text-align: center; font-size: 9px; font-weight: 700; color: var(--ink-dim); line-height: 12px; }
+.cal-cell { height: 14px; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 600; color: var(--ink-soft); background: var(--line-soft); border-radius: 4px; }
+.cal-cell.on { color: #fff; }
+.cal-cell.today { box-shadow: 0 0 0 1.5px var(--strong); font-weight: 800; }
+.cal-cell.future { opacity: .3; }
+.pr-list { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
+.pr-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; background: var(--strong-bg); border-radius: 10px; }
+.pr-ex { font-weight: 600; min-width: 0; }
+.pr-vals { display: flex; flex-direction: column; align-items: flex-end; flex-shrink: 0; }
+.pr-now { font-weight: 800; font-size: 17px; color: var(--strong); font-variant-numeric: tabular-nums; }
+.pr-prev { font-size: 11px; color: var(--ink-dim); }
 .ai-providers { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; }
 .ex-target { display: block; font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: var(--ink-dim); margin-top: 2px; }
 .set-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
-.set-row { display: flex; align-items: center; gap: 8px; }
+.set-row { display: flex; align-items: center; gap: 8px; position: relative; }
 .set-row.done { opacity: .55; }
 .set-wrap { display: flex; flex-direction: column; gap: 5px; }
 .set-wrap.done { opacity: .55; }
-.set-extra { display: flex; gap: 6px; padding-left: 24px; }
+.set-extra { display: flex; gap: 6px; padding-left: 0; }
 .set-extra .set-f { font-size: 12px; padding: 6px 8px; }
-.set-n { font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: var(--ink-dim); width: 16px; flex-shrink: 0; }
+/* El número de serie va en el canalón izquierdo (alineado con el agarrador),
+   fuera del flujo, para que los inputs arranquen en el borde del contenido. */
+.set-n { position: absolute; left: -32px; width: 28px; top: 50%; transform: translateY(-50%); text-align: center; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: var(--ink-dim); }
 .set-f { flex: 1; min-width: 0; padding: 8px 10px; font-size: 14px; }
 .set-x { color: var(--ink-dim); }
 .set-unit { font-size: 11px; color: var(--ink-dim); flex-shrink: 0; }
@@ -240,7 +353,7 @@ textarea.inp { resize: vertical; line-height: 1.4; }
 .set-load-mode { flex: 0 0 auto; width: auto; font-size: 12px; padding: 8px 6px; padding-right: 22px; }
 .set-load { max-width: 64px; flex: 0 0 auto; }
 /* dropsets */
-.drop-row { display: flex; align-items: center; gap: 8px; padding-left: 22px; }
+.drop-row { display: flex; align-items: center; gap: 8px; padding-left: 0; }
 .drop-tag { font-family: 'IBM Plex Mono', monospace; font-size: 9px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--sub-accent); background: var(--sub-bg); padding: 2px 6px; border-radius: 4px; flex-shrink: 0; }
 .set-foot { padding-left: 22px; }
 .set-drop-btn { background: none; border: none; color: var(--sub-accent); font-size: 12px; font-weight: 600; cursor: pointer; padding: 2px 0; }
