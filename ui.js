@@ -105,6 +105,27 @@ const UI = (() => {
     overlay.querySelector('.modal-x').addEventListener('click', () => closeModal(overlay));
     overlay.addEventListener('click', (e) => { if (e.target === overlay) closeModal(overlay); });
 
+    // Ajusta el overlay al viewport VISIBLE: cuando se abre el teclado, el modal
+    // se encoge y se queda por encima de él (no queda nada tapado).
+    const vv = window.visualViewport;
+    if (vv) {
+      const fit = () => {
+        const top = vv.offsetTop || 0;
+        const h = Math.min(vv.height, window.innerHeight - top); // clamp: nunca excede el viewport
+        if (!h || h < 1) { // viewport no fiable: usar el CSS por defecto
+          overlay.style.height = ''; overlay.style.top = ''; overlay.style.bottom = '';
+          return;
+        }
+        overlay.style.height = h + 'px';
+        overlay.style.top = top + 'px';
+        overlay.style.bottom = 'auto';
+      };
+      overlay._fit = fit;
+      vv.addEventListener('resize', fit);
+      vv.addEventListener('scroll', fit);
+      fit();
+    }
+
     if (onMount) onMount(overlay);
     return overlay;
   }
@@ -112,6 +133,10 @@ const UI = (() => {
   function closeModal(overlay) {
     const target = (overlay && overlay.classList) ? overlay : modalStack[modalStack.length - 1];
     if (!target) return;
+    if (target._fit && window.visualViewport) {
+      window.visualViewport.removeEventListener('resize', target._fit);
+      window.visualViewport.removeEventListener('scroll', target._fit);
+    }
     const idx = modalStack.indexOf(target);
     if (idx !== -1) modalStack.splice(idx, 1);
     target.remove();
@@ -357,7 +382,7 @@ const UI = (() => {
     const sorted = [...exercises].sort((a, b) => a.name.localeCompare(b.name));
     modal({
       title, size: 'wide',
-      bodyHTML: `<input class="inp" id="exSearch" placeholder="🔎 Buscar ejercicio…" autocomplete="off">
+      bodyHTML: `<input class="inp picker-search" id="exSearch" placeholder="🔎 Buscar ejercicio…" autocomplete="off">
         <div class="picker-list" id="pickerList"></div>`,
       actions: [{ label: 'Cerrar', kind: 'ghost' }],
       onMount: (root) => {
@@ -390,7 +415,7 @@ const UI = (() => {
     const searchable = opts.length > 8;
     modal({
       title, size: 'wide',
-      bodyHTML: `${searchable ? '<input class="inp" id="listSearch" placeholder="Buscar…" autocomplete="off">' : ''}<div class="picker-list" id="listResults"></div>`,
+      bodyHTML: `${searchable ? '<input class="inp picker-search" id="listSearch" placeholder="Buscar…" autocomplete="off">' : ''}<div class="picker-list" id="listResults"></div>`,
       actions: [{ label: 'Cerrar', kind: 'ghost' }],
       onMount: (root) => {
         const listEl = root.querySelector('#listResults');

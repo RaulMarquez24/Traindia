@@ -108,10 +108,13 @@ const VSessions = (() => {
   function setRowsHTML(entry, ei, mode) {
     const type = entry.type || 'weight';
     return (entry.sets || []).map((s, si) => {
+      // En vivo, al marcar la serie (✓) se "bloquea": no se edita ni hay dropset.
+      const locked = mode === 'live' && s.done;
+      const dis = locked ? ' disabled' : '';
       const done = mode === 'live'
-        ? `<button class="set-done${s.done ? ' on' : ''}" data-done data-ei="${ei}" data-si="${si}" title="Serie hecha">${UI.icon('check', 16)}</button>`
+        ? `<button class="set-done${s.done ? ' on' : ''}" data-done data-ei="${ei}" data-si="${si}" title="${s.done ? 'Desmarcar para editar' : 'Serie hecha'}">${UI.icon('check', 16)}</button>`
         : '';
-      const rm = `<button class="icon-btn danger" data-rm-set data-ei="${ei}" data-si="${si}">×</button>`;
+      const rm = locked ? '' : `<button class="icon-btn danger" data-rm-set data-ei="${ei}" data-si="${si}">×</button>`;
 
       if (type === 'time') {
         const total = parseInt(s.time);
@@ -121,15 +124,15 @@ const VSessions = (() => {
         return `<div class="set-wrap${s.done ? ' done' : ''}">
           <div class="set-row">
             <span class="set-n">${si + 1}</span>
-            <input class="inp set-f" data-f="timemin" data-ei="${ei}" data-si="${si}" type="number" min="0" value="${mm}" placeholder="min"><span class="set-unit">m</span>
-            <input class="inp set-f" data-f="timesec" data-ei="${ei}" data-si="${si}" type="number" min="0" max="59" value="${ss}" placeholder="seg"><span class="set-unit">s</span>
+            <input class="inp set-f" data-f="timemin" data-ei="${ei}" data-si="${si}" type="number" min="0" value="${mm}" placeholder="min"${dis}><span class="set-unit">m</span>
+            <input class="inp set-f" data-f="timesec" data-ei="${ei}" data-si="${si}" type="number" min="0" max="59" value="${ss}" placeholder="seg"${dis}><span class="set-unit">s</span>
             ${done}${rm}
           </div>
           <div class="set-extra">
-            <input class="inp set-f" data-f="weight" data-ei="${ei}" data-si="${si}" type="number" min="0" step="0.5" value="${UI.esc(s.weight)}" placeholder="kg">
-            <input class="inp set-f" data-f="speed" data-ei="${ei}" data-si="${si}" type="number" min="0" step="0.1" value="${UI.esc(s.speed)}" placeholder="km/h">
-            <input class="inp set-f" data-f="incline" data-ei="${ei}" data-si="${si}" type="number" step="0.5" value="${UI.esc(s.incline)}" placeholder="incl %">
-            <input class="inp set-f" data-f="level" data-ei="${ei}" data-si="${si}" type="number" min="0" value="${UI.esc(s.level)}" placeholder="nivel">
+            <input class="inp set-f" data-f="weight" data-ei="${ei}" data-si="${si}" type="number" min="0" step="0.5" value="${UI.esc(s.weight)}" placeholder="kg"${dis}>
+            <input class="inp set-f" data-f="speed" data-ei="${ei}" data-si="${si}" type="number" min="0" step="0.1" value="${UI.esc(s.speed)}" placeholder="km/h"${dis}>
+            <input class="inp set-f" data-f="incline" data-ei="${ei}" data-si="${si}" type="number" step="0.5" value="${UI.esc(s.incline)}" placeholder="incl %"${dis}>
+            <input class="inp set-f" data-f="level" data-ei="${ei}" data-si="${si}" type="number" min="0" value="${UI.esc(s.level)}" placeholder="nivel"${dis}>
           </div>
         </div>`;
       }
@@ -137,29 +140,30 @@ const VSessions = (() => {
       // weight / reps: fila principal + dropsets opcionales
       let mainFields;
       if (type === 'reps') {
-        mainFields = `<input class="inp set-f" data-f="reps" data-ei="${ei}" data-si="${si}" type="number" min="0" value="${UI.esc(s.reps)}" placeholder="reps"><span class="set-unit">reps</span>
-          <select class="inp set-f set-load-mode" data-f="loadMode" data-ei="${ei}" data-si="${si}">
+        mainFields = `<input class="inp set-f" data-f="reps" data-ei="${ei}" data-si="${si}" type="number" min="0" value="${UI.esc(s.reps)}" placeholder="reps"${dis}><span class="set-unit">reps</span>
+          <select class="inp set-f set-load-mode" data-f="loadMode" data-ei="${ei}" data-si="${si}"${dis}>
             <option value=""${!s.loadMode ? ' selected' : ''}>corporal</option>
             <option value="lastre"${s.loadMode === 'lastre' ? ' selected' : ''}>+ lastre</option>
             <option value="asist"${s.loadMode === 'asist' ? ' selected' : ''}>− asist.</option>
           </select>
-          <input class="inp set-f set-load" data-f="load" data-ei="${ei}" data-si="${si}" type="number" min="0" step="0.5" value="${UI.esc(s.load)}" placeholder="kg">`;
+          <input class="inp set-f set-load" data-f="load" data-ei="${ei}" data-si="${si}" type="number" min="0" step="0.5" value="${UI.esc(s.load)}" placeholder="kg"${dis}>`;
       } else {
-        mainFields = `<input class="inp set-f" data-f="reps" data-ei="${ei}" data-si="${si}" type="number" min="0" value="${UI.esc(s.reps)}" placeholder="reps"><span class="set-x">×</span><input class="inp set-f" data-f="weight" data-ei="${ei}" data-si="${si}" type="number" min="0" step="0.5" value="${UI.esc(s.weight)}" placeholder="kg"><span class="set-unit">kg</span>`;
+        mainFields = `<input class="inp set-f" data-f="reps" data-ei="${ei}" data-si="${si}" type="number" min="0" value="${UI.esc(s.reps)}" placeholder="reps"${dis}><span class="set-x">×</span><input class="inp set-f" data-f="weight" data-ei="${ei}" data-si="${si}" type="number" min="0" step="0.5" value="${UI.esc(s.weight)}" placeholder="kg"${dis}><span class="set-unit">kg</span>`;
       }
       const drops = (s.drops || []).map((d, di) => {
         let df;
         if (type === 'reps') {
-          df = `<input class="inp set-f" data-f="reps" data-ei="${ei}" data-si="${si}" data-di="${di}" type="number" min="0" value="${UI.esc(d.reps)}" placeholder="reps"><span class="set-unit">reps</span><input class="inp set-f set-load" data-f="load" data-ei="${ei}" data-si="${si}" data-di="${di}" type="number" min="0" step="0.5" value="${UI.esc(d.load)}" placeholder="kg">`;
+          df = `<input class="inp set-f" data-f="reps" data-ei="${ei}" data-si="${si}" data-di="${di}" type="number" min="0" value="${UI.esc(d.reps)}" placeholder="reps"${dis}><span class="set-unit">reps</span><input class="inp set-f set-load" data-f="load" data-ei="${ei}" data-si="${si}" data-di="${di}" type="number" min="0" step="0.5" value="${UI.esc(d.load)}" placeholder="kg"${dis}>`;
         } else {
-          df = `<input class="inp set-f" data-f="reps" data-ei="${ei}" data-si="${si}" data-di="${di}" type="number" min="0" value="${UI.esc(d.reps)}" placeholder="reps"><span class="set-x">×</span><input class="inp set-f" data-f="weight" data-ei="${ei}" data-si="${si}" data-di="${di}" type="number" min="0" step="0.5" value="${UI.esc(d.weight)}" placeholder="kg">`;
+          df = `<input class="inp set-f" data-f="reps" data-ei="${ei}" data-si="${si}" data-di="${di}" type="number" min="0" value="${UI.esc(d.reps)}" placeholder="reps"${dis}><span class="set-x">×</span><input class="inp set-f" data-f="weight" data-ei="${ei}" data-si="${si}" data-di="${di}" type="number" min="0" step="0.5" value="${UI.esc(d.weight)}" placeholder="kg"${dis}>`;
         }
-        return `<div class="drop-row"><span class="drop-tag">drop</span>${df}<button class="icon-btn danger" data-rm-drop data-ei="${ei}" data-si="${si}" data-di="${di}">×</button></div>`;
+        const dropRm = locked ? '' : `<button class="icon-btn danger" data-rm-drop data-ei="${ei}" data-si="${si}" data-di="${di}">×</button>`;
+        return `<div class="drop-row"><span class="drop-tag">drop</span>${df}${dropRm}</div>`;
       }).join('');
       return `<div class="set-wrap${s.done ? ' done' : ''}">
         <div class="set-row"><span class="set-n">${si + 1}</span>${mainFields}${done}${rm}</div>
         ${drops}
-        <div class="set-foot"><button type="button" class="set-drop-btn" data-add-drop data-ei="${ei}" data-si="${si}">↧ dropset</button></div>
+        ${locked ? '' : `<div class="set-foot"><button type="button" class="set-drop-btn" data-add-drop data-ei="${ei}" data-si="${si}">↧ dropset</button></div>`}
       </div>`;
     }).join('');
   }
