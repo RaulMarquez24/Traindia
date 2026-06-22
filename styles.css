@@ -339,7 +339,28 @@ textarea.inp { resize: vertical; line-height: 1.4; }
 .set-row.done { opacity: .55; }
 .set-wrap { display: flex; flex-direction: column; gap: 5px; }
 .set-wrap.done { opacity: .55; }
-.set-extra { display: flex; gap: 6px; padding-left: 0; }
+.set-extra { display: flex; gap: 6px; padding-left: 0; flex-wrap: wrap; }
+.ex-card-foot { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.metric-add { background: none; border: 1px dashed var(--line); color: var(--ink-soft); border-radius: 8px; padding: 5px 10px; font-size: 12px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; }
+.metric-add .ic { color: var(--strong); }
+.metric-add:active { background: var(--line-soft); }
+.metric-opts { display: flex; flex-direction: column; }
+.metric-opt { display: flex; align-items: center; gap: 11px; padding: 11px 4px; border-bottom: 1px solid var(--line-soft); cursor: pointer; font-weight: 500; }
+.metric-opt input { width: 18px; height: 18px; flex-shrink: 0; }
+.metric-opt em { color: var(--ink-dim); font-style: normal; font-size: 12px; }
+/* Nota + nivel de esfuerzo por ejercicio */
+.ex-note { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; margin: 4px 0 8px; padding: 7px 9px; background: var(--line-soft); border-radius: 8px; font-size: 12.5px; color: var(--ink-soft); cursor: pointer; }
+.ex-note-txt { display: inline-flex; align-items: center; gap: 4px; }
+.ex-note .ic { color: var(--ink-dim); flex-shrink: 0; }
+.effort-badge { background: var(--strong-bg); color: var(--strong); font-weight: 700; font-size: 11px; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+.last-note { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; margin: 0 0 8px; padding: 0 2px; font-size: 12px; color: var(--ink-dim); }
+.last-note .ic { flex-shrink: 0; }
+.effort-pick { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+.effort-opt { background: var(--bg-card); border: 1px solid var(--line); border-radius: 999px; padding: 7px 13px; font-size: 13px; font-weight: 600; color: var(--ink-soft); cursor: pointer; }
+.effort-opt.sel { background: var(--strong); border-color: var(--strong); color: #fff; }
+/* Chip de esfuerzo (RPE %) por serie, al final de la fila */
+.set-rpe { flex-shrink: 0; min-width: 32px; padding: 5px 6px; border: 1px solid var(--line); border-radius: 8px; background: none; color: var(--ink-dim); font-size: 11px; font-weight: 700; cursor: pointer; line-height: 1; font-variant-numeric: tabular-nums; }
+.set-rpe.on { background: var(--strong-bg); border-color: var(--strong); color: var(--strong); }
 .set-extra .set-f { font-size: 12px; padding: 6px 8px; }
 /* El número de serie va en el canalón izquierdo (alineado con el agarrador),
    fuera del flujo, para que los inputs arranquen en el borde del contenido. */
