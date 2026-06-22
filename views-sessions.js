@@ -5,8 +5,84 @@
 const VSessions = (() => {
 
   // -------- helpers de modelo --------
+  // Datos extra opcionales de los ejercicios de TIEMPO (cardio). Se eligen por
+  // ejercicio (se recuerdan) y/o sobre la marcha; solo se muestran los activos.
+  const TIME_FIELDS = [
+    { key: 'distance', label: 'Distancia', unit: 'km', ph: 'km', step: '0.01' },
+    { key: 'kcal', label: 'Kcal', unit: 'kcal', ph: 'kcal', step: '1' },
+    { key: 'speed', label: 'Velocidad', unit: 'km/h', ph: 'km/h', step: '0.1' },
+    { key: 'incline', label: 'Inclinación', unit: '%', ph: 'incl %', step: '0.5' },
+    { key: 'level', label: 'Nivel', unit: '', ph: 'nivel', step: '1' },
+    { key: 'weight', label: 'Peso', unit: 'kg', ph: 'kg', step: '0.5' },
+  ];
+  const TIME_FIELD = Object.fromEntries(TIME_FIELDS.map(f => [f.key, f]));
+  const DEFAULT_TIME_METRICS = ['distance', 'kcal'];
+  // Métricas activas de una entry de tiempo: las elegidas (entry.metrics) + las
+  // que ya tengan datos (para no ocultar nada introducido), ordenadas.
+  function timeActiveMetrics(entry) {
+    const chosen = Array.isArray(entry.metrics) ? entry.metrics : DEFAULT_TIME_METRICS;
+    const keys = new Set(chosen);
+    TIME_FIELDS.forEach(f => { if ((entry.sets || []).some(s => s[f.key])) keys.add(f.key); });
+    return TIME_FIELDS.filter(f => keys.has(f.key)).map(f => f.key);
+  }
+  async function setExerciseMetrics(app, exId, keys) {
+    if (!exId) return;
+    const ex = await DB.get('exercises', exId);
+    if (ex) { ex.metrics = keys; await DB.put('exercises', ex); }
+  }
+  // Aplica la selección de datos a la entry (limpia los quitados) y la recuerda en el ejercicio.
+  async function applyMetrics(app, entry, keys) {
+    const ordered = TIME_FIELDS.filter(f => keys.includes(f.key)).map(f => f.key);
+    const removed = timeActiveMetrics(entry).filter(k => !ordered.includes(k));
+    (entry.sets || []).forEach(s => removed.forEach(k => { delete s[k]; }));
+    entry.metrics = ordered;
+    await setExerciseMetrics(app, entry.exerciseId, ordered);
+  }
+  function pickMetrics(app, entry, onDone) {
+    const active = new Set(timeActiveMetrics(entry));
+    UI.modal({
+      title: 'Datos a registrar',
+      bodyHTML: `<div class="metric-opts">${TIME_FIELDS.map(f => `<label class="metric-opt"><input type="checkbox" data-mk="${f.key}"${active.has(f.key) ? ' checked' : ''}><span>${f.label}${f.unit ? ` <em>(${f.unit})</em>` : ''}</span></label>`).join('')}</div>
+        <p class="field-hint">Se recuerdan para este ejercicio; podrás cambiarlos cuando quieras.</p>`,
+      actions: [
+        { label: 'Cancelar', kind: 'ghost' },
+        { label: 'Listo', kind: 'primary', onClick: async (root) => {
+          const keys = [...root.querySelectorAll('[data-mk]')].filter(c => c.checked).map(c => c.dataset.mk);
+          await onDone(keys);
+        } },
+      ],
+    });
+  }
+
+  // Nota libre por ejercicio (comentario general que reaparece en "última vez").
+  function editNote(app, entry, onDone) {
+    UI.modal({
+      title: 'Nota del ejercicio',
+      bodyHTML: UI.field('Nota', UI.textarea('note', entry.note || '', 'Ej: subir peso la próxima, molestia leve…', 3)),
+      actions: [
+        { label: 'Cancelar', kind: 'ghost' },
+        { label: 'Guardar', kind: 'primary', onClick: (root) => onDone(root.querySelector('textarea[name="note"]').value.trim()) },
+      ],
+    });
+  }
+
+  // Nivel de esfuerzo (RPE en %) POR SERIE. Menú rápido que aplica al tocar.
+  const EFFORT_LEVELS = ['50%', '60%', '70%', '80%', '90%', '100%'];
+  function pickSetEffort(current, onPick) {
+    UI.modal({
+      title: 'Esfuerzo de la serie',
+      bodyHTML: `<div class="effort-pick">
+          <button type="button" class="effort-opt${!current ? ' sel' : ''}" data-eff="">—</button>
+          ${EFFORT_LEVELS.map(l => `<button type="button" class="effort-opt${current === l ? ' sel' : ''}" data-eff="${l}">${l}</button>`).join('')}
+        </div>
+        <p class="field-hint">Cómo de duro fue esta serie. Toca para elegir.</p>`,
+      actions: [{ label: 'Cerrar', kind: 'ghost' }],
+      onMount: (root) => root.querySelectorAll('.effort-opt').forEach(b => b.addEventListener('click', () => { UI.closeModal(root); onPick(b.dataset.eff); })),
+    });
+  }
+
   function emptySet(type) {
-    if (type === 'time') return { time: '', weight: '', speed: '', incline: '', level: '', done: false };
+    if (type === 'time') return { time: '', distance: '', kcal: '', weight: '', speed: '', incline: '', level: '', done: false };
     if (type === 'reps') return { reps: '', load: '', loadMode: '', done: false };
     return { reps: '', weight: '', done: false };
   }
@@ -17,7 +93,7 @@ const VSessions = (() => {
 
   function dropHasData(d) { return d && (d.reps || d.weight || d.load); }
   function setHasData(s) {
-    return s.reps || s.weight || s.time || s.speed || s.level || s.incline || s.load ||
+    return s.reps || s.weight || s.time || s.speed || s.level || s.incline || s.load || s.distance || s.kcal ||
       (s.drops && s.drops.some(dropHasData));
   }
   function liveHasData(s) { return (s.entries || []).some(e => (e.sets || []).some(setHasData)); }
@@ -28,21 +104,25 @@ const VSessions = (() => {
     const sign = set.loadMode === 'asist' ? '−' : '+';
     return ` ${sign}${set.load}kg${set.loadMode === 'asist' ? ' asist' : ''}`;
   }
-  // texto de una serie para detalle / contexto IA (incluye dropsets)
+  // texto de una serie para detalle / contexto IA (incluye dropsets y esfuerzo)
   function setDisplay(type, set) {
+    let v;
     if (type === 'time') {
-      let v = fmtTime(set.time) || '0s';
-      if (set.weight) v += ` · ${set.weight}kg`;
-      const ex = cardioExtra(set); if (ex) v += ` · ${ex}`;
-      return v;
-    }
-    if (type === 'reps') {
-      let v = `${set.reps || 0} reps${loadSuffix(set)}`;
+      const parts = [];
+      const t = fmtTime(set.time); if (t) parts.push(t);
+      if (set.distance) parts.push(`${set.distance} km`);
+      if (set.kcal) parts.push(`${set.kcal} kcal`);
+      if (set.weight) parts.push(`${set.weight} kg`);
+      const ex = cardioExtra(set); if (ex) parts.push(ex);
+      v = parts.join(' · ') || '0s';
+    } else if (type === 'reps') {
+      v = `${set.reps || 0} reps${loadSuffix(set)}`;
       (set.drops || []).filter(dropHasData).forEach(d => { v += ` → ${d.reps || 0}${d.load ? ` (${d.load}kg)` : ''}`; });
-      return v;
+    } else {
+      v = `${set.reps || 0} × ${set.weight || 0} kg`;
+      (set.drops || []).filter(dropHasData).forEach(d => { v += ` → ${d.reps || 0}×${d.weight || 0}`; });
     }
-    let v = `${set.reps || 0} × ${set.weight || 0} kg`;
-    (set.drops || []).filter(dropHasData).forEach(d => { v += ` → ${d.reps || 0}×${d.weight || 0}`; });
+    if (set.effort) v += ` · ${set.effort}`;
     return v;
   }
 
@@ -102,7 +182,7 @@ const VSessions = (() => {
         const k = keyForEntry(e);
         if (!k || map[k]) return; // ya tenemos una más reciente para este ejercicio
         const done = (e.sets || []).filter(setHasData);
-        if (done.length) map[k] = { date: sess.date, type: e.type || 'weight', sets: done };
+        if (done.length) map[k] = { date: sess.date, type: e.type || 'weight', sets: done, note: e.note };
       }));
     return map;
   }
@@ -110,7 +190,8 @@ const VSessions = (() => {
     const prev = _lastTimeMap && _lastTimeMap[keyForEntry(entry)];
     if (!prev) return '';
     const sets = prev.sets.map(st => setDisplay(prev.type, st)).join(' · ');
-    return `<div class="last-time">${UI.icon('clock', 12)} Última vez · ${UI.esc(UI.fmtDateShort(prev.date))}: <span>${UI.esc(sets)}</span></div>`;
+    const note = prev.note ? `<div class="last-note"><span>${UI.icon('edit', 12)} ${UI.esc(prev.note)}</span></div>` : '';
+    return `<div class="last-time">${UI.icon('clock', 12)} Última vez · ${UI.esc(UI.fmtDateShort(prev.date))}: <span>${UI.esc(sets)}</span></div>${note}`;
   }
 
   // ----- Récords personales (PR): mejor marca histórica por ejercicio -----
@@ -354,6 +435,9 @@ const VSessions = (() => {
         ? `<button class="set-done${s.done ? ' on' : ''}" data-done data-ei="${ei}" data-si="${si}" title="${s.done ? 'Desmarcar para editar' : 'Serie hecha'}">${UI.icon('check', 16)}</button>`
         : '';
       const rm = locked ? '' : `<button class="icon-btn danger" data-rm-set data-ei="${ei}" data-si="${si}">×</button>`;
+      const effortBtn = (mode === 'live' || mode === 'edit')
+        ? `<button type="button" class="set-rpe${s.effort ? ' on' : ''}" data-set-effort data-ei="${ei}" data-si="${si}" title="Esfuerzo de la serie">${s.effort ? UI.esc(s.effort) : '%'}</button>`
+        : '';
 
       if (type === 'time') {
         const total = parseInt(s.time);
@@ -365,14 +449,9 @@ const VSessions = (() => {
             <span class="set-n">${si + 1}</span>
             <input class="inp set-f" data-f="timemin" data-ei="${ei}" data-si="${si}" type="number" min="0" value="${mm}" placeholder="min"${dis}><span class="set-unit">m</span>
             <input class="inp set-f" data-f="timesec" data-ei="${ei}" data-si="${si}" type="number" min="0" max="59" value="${ss}" placeholder="seg"${dis}><span class="set-unit">s</span>
-            ${done}${rm}
+            ${effortBtn}${done}${rm}
           </div>
-          <div class="set-extra">
-            <input class="inp set-f" data-f="weight" data-ei="${ei}" data-si="${si}" type="number" min="0" step="0.5" value="${UI.esc(s.weight)}" placeholder="kg"${dis}>
-            <input class="inp set-f" data-f="speed" data-ei="${ei}" data-si="${si}" type="number" min="0" step="0.1" value="${UI.esc(s.speed)}" placeholder="km/h"${dis}>
-            <input class="inp set-f" data-f="incline" data-ei="${ei}" data-si="${si}" type="number" step="0.5" value="${UI.esc(s.incline)}" placeholder="incl %"${dis}>
-            <input class="inp set-f" data-f="level" data-ei="${ei}" data-si="${si}" type="number" min="0" value="${UI.esc(s.level)}" placeholder="nivel"${dis}>
-          </div>
+          ${(() => { const ms = timeActiveMetrics(entry); return ms.length ? `<div class="set-extra">${ms.map(k => { const f = TIME_FIELD[k]; return `<input class="inp set-f" data-f="${k}" data-ei="${ei}" data-si="${si}" type="number" min="0" step="${f.step}" value="${UI.esc(s[k] || '')}" placeholder="${f.ph}"${dis}>`; }).join('')}</div>` : ''; })()}
         </div>`;
       }
 
@@ -400,7 +479,7 @@ const VSessions = (() => {
         return `<div class="drop-row"><span class="drop-tag">drop</span>${df}${dropRm}</div>`;
       }).join('');
       return `<div class="set-wrap${s.done ? ' done' : ''}">
-        <div class="set-row"><span class="set-n">${si + 1}</span>${mainFields}${done}${rm}</div>
+        <div class="set-row"><span class="set-n">${si + 1}</span>${mainFields}${effortBtn}${done}${rm}</div>
         ${drops}
         ${locked ? '' : `<div class="set-foot"><button type="button" class="set-drop-btn" data-add-drop data-ei="${ei}" data-si="${si}">↧ dropset</button></div>`}
       </div>`;
@@ -420,7 +499,12 @@ const VSessions = (() => {
         </div>
         ${mode === 'live' ? lastTimeHTML(entry) : ''}
         <div class="set-list">${setRowsHTML(entry, ei, mode)}</div>
-        <button class="btn ghost small" data-add-set data-ei="${ei}">+ Serie</button>
+        ${entry.note ? `<div class="ex-note" data-note data-ei="${ei}"><span class="ex-note-txt">${UI.icon('edit', 13)} ${UI.esc(entry.note)}</span></div>` : ''}
+        <div class="ex-card-foot">
+          <button class="btn ghost small" data-add-set data-ei="${ei}">+ Serie</button>
+          ${entry.type === 'time' ? `<button type="button" class="metric-add" data-metrics data-ei="${ei}">${UI.icon('plus', 13)} datos</button>` : ''}
+          ${entry.note ? '' : `<button type="button" class="metric-add" data-note data-ei="${ei}">${UI.icon('edit', 13)} nota</button>`}
+        </div>
       </div>
     </div>`;
   }
@@ -460,8 +544,11 @@ const VSessions = (() => {
       const day = (app.routine?.days || []).find(d => d.id === params.dayId);
       const entries = [];
       if (day && !day.isRest) {
+        const metricsById = {};
+        (await DB.exercisesOf(app.activeUser.id)).forEach(x => { if (Array.isArray(x.metrics)) metricsById[x.id] = x.metrics; });
         day.blocks.forEach(b => b.exercises.forEach(ex => {
           const e = entryFromExercise(ex);
+          if (e.type === 'time' && e.exerciseId && metricsById[e.exerciseId]) e.metrics = metricsById[e.exerciseId].slice();
           e.sets.push(emptySet(e.type));
           entries.push(e);
         }));
@@ -519,38 +606,63 @@ const VSessions = (() => {
     bindRestTimer(app, root);
 
     const sync = () => { syncLive(root, s); app.persistLive(); };
-    const redraw = () => app.render();
 
-    // Autoguardado inmediato en cada tecla: el modelo y el borrador en BD siempre
-    // están al día, así si se cierra la app de golpe se puede reanudar sin perder nada.
+    // Handlers de cada tarjeta. Se re-enganchan tras cada redibujado de la lista.
+    function bindEntries() {
+      root.querySelectorAll('[data-add-set]').forEach(b => b.addEventListener('click', () => {
+        sync(); const e = s.entries[+b.dataset.ei]; e.sets.push(emptySet(e.type)); redraw();
+      }));
+      root.querySelectorAll('[data-rm-set]').forEach(b => b.addEventListener('click', () => {
+        sync(); s.entries[+b.dataset.ei].sets.splice(+b.dataset.si, 1); redraw();
+      }));
+      root.querySelectorAll('[data-add-drop]').forEach(b => b.addEventListener('click', () => {
+        sync(); const set = s.entries[+b.dataset.ei].sets[+b.dataset.si]; (set.drops = set.drops || []).push(emptyDrop(s.entries[+b.dataset.ei].type)); redraw();
+      }));
+      root.querySelectorAll('[data-rm-drop]').forEach(b => b.addEventListener('click', () => {
+        sync(); const set = s.entries[+b.dataset.ei].sets[+b.dataset.si]; if (set.drops) set.drops.splice(+b.dataset.di, 1); redraw();
+      }));
+      root.querySelectorAll('[data-rm-ex]').forEach(b => b.addEventListener('click', () => {
+        sync(); s.entries.splice(+b.dataset.ei, 1); redraw();
+      }));
+      root.querySelectorAll('[data-done]').forEach(b => b.addEventListener('click', () => {
+        sync(); const set = s.entries[+b.dataset.ei].sets[+b.dataset.si]; set.done = !set.done; redraw();
+      }));
+      root.querySelectorAll('[data-ai-ex]').forEach(b => b.addEventListener('click', () => {
+        sync(); UI.askAI(buildExerciseContext(s, s.entries[+b.dataset.ei]));
+      }));
+      root.querySelectorAll('[data-metrics]').forEach(b => b.addEventListener('click', () => {
+        sync(); const entry = s.entries[+b.dataset.ei];
+        pickMetrics(app, entry, async (keys) => { await applyMetrics(app, entry, keys); redraw(); });
+      }));
+      root.querySelectorAll('[data-note]').forEach(b => b.addEventListener('click', () => {
+        sync(); const entry = s.entries[+b.dataset.ei];
+        editNote(app, entry, (note) => { entry.note = note || undefined; app.persistLive(); redraw(); });
+      }));
+      root.querySelectorAll('[data-set-effort]').forEach(b => b.addEventListener('click', () => {
+        sync(); const set = s.entries[+b.dataset.ei].sets[+b.dataset.si];
+        pickSetEffort(set.effort, (eff) => { set.effort = eff || undefined; app.persistLive(); redraw(); });
+      }));
+    }
+
+    // Re-render SOLO la lista de ejercicios (no reconstruye toda la vista → no se
+    // pierde el scroll ni hay que volver a bajar). El contenedor .live-entries
+    // persiste, así que makeSortable (enganchado abajo una vez) sigue valiendo.
+    const redraw = () => {
+      const cont = root.querySelector('.live-entries');
+      if (!cont) { app.render(); return; }
+      cont.innerHTML = s.entries.map((e, i) => entryCardHTML(e, i, 'live')).join('') || '<div class="empty-state"><p>Añade ejercicios para empezar.</p></div>';
+      bindEntries();
+    };
+
+    // Autoguardado inmediato en cada tecla (delegado en root: sobrevive al redibujado).
     root.addEventListener('input', () => { syncLive(root, s); app.persistLive(); });
 
-    root.querySelectorAll('[data-add-set]').forEach(b => b.addEventListener('click', () => {
-      sync(); const e = s.entries[+b.dataset.ei]; e.sets.push(emptySet(e.type)); redraw();
-    }));
-    root.querySelectorAll('[data-rm-set]').forEach(b => b.addEventListener('click', () => {
-      sync(); s.entries[+b.dataset.ei].sets.splice(+b.dataset.si, 1); redraw();
-    }));
-    root.querySelectorAll('[data-add-drop]').forEach(b => b.addEventListener('click', () => {
-      sync(); const set = s.entries[+b.dataset.ei].sets[+b.dataset.si]; (set.drops = set.drops || []).push(emptyDrop(s.entries[+b.dataset.ei].type)); redraw();
-    }));
-    root.querySelectorAll('[data-rm-drop]').forEach(b => b.addEventListener('click', () => {
-      sync(); const set = s.entries[+b.dataset.ei].sets[+b.dataset.si]; if (set.drops) set.drops.splice(+b.dataset.di, 1); redraw();
-    }));
-    root.querySelectorAll('[data-rm-ex]').forEach(b => b.addEventListener('click', () => {
-      sync(); s.entries.splice(+b.dataset.ei, 1); redraw();
-    }));
+    bindEntries();
     UI.makeSortable(root.querySelector('.live-entries'), {
       itemSelector: '.ex-card', handleSelector: '[data-drag="card"]',
       onReorder: (order) => { sync(); s.entries = order.map(i => s.entries[+i]); redraw(); },
     });
-    root.querySelectorAll('[data-done]').forEach(b => b.addEventListener('click', () => {
-      sync(); const set = s.entries[+b.dataset.ei].sets[+b.dataset.si]; set.done = !set.done; redraw();
-    }));
-    root.querySelectorAll('[data-ai-ex]').forEach(b => b.addEventListener('click', () => {
-      sync(); UI.askAI(buildExerciseContext(s, s.entries[+b.dataset.ei]));
-    }));
-    root.querySelector('#liveAddEx').addEventListener('click', () => { sync(); addExerciseToSession(app, s, () => app.render()); });
+    root.querySelector('#liveAddEx').addEventListener('click', () => { sync(); addExerciseToSession(app, s, () => redraw()); });
     root.querySelector('#liveCancel').addEventListener('click', async () => {
       const ok = await UI.confirm({ title: 'Descartar entreno', message: 'Se perderá lo registrado en esta sesión.', confirmLabel: 'Descartar', danger: true });
       if (!ok) return;
@@ -593,10 +705,16 @@ const VSessions = (() => {
     UI.pickExercise({ exercises: catalog, categories, onPick: async (picked) => {
       let ex = picked;
       if (picked.isNew) {
-        ex = { id: DB.uid('ex'), userId: app.activeUser.id, name: picked.name, muscleGroup: picked.muscleGroup, type: picked.type, createdAt: Date.now() };
-        await DB.put('exercises', ex);
+        const clash = catalog.find(e => (e.name || '').trim().toLowerCase() === picked.name.trim().toLowerCase());
+        if (clash) { ex = clash; UI.toast('Ese ejercicio ya existe; se ha usado el existente'); }
+        else {
+          ex = { id: DB.uid('ex'), userId: app.activeUser.id, name: picked.name, muscleGroup: picked.muscleGroup, type: picked.type, createdAt: Date.now() };
+          await DB.put('exercises', ex);
+        }
       }
-      session.entries.push({ exerciseId: ex.id, name: ex.name, type: ex.type, target: '', sets: [emptySet(ex.type)] });
+      const entry = { exerciseId: ex.id, name: ex.name, type: ex.type, target: '', sets: [emptySet(ex.type)] };
+      if (ex.type === 'time' && Array.isArray(ex.metrics)) entry.metrics = ex.metrics.slice();
+      session.entries.push(entry);
       onAdded();
     } });
   }
@@ -849,7 +967,8 @@ const VSessions = (() => {
       const rows = (e.sets || []).map((set, i) => {
         return `<li><span class="set-n-sm">${i + 1}</span><span>${UI.esc(setDisplay(e.type || 'weight', set))}</span></li>`;
       }).join('');
-      return `<div class="block"><div class="block-label detail-ex-head"><span>${UI.esc(e.name)}</span><button class="icon-btn" data-ai-done data-ei="${ei}" title="Consultar a una IA sobre este ejercicio">${UI.icon('chat', 16)}</button></div><ul class="set-detail-list">${rows}</ul></div>`;
+      const note = e.note ? `<div class="ex-note"><span class="ex-note-txt">${UI.icon('edit', 13)} ${UI.esc(e.note)}</span></div>` : '';
+      return `<div class="block"><div class="block-label detail-ex-head"><span>${UI.esc(e.name)}</span><button class="icon-btn" data-ai-done data-ei="${ei}" title="Consultar a una IA sobre este ejercicio">${UI.icon('chat', 16)}</button></div><ul class="set-detail-list">${rows}</ul>${note}</div>`;
     }).join('');
 
     return `<div class="section">
@@ -936,6 +1055,18 @@ const VSessions = (() => {
         itemSelector: '.ex-card', handleSelector: '[data-drag="card"]',
         onReorder: (order) => { syncMeta(root); draft.entries = order.map(i => draft.entries[+i]); render(root); },
       });
+      root.querySelectorAll('[data-metrics]').forEach(b => b.addEventListener('click', () => {
+        syncMeta(root); const entry = draft.entries[+b.dataset.ei];
+        pickMetrics(app, entry, async (keys) => { await applyMetrics(app, entry, keys); render(root); });
+      }));
+      root.querySelectorAll('[data-note]').forEach(b => b.addEventListener('click', () => {
+        syncMeta(root); const entry = draft.entries[+b.dataset.ei];
+        editNote(app, entry, (note) => { entry.note = note || undefined; render(root); });
+      }));
+      root.querySelectorAll('[data-set-effort]').forEach(b => b.addEventListener('click', () => {
+        syncMeta(root); const set = draft.entries[+b.dataset.ei].sets[+b.dataset.si];
+        pickSetEffort(set.effort, (eff) => { set.effort = eff || undefined; render(root); });
+      }));
       root.querySelector('#sesAddEx').addEventListener('click', () => { syncMeta(root); addExerciseToSession(app, draft, () => render(root)); });
     };
 
@@ -958,5 +1089,5 @@ const VSessions = (() => {
     });
   }
 
-  return { live, liveBind, list, listBind, detail, detailBind, sessionVolume, checkResume, liveHasData, restEnsure };
+  return { live, liveBind, list, listBind, detail, detailBind, sessionVolume, checkResume, liveHasData, restEnsure, TIME_FIELDS, DEFAULT_TIME_METRICS };
 })();

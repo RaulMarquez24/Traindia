@@ -365,9 +365,13 @@ const VPlan = (() => {
       UI.pickExercise({ exercises: opts, title: `Añadir a ${category}`, lockGroup: category, onPick: async (picked) => {
         let ex = picked;
         if (picked.isNew) {
-          ex = { id: DB.uid('ex'), userId: app.activeUser.id, name: picked.name, muscleGroup: category, type: picked.type, createdAt: Date.now() };
-          await DB.put('exercises', ex); catalog.push(ex);
-          if (!categories.includes(category)) categories.push(category);
+          const clash = catalog.find(e => (e.name || '').trim().toLowerCase() === picked.name.trim().toLowerCase());
+          if (clash) { ex = clash; UI.toast('Ese ejercicio ya existe; se ha usado el existente'); }
+          else {
+            ex = { id: DB.uid('ex'), userId: app.activeUser.id, name: picked.name, muscleGroup: category, type: picked.type, createdAt: Date.now() };
+            await DB.put('exercises', ex); catalog.push(ex);
+            if (!categories.includes(category)) categories.push(category);
+          }
         }
         cb(ex);
       } });
@@ -603,8 +607,53 @@ const VPlan = (() => {
     return usage;
   }
 
+  // ---------- Ejercicios duplicados (mismo nombre) ----------
+  // Devuelve los ejercicios repetidos que se pueden borrar: NO predefinidos, NO
+  // usados en ningún día (de ninguna rutina) y dejando al menos uno por nombre.
+  async function dedupeRemovable(app) {
+    const list = await DB.exercisesOf(app.activeUser.id);
+    const routines = await DB.routinesOf(app.activeUser.id);
+    const usedIds = new Set(), usedNamesNoId = new Set();
+    routines.forEach(rt => (rt.days || []).forEach(d => (d.blocks || []).forEach(b => (b.exercises || []).forEach(e => {
+      if (e.exerciseId) usedIds.add(e.exerciseId);
+      else if (e.name) usedNamesNoId.add(e.name.trim().toLowerCase());
+    }))));
+    const isUsed = (ex) => usedIds.has(ex.id) || usedNamesNoId.has((ex.name || '').trim().toLowerCase());
+    const groups = {};
+    list.forEach(e => { const k = (e.name || '').trim().toLowerCase(); if (k) (groups[k] = groups[k] || []).push(e); });
+    const removable = [];
+    Object.values(groups).forEach(g => {
+      if (g.length < 2) return;
+      const kept = g.filter(e => e.isDefault || isUsed(e));
+      const candidates = g.filter(e => !e.isDefault && !isUsed(e));
+      removable.push(...(kept.length >= 1 ? candidates : candidates.slice(1))); // si no hay ninguno "fijo", conserva uno
+    });
+    return removable;
+  }
+  async function cleanupDuplicates(app) {
+    const rem = await dedupeRemovable(app);
+    for (const e of rem) await DB.del('exercises', e.id);
+    return rem.length;
+  }
+  // Aviso al entrar en la app si hay duplicados borrables.
+  async function checkDuplicates(app) {
+    if (document.querySelector('.modal-overlay')) return; // no encimar otros avisos
+    const rem = await dedupeRemovable(app);
+    if (!rem.length) return;
+    const names = [...new Set(rem.map(e => e.name))];
+    UI.modal({
+      title: 'Ejercicios duplicados',
+      bodyHTML: `<p class="modal-text">Hay <strong>${rem.length}</strong> ejercicio${rem.length === 1 ? '' : 's'} repetido${rem.length === 1 ? '' : 's'} sin usar (${names.slice(0, 3).map(n => UI.esc(n)).join(', ')}${names.length > 3 ? '…' : ''}). ¿Quieres eliminar los repetidos que no estás usando? Se conserva uno de cada.</p>`,
+      actions: [
+        { label: 'Ahora no', kind: 'ghost' },
+        { label: `Eliminar ${rem.length}`, kind: 'danger', onClick: async () => { const n = await cleanupDuplicates(app); UI.toast(`${n} duplicado${n === 1 ? '' : 's'} eliminado${n === 1 ? '' : 's'}`); app.render(); } },
+      ],
+    });
+  }
+
   async function exercises(app) {
     const list = (await DB.exercisesOf(app.activeUser.id)).sort((a, b) => a.name.localeCompare(b.name));
+    const removableDup = await dedupeRemovable(app);
     const usage = buildUsage(app.routine);
     const byId = {};
     list.forEach(e => { byId[e.id] = e; });
@@ -658,6 +707,7 @@ const VPlan = (() => {
       ${unused.length ? `<ul class="ex-list">${unused.map(e => item(e, !e.isDefault)).join('')}</ul>` : '<p class="dim" style="padding:2px 0">No hay ejercicios en desuso.</p>'}
       </div>
       <p class="dim" id="catalogNoResults" style="display:none;padding:12px 2px">Sin resultados.</p>
+      ${removableDup.length ? `<button class="btn ghost danger block" id="cleanDups" style="margin-top:16px">${UI.icon('trash', 16)} Eliminar ${removableDup.length} duplicado${removableDup.length === 1 ? '' : 's'} sin usar</button>` : ''}
       <button class="btn primary block" id="addEx" style="margin-top:16px">+ Nuevo ejercicio</button>
     </div>`;
   }
@@ -680,6 +730,14 @@ const VPlan = (() => {
       });
       const noRes = root.querySelector('#catalogNoResults');
       if (noRes) noRes.style.display = anyVisible ? 'none' : '';
+    });
+    const cleanBtn = root.querySelector('#cleanDups');
+    if (cleanBtn) cleanBtn.addEventListener('click', async () => {
+      const rem = await dedupeRemovable(app);
+      const ok = await UI.confirm({ title: 'Eliminar duplicados', message: `Se eliminarán ${rem.length} ejercicio(s) repetido(s) que no usas (se conserva uno de cada). No afecta a las sesiones ya registradas.`, confirmLabel: 'Eliminar', danger: true });
+      if (!ok) return;
+      const n = await cleanupDuplicates(app);
+      app.render(); UI.toast(`${n} duplicado(s) eliminado(s)`);
     });
     root.querySelector('#addEx').addEventListener('click', () => editExercise(app, null));
     root.querySelectorAll('[data-edit]').forEach(b => b.addEventListener('click', async () => {
@@ -727,6 +785,14 @@ const VPlan = (() => {
           { value: 'reps', label: 'Repeticiones (peso corporal)' },
           { value: 'time', label: 'Tiempo / duración' }], ex ? ex.type : 'weight'),
           'Determina qué campos verás al registrar la sesión.')}
+        ${(() => {
+          const chosen = (ex && Array.isArray(ex.metrics)) ? ex.metrics : VSessions.DEFAULT_TIME_METRICS;
+          return `<div id="exMetrics" style="${(ex ? ex.type : 'weight') === 'time' ? '' : 'display:none'}">
+            <span class="field-label">Datos a registrar (además del tiempo)</span>
+            <div class="metric-opts">${VSessions.TIME_FIELDS.map(f => `<label class="metric-opt"><input type="checkbox" data-mk="${f.key}"${chosen.includes(f.key) ? ' checked' : ''}><span>${f.label}${f.unit ? ` <em>(${f.unit})</em>` : ''}</span></label>`).join('')}</div>
+            <p class="field-hint">Solo se mostrarán estos al registrar. También puedes cambiarlos durante el entreno.</p>
+          </div>`;
+        })()}
         <span class="field-label">Suplentes (el sustituto de este ejercicio es…)</span>
         <div class="subs-box" id="subsBox"></div>
         <button type="button" class="btn ghost small" id="addSub">+ Añadir suplente</button>
@@ -737,10 +803,17 @@ const VPlan = (() => {
         { label: 'Guardar', kind: 'primary', onClick: async (root) => {
           const d = UI.readForm(root.querySelector('#exForm'));
           if (!d.name.trim()) { UI.toast('Escribe un nombre', 'err'); return false; }
+          const nameKey = d.name.trim().toLowerCase();
+          if (catalog.some(e => (e.name || '').trim().toLowerCase() === nameKey && (!ex || e.id !== ex.id))) {
+            UI.toast('Ya existe un ejercicio con ese nombre', 'err'); return false;
+          }
+          const metrics = d.type === 'time'
+            ? VSessions.TIME_FIELDS.map(f => f.key).filter(k => root.querySelector(`#exMetrics [data-mk="${k}"]`)?.checked)
+            : undefined;
           if (isNew) {
-            await DB.put('exercises', { id: DB.uid('ex'), userId: app.activeUser.id, name: d.name.trim(), muscleGroup: d.muscleGroup.trim() || 'General', type: d.type, substitutes: subs, createdAt: Date.now() });
+            await DB.put('exercises', { id: DB.uid('ex'), userId: app.activeUser.id, name: d.name.trim(), muscleGroup: d.muscleGroup.trim() || 'General', type: d.type, substitutes: subs, metrics, createdAt: Date.now() });
           } else {
-            await DB.updateExercise(app.activeUser.id, ex.id, { name: d.name.trim(), muscleGroup: d.muscleGroup.trim() || 'General', type: d.type, substitutes: subs });
+            await DB.updateExercise(app.activeUser.id, ex.id, { name: d.name.trim(), muscleGroup: d.muscleGroup.trim() || 'General', type: d.type, substitutes: subs, metrics });
             await app.refreshRoutine();
           }
           app.render();
@@ -749,6 +822,9 @@ const VPlan = (() => {
       ],
       onMount: (root) => {
         renderChips(root);
+        const typeSel = root.querySelector('#exForm select[name="type"]');
+        const exMetrics = root.querySelector('#exMetrics');
+        if (typeSel && exMetrics) typeSel.addEventListener('change', () => { exMetrics.style.display = typeSel.value === 'time' ? '' : 'none'; });
         const catBtn = root.querySelector('#exCatBtn');
         const catHidden = root.querySelector('#exForm input[name="muscleGroup"]');
         catBtn.addEventListener('click', () => {
@@ -853,5 +929,5 @@ const VPlan = (() => {
     return `<div class="empty-state"><p>No hay rutina configurada.</p></div>`;
   }
 
-  return { week, weekBind, day, dayBind, guides, guide, info, infoBind, exercises, exercisesBind, places, placesBind };
+  return { week, weekBind, day, dayBind, guides, guide, info, infoBind, exercises, exercisesBind, places, placesBind, checkDuplicates };
 })();

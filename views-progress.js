@@ -17,7 +17,11 @@ const VProgress = (() => {
     { key: 'volume', label: 'Volumen (kg)' },
     { key: 'maxReps', label: 'Reps máx' },
   ];
-  const TIME_METRIC = { key: 'maxTime', label: 'Tiempo máx' };
+  const TIME_METRICS = [
+    { key: 'maxTime', label: 'Tiempo máx' },
+    { key: 'distance', label: 'Distancia (km)' },
+    { key: 'kcal', label: 'Kcal' },
+  ];
 
   // Formatea segundos: <60s → "45s"; <60min → "m:ss"; ≥60min → "h:mm:ss".
   function fmtSecs(v) {
@@ -36,7 +40,7 @@ const VProgress = (() => {
     const points = [];
     const lname = exName.toLowerCase();
     sessions.forEach(s => {
-      let maxWeight = 0, volume = 0, maxReps = 0, maxTime = 0, found = false;
+      let maxWeight = 0, volume = 0, maxReps = 0, maxTime = 0, distance = 0, kcal = 0, found = false;
       (s.entries || []).forEach(e => {
         if ((e.name || '').toLowerCase() !== lname) return;
         found = true;
@@ -46,10 +50,12 @@ const VProgress = (() => {
           if (r > maxReps) maxReps = r;
           if (t > maxTime) maxTime = t;
           volume += r * w;
+          distance += parseFloat(set.distance) || 0;
+          kcal += parseFloat(set.kcal) || 0;
         });
       });
       if (!found) return;
-      const map = { maxWeight, volume, maxReps, maxTime };
+      const map = { maxWeight, volume, maxReps, maxTime, distance: Math.round(distance * 100) / 100, kcal: Math.round(kcal) };
       const y = map[metric] || 0;
       points.push({ x: s.date, y });
     });
@@ -152,7 +158,7 @@ const VProgress = (() => {
     if (catalog.length === 0) { host.innerHTML = `<div class="empty-state"><p>No hay ejercicios en el catálogo.</p></div>`; return; }
     const exId = host._exId || params.exId || catalog[0].id;
     const ex = catalog.find(e => e.id === exId) || catalog[0];
-    const metrics = ex.type === 'time' ? [TIME_METRIC] : EX_METRICS;
+    const metrics = ex.type === 'time' ? TIME_METRICS : EX_METRICS;
     const metric = (host._metric && metrics.some(m => m.key === host._metric)) ? host._metric : metrics[0].key;
 
     const points = await exerciseSeries(app.activeUser.id, ex.name, metric);
@@ -160,7 +166,7 @@ const VProgress = (() => {
     const prMax = points.length ? Math.max(...points.map(p => p.y)) : null;
     const prPoint = points.length ? points.reduce((b, p) => (p.y > b.y ? p : b), points[0]) : null; // primera vez que alcanzaste el máximo
     const isTime = metric === 'maxTime';
-    const unit = { maxWeight: ' kg', volume: ' kg', maxReps: ' reps' }[metric] || '';
+    const unit = { maxWeight: ' kg', volume: ' kg', maxReps: ' reps', distance: ' km', kcal: ' kcal' }[metric] || '';
     const fmtVal = (v) => isTime ? fmtSecs(v) : `${v}${unit}`; // tiempo → m:ss / h:mm:ss
     const metricLabel = (metrics.find(m => m.key === metric) || {}).label || '';
     const recent = points.slice(-8).reverse().map(p => `<li><span>${UI.fmtDateShort(p.x)}</span><strong>${p.y === prMax ? `${fmtVal(p.y)} 🏆` : fmtVal(p.y)}</strong></li>`).join('');

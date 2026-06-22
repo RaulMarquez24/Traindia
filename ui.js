@@ -395,13 +395,14 @@ const UI = (() => {
           const ql = norm(q);
           const items = sorted.filter(e => !ql || norm(e.name).includes(ql) || norm(e.muscleGroup || '').includes(ql));
           let html = items.map(e => `<button class="picker-row" data-id="${esc(e.id)}"><span class="picker-name">${esc(e.name)}</span><span class="picker-tag">${esc(e.muscleGroup || '')} · ${TYPE_SHORT[e.type] || e.type}</span></button>`).join('');
-          if (allowNew && ql) html += `<button class="picker-row new" data-new="1"><span class="picker-name">➕ Crear “${esc(q.trim())}”</span></button>`;
+          const exact = sorted.some(e => norm(e.name) === norm(q));
+          if (allowNew && ql && !exact) html += `<button class="picker-row new" data-new="1"><span class="picker-name">➕ Crear “${esc(q.trim())}”</span></button>`;
           listEl.innerHTML = html || '<div class="empty-state"><p class="dim">Sin resultados.</p></div>';
-          listEl.querySelectorAll('[data-id]').forEach(b => b.addEventListener('click', () => { closeModal(); onPick(sorted.find(e => e.id === b.dataset.id)); }));
+          listEl.querySelectorAll('[data-id]').forEach(b => b.addEventListener('click', () => { closeModal(root); onPick(sorted.find(e => e.id === b.dataset.id)); }));
           const nb = listEl.querySelector('[data-new]');
           if (nb) nb.addEventListener('click', async () => {
             const nu = await newExercisePrompt(q.trim(), lockGroup, categories);
-            if (nu) { closeModal(); onPick({ isNew: true, ...nu }); }
+            if (nu) { closeModal(root); onPick({ isNew: true, ...nu }); } // cierra el picker concreto (no el de arriba por la carrera de microtareas)
           });
         };
         search.addEventListener('input', () => draw(search.value));

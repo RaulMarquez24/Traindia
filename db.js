@@ -157,6 +157,15 @@ const DB = (() => {
     return 'weight';
   }
 
+  // Datos a registrar por defecto de un ejercicio de tiempo: cardio (cinta, bici,
+  // carrera, z2…) lleva distancia+kcal; isométricos/movilidad/agilidad solo tiempo.
+  function defaultMetricsFor(name, type) {
+    if (type !== 'time') return undefined;
+    const n = (name || '').toLowerCase();
+    const cardio = ['cinta', 'bici', 'elíptic', 'eliptic', 'carrera', 'trote', 'paseo', 'z2', '400m', '800m', 'km', 'metros'];
+    return cardio.some(w => n.includes(w)) ? ['distance', 'kcal'] : [];
+  }
+
   // Grupo muscular INDIVIDUAL de cada ejercicio predefinido (uno solo, nunca combinado).
   const MUSCLE_GROUP = {
     'Press banca o mancuerna': 'Pecho',
@@ -240,7 +249,9 @@ const DB = (() => {
           if (map.has(key)) continue;
           if (byName.has(key)) { const e = byName.get(key); map.set(key, { id: e.id, type: e.type }); continue; }
           const type = classifyType(ex.name, ex.sets);
+          const metrics = defaultMetricsFor(ex.name, type);
           const rec = { id: uid('ex'), userId, name: ex.name.trim(), muscleGroup: muscleGroupFor(ex.name) || 'General', type, isDefault: true, defaultKey: ex.name.trim(), createdAt: Date.now() };
+          if (metrics) rec.metrics = metrics;
           await put('exercises', rec);
           added++;
           map.set(key, { id: rec.id, type });
@@ -407,6 +418,7 @@ const DB = (() => {
       const key = name.trim().toLowerCase();
       if (byName.has(key)) return byName.get(key);
       const rec = { id: uid('ex'), userId, name: _cap(name.trim()), muscleGroup: group || 'General', type: type || 'weight', isDefault: true, defaultKey: _cap(name.trim()), substitutes: [], createdAt: Date.now() };
+      const m = defaultMetricsFor(rec.name, rec.type); if (m) rec.metrics = m;
       await put('exercises', rec);
       byName.set(key, rec);
       return rec;
@@ -456,7 +468,7 @@ const DB = (() => {
   // Migración idempotente: corrige tipos mal puestos en predefinidos y rellena type en rutinas.
   async function migrate() {
     const s = await getSettings();
-    if (!s || (s.dataVersion || 0) >= 8) return;
+    if (!s || (s.dataVersion || 0) >= 9) return;
     const defaults = defaultTypeByName();
     const users = await getAll('users');
     for (const u of users) {
@@ -470,6 +482,8 @@ const DB = (() => {
         if (dt && e.isDefault === undefined) { e.isDefault = true; e.defaultKey = e.name.trim(); needPut = true; }
         const mg = muscleGroupFor(e.name); // grupo individual (solo predefinidos conocidos)
         if (mg && e.muscleGroup !== mg) { e.muscleGroup = mg; needPut = true; }
+        // datos a registrar por defecto en ejercicios de tiempo (v9)
+        if (e.type === 'time' && e.metrics === undefined) { e.metrics = defaultMetricsFor(e.name, 'time'); needPut = true; }
         if (needPut) await put('exercises', e);
         typeByName.set(e.name.trim().toLowerCase(), e.type);
         byId[e.id] = e; byName[e.name.trim().toLowerCase()] = e;
@@ -506,7 +520,7 @@ const DB = (() => {
       }
       await seedSubstitutes(u.id); // vincula suplentes a los ya sembrados (idempotente)
     }
-    await saveSettings({ dataVersion: 8 });
+    await saveSettings({ dataVersion: 9 });
   }
 
   // ---- Consultas por usuario ----
