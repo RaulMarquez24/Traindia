@@ -232,6 +232,28 @@ const VSessions = (() => {
     });
     return prs;
   }
+  // Recalcula los récords de una sesión EDITADA comparando con las demás sesiones
+  // anteriores (así un ejercicio quitado o un valor cambiado deja de mostrar récord).
+  function recomputePRs(session, others) {
+    const prs = [];
+    (session.entries || []).forEach(e => {
+      const k = keyForEntry(e), type = e.type || 'weight';
+      let best = 0; (e.sets || []).forEach(st => { const m = metricOf(type, st); if (m > best) best = m; });
+      if (best <= 0) return;
+      let prev = 0;
+      others.forEach(os => {
+        const before = (os.date || '') < (session.date || '') || ((os.date || '') === (session.date || '') && (os.createdAt || 0) < (session.createdAt || 0));
+        if (!before) return;
+        (os.entries || []).forEach(oe => {
+          if (keyForEntry(oe) !== k) return;
+          (oe.sets || []).forEach(st => { const m = metricOf(oe.type || 'weight', st); if (m > prev) prev = m; });
+        });
+      });
+      if (prev === 0) prs.push({ name: e.name, type, value: best, prev: 0, first: true });
+      else if (best > prev) prs.push({ name: e.name, type, value: best, prev });
+    });
+    return prs;
+  }
   function celebratePRs(prs) {
     UI.modal({
       title: '🏆 ¡Récord personal!',
@@ -1079,6 +1101,10 @@ const VSessions = (() => {
           if (!draft.name.trim()) draft.name = 'Sesión';
           draft.entries.forEach(e => { e.sets = e.sets.filter(setHasData); });
           draft.entries = draft.entries.filter(e => e.sets.length > 0);
+          // recalcular récords de la sesión editada (un ejercicio quitado deja de tener récord)
+          const others = (await DB.sessionsOf(draft.userId)).filter(x => !x.draft && x.id !== draft.id);
+          const prs = recomputePRs(draft, others);
+          draft.prs = prs.length ? prs : undefined;
           await DB.put('sessions', draft);
           UI.toast('Sesión guardada');
           if (app.currentView === 'session') app.go('session', { sessionId: draft.id }, true);
