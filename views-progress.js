@@ -40,7 +40,8 @@ const VProgress = (() => {
     const points = [];
     const lname = exName.toLowerCase();
     sessions.forEach(s => {
-      let maxWeight = 0, volume = 0, maxReps = 0, maxTime = 0, distance = 0, kcal = 0, found = false;
+      let maxWeight = 0, volume = 0, maxReps = 0, maxTime = 0, distance = 0, kcal = 0, totalTime = 0, found = false;
+      let bestW = null, bestR = null; // mejor serie por peso (desempata reps) y por reps (desempata peso)
       (s.entries || []).forEach(e => {
         if ((e.name || '').toLowerCase() !== lname) return;
         found = true;
@@ -50,14 +51,25 @@ const VProgress = (() => {
           if (r > maxReps) maxReps = r;
           if (t > maxTime) maxTime = t;
           volume += r * w;
+          totalTime += t;
           distance += parseFloat(set.distance) || 0;
           kcal += parseFloat(set.kcal) || 0;
+          if (w > 0 && (!bestW || w > bestW.w || (w === bestW.w && r > bestW.r))) bestW = { w, r };
+          if (r > 0 && (!bestR || r > bestR.r || (r === bestR.r && w > bestR.w))) bestR = { w, r };
         });
       });
       if (!found) return;
-      const map = { maxWeight, volume, maxReps, maxTime, distance: Math.round(distance * 100) / 100, kcal: Math.round(kcal) };
+      const distR = Math.round(distance * 100) / 100;
+      const map = { maxWeight, volume, maxReps, maxTime, distance: distR, kcal: Math.round(kcal) };
       const y = map[metric] || 0;
-      points.push({ x: s.date, y });
+      // condiciones de la marca + desempate. La "tie" mayor = mejor marca a igual valor.
+      let detail = '', tie = 0;
+      if (metric === 'maxWeight' && bestW) { detail = bestW.r ? `× ${bestW.r}` : ''; tie = bestW.r; }            // + reps a igual peso
+      else if (metric === 'maxReps' && bestR) { detail = bestR.w ? `@ ${bestR.w} kg` : ''; tie = bestR.w; }       // + peso a iguales reps
+      else if (metric === 'distance' && distance > 0) { detail = totalTime ? `en ${fmtSecs(totalTime)}` : ''; tie = -totalTime; } // − tiempo a igual distancia
+      else if (metric === 'kcal' && kcal > 0) { detail = totalTime ? `en ${fmtSecs(totalTime)}` : ''; }
+      else if (metric === 'maxTime' && distR > 0) { detail = `· ${distR} km`; tie = distR; }                      // + distancia a igual tiempo
+      points.push({ x: s.date, y, detail, tie });
     });
     return points;
   }
@@ -163,19 +175,21 @@ const VProgress = (() => {
 
     const points = await exerciseSeries(app.activeUser.id, ex.name, metric);
 
-    const prMax = points.length ? Math.max(...points.map(p => p.y)) : null;
-    const prPoint = points.length ? points.reduce((b, p) => (p.y > b.y ? p : b), points[0]) : null; // primera vez que alcanzaste el máximo
     const isTime = metric === 'maxTime';
     const unit = { maxWeight: ' kg', volume: ' kg', maxReps: ' reps', distance: ' km', kcal: ' kcal' }[metric] || '';
-    const fmtVal = (v) => isTime ? fmtSecs(v) : `${v}${unit}`; // tiempo → m:ss / h:mm:ss
+    // récord = mejor punto; a igual valor, gana el de mejor condición (más reps / más peso)
+    const better = (p, b) => p.y > b.y || (p.y === b.y && (p.tie || 0) > (b.tie || 0));
+    const prPoint = points.length ? points.reduce((b, p) => (better(p, b) ? p : b), points[0]) : null;
+    const fmtPoint = (p) => { const base = isTime ? fmtSecs(p.y) : `${p.y}${unit}`; return p.detail ? `${base} ${p.detail}` : base; };
     const metricLabel = (metrics.find(m => m.key === metric) || {}).label || '';
-    const recent = points.slice(-8).reverse().map(p => `<li><span>${UI.fmtDateShort(p.x)}</span><strong>${p.y === prMax ? `${fmtVal(p.y)} 🏆` : fmtVal(p.y)}</strong></li>`).join('');
+    const isPR = (p) => prPoint && p.y === prPoint.y && (p.tie || 0) === (prPoint.tie || 0);
+    const recent = points.slice(-8).reverse().map(p => `<li><span>${UI.fmtDateShort(p.x)}</span><strong>${fmtPoint(p)}${isPR(p) ? ' 🏆' : ''}</strong></li>`).join('');
 
     host.innerHTML = `
       <div class="card">
         ${UI.field('Ejercicio', UI.selectButton('exSelBtn', ex.name))}
         <div class="chips-row small">${metrics.map(m => `<button class="chip${m.key === metric ? ' on' : ''}" data-metric="${m.key}">${m.label}</button>`).join('')}</div>
-        ${prPoint ? `<div class="pr-stat">${UI.icon('star', 16)}<div class="pr-stat-text"><span class="pr-stat-label">Récord · ${UI.esc(metricLabel)}</span><span class="pr-stat-date">${UI.fmtDateShort(prPoint.x)}</span></div><span class="pr-stat-val">${fmtVal(prPoint.y)}</span></div>` : ''}
+        ${prPoint ? `<div class="pr-stat">${UI.icon('star', 16)}<div class="pr-stat-text"><span class="pr-stat-label">Récord · ${UI.esc(metricLabel)}</span><span class="pr-stat-date">${UI.fmtDateShort(prPoint.x)}</span></div><span class="pr-stat-val">${fmtPoint(prPoint)}</span></div>` : ''}
         ${UI.lineChart([{ label: ex.name, color: app.activeUser.color, points }], { width: 320, height: 150, fmtY: isTime ? fmtSecs : undefined })}
       </div>
       ${points.length ? `<div class="block"><div class="block-label">Últimos registros</div><ul class="kv-list">${recent}</ul></div>` : '<div class="empty-state"><p class="dim">Aún no has registrado este ejercicio en ninguna sesión.</p></div>'}`;
