@@ -332,6 +332,8 @@ textarea.inp { resize: vertical; line-height: 1.4; }
 .e1-tips li { margin-bottom: 4px; }
 .e1-tips li:last-child { margin-bottom: 0; }
 /* Lista "Tus récords" */
+.rec-catsel { margin-bottom: 10px; }
+.rec-catsel .field { margin: 0; }
 .rec-row { display: flex; align-items: center; gap: 10px; padding: 11px 12px; border-bottom: 1px solid var(--line-soft); }
 .rec-row:last-child { border-bottom: 0; }
 .rec-medal { font-size: 17px; flex-shrink: 0; }

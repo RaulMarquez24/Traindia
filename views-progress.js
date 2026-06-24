@@ -236,10 +236,7 @@ const VProgress = (() => {
         <button class="chip${sort === 'recent' ? ' on' : ''}" data-sort="recent">Recientes</button>
         <button class="chip${sort === 'name' ? ' on' : ''}" data-sort="name">A-Z</button>
       </div>
-      ${cats.length > 1 ? `<div class="chips-row small rec-cats" style="margin-bottom:8px">
-        <button class="chip${cat === '__all__' ? ' on' : ''}" data-cat="__all__">Todas</button>
-        ${cats.map(c => `<button class="chip${cat === c ? ' on' : ''}" data-cat="${UI.esc(c)}">${UI.esc(c)}</button>`).join('')}
-      </div>` : ''}
+      ${cats.length > 1 ? `<div class="rec-catsel">${UI.field('Categoría', UI.selectButton('recCatBtn', cat === '__all__' ? 'Todas' : cat))}</div>` : ''}
       <div class="card" style="padding:0" id="recList">${rows}</div>
       <p class="dim" id="recNoRes" style="display:none;padding:12px 2px">Sin resultados.</p>`;
 
@@ -257,7 +254,13 @@ const VProgress = (() => {
     const si = host.querySelector('#recSearch');
     si.addEventListener('input', () => { host._recSearch = si.value; applyFilter(); }); // filtra sin re-render (mantiene foco)
     host.querySelectorAll('[data-sort]').forEach(b => b.addEventListener('click', () => { host._recSort = b.dataset.sort; renderRecords(app, host); }));
-    host.querySelectorAll('.rec-cats [data-cat]').forEach(b => b.addEventListener('click', () => { host._recCat = b.dataset.cat; renderRecords(app, host); }));
+    const catBtn = host.querySelector('#recCatBtn');
+    if (catBtn) catBtn.addEventListener('click', () => UI.pickFromList({
+      title: 'Filtrar por categoría',
+      options: [{ value: '__all__', label: 'Todas' }].concat(cats.map(c => ({ value: c, label: c }))),
+      value: cat,
+      onPick: (val) => { host._recCat = val; renderRecords(app, host); },
+    }));
     applyFilter();
   }
 
