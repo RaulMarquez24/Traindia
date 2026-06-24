@@ -547,7 +547,7 @@ const VData = (() => {
     //    nunca se duplican: si ya tienes ese ejercicio (aunque con otro id) se
     //    reutiliza; solo se crean los que te falten. (El progreso va por nombre.)
     if (want.has('exercises')) {
-      exMap = await mapExercisesToCatalog(targetUserId, data.exercises || []);
+      exMap = await mapExercisesToCatalog(targetUserId, data.exercises || [], { overwrite: !duplicate });
     }
     const remapEx = (id) => (id && exMap[id]) ? exMap[id] : (id || null);
 
@@ -626,11 +626,14 @@ const VData = (() => {
 
   // Asegura que los ejercicios importados existen en el catálogo del usuario (por nombre).
   // Devuelve idMap: idOrigen -> idLocal. Crea los que falten y remapea sus suplentes.
-  async function mapExercisesToCatalog(userId, importedExercises) {
+  // Con opts.overwrite, además ACTUALIZA los existentes con los datos importados
+  // (grupo, tipo, métricas y suplentes) — para la política "Reemplazar".
+  async function mapExercisesToCatalog(userId, importedExercises, opts = {}) {
+    const overwrite = !!opts.overwrite;
     const local = await DB.exercisesOf(userId);
     const byName = new Map(local.map(e => [e.name.trim().toLowerCase(), e]));
     const idMap = {};
-    const created = [];
+    const created = [], updated = [];
     for (const ie of (importedExercises || [])) {
       const key = (ie.name || '').trim().toLowerCase();
       let ex = byName.get(key);
@@ -638,12 +641,25 @@ const VData = (() => {
         ex = { id: DB.uid('ex'), userId, name: (ie.name || '').trim(), muscleGroup: ie.muscleGroup || 'General', type: ie.type || 'weight', substitutes: [], createdAt: Date.now() };
         if (Array.isArray(ie.metrics)) ex.metrics = ie.metrics.slice(); // conservar datos a registrar (tiempo)
         await DB.put('exercises', ex); byName.set(key, ex); created.push({ ex, srcSubs: ie.substitutes || [] });
+      } else if (overwrite) {
+        // reemplazar: vuelca los datos importados en tu ejercicio (mantiene id y createdAt)
+        if (ie.muscleGroup) ex.muscleGroup = ie.muscleGroup;
+        if (ie.type) ex.type = ie.type;
+        if (Array.isArray(ie.metrics)) ex.metrics = ie.metrics.slice();
+        else if (ie.type && ie.type !== 'time') delete ex.metrics; // un no-cardio no lleva métricas
+        updated.push({ ex, srcSubs: ie.substitutes || [] });
       }
       idMap[ie.id] = ex.id;
     }
+    // 2º pase: remapea suplentes ya con el idMap completo.
     for (const { ex, srcSubs } of created) {
       const subs = srcSubs.map(sid => idMap[sid]).filter(Boolean);
       if (subs.length) { ex.substitutes = subs; await DB.put('exercises', ex); }
+    }
+    for (const { ex, srcSubs } of updated) {
+      const subs = srcSubs.map(sid => idMap[sid]).filter(Boolean);
+      if (subs.length) ex.substitutes = subs; // si el import no trae suplentes, conserva los tuyos
+      await DB.put('exercises', ex);
     }
     return idMap;
   }
