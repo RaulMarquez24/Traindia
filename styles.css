@@ -321,7 +321,8 @@ textarea.inp { resize: vertical; line-height: 1.4; }
 .e1-alert .ic { flex-shrink: 0; margin-top: 1px; }
 .e1-alert span { flex: 1; min-width: 0; }
 .e1-alert strong { color: var(--strong); font-weight: 700; }
-.e1-formula-row { display: flex; align-items: center; justify-content: center; gap: 8px; margin: 6px 0 2px; }
+.e1-formula-row { display: flex; flex-direction: column; align-items: center; gap: 6px; margin: 8px 0 2px; }
+.e1-formula-row .chips-row { justify-content: center; }
 .e1-formula-label { font-size: 11px; font-weight: 600; color: var(--ink-dim); text-transform: uppercase; letter-spacing: .03em; }
 .e1-help { background: var(--strong-bg); border-radius: 10px; padding: 10px 12px; margin: 8px 0 2px; font-size: 12.5px; line-height: 1.45; color: var(--ink-soft); }
 .e1-help p { margin: 0 0 9px; }
