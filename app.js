@@ -291,6 +291,59 @@ const app = {
     });
   },
 
+  // ---- Sugerencias / reportes (formulario → email vía Web3Forms) ----
+  openFeedback() {
+    const ACCESS_KEY = '1ba5f2b9-bc2f-4d16-b0d7-6fcdf7f4639e';
+    UI.modal({
+      title: 'Sugerencias y reportes',
+      bodyHTML: `<div id="fbForm">
+        <p class="modal-text dim">¿Una idea para mejorar o algo que no va bien? Cuéntamelo y me llega directo. Deja un contacto solo si quieres respuesta.</p>
+        ${UI.field('Tipo', UI.select('tipo', [{ value: 'Sugerencia', label: '💡 Sugerencia' }, { value: 'Error', label: '🐞 Error / fallo' }, { value: 'Otro', label: 'Otro' }], 'Sugerencia'))}
+        ${UI.field('Mensaje', UI.textarea('mensaje', '', 'Describe tu idea o el problema con detalle…', 5))}
+        ${UI.field('Tu contacto (opcional)', UI.input('contacto', '', { placeholder: 'Email o nombre, por si quiero responderte' }))}
+        <input type="text" name="botcheck" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px">
+        <p class="field-hint">Se envía a través de un servicio externo (Web3Forms) para que me llegue por correo. No se envía ningún dato de tus entrenos.</p>
+      </div>`,
+      actions: [
+        { label: 'Cancelar', kind: 'ghost' },
+        { label: 'Enviar', kind: 'primary', onClick: async (overlay) => {
+          const root = overlay.querySelector('#fbForm');
+          const d = UI.readForm(root);
+          if (d.botcheck) return; // honeypot: cierra en silencio
+          if (!d.mensaje || !d.mensaje.trim()) { UI.toast('Escribe un mensaje', 'err'); return false; }
+          if (!navigator.onLine) { UI.toast('Sin conexión: inténtalo cuando vuelvas a tener internet', 'err'); return false; }
+          const btn = overlay.querySelector('.modal-actions .btn.primary');
+          const prev = btn.textContent; btn.textContent = 'Enviando…'; btn.disabled = true;
+          try {
+            const res = await fetch('https://api.web3forms.com/submit', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+              body: JSON.stringify({
+                access_key: ACCESS_KEY,
+                subject: `Traindía · ${d.tipo}`,
+                from_name: 'Traindía PWA',
+                tipo: d.tipo,
+                mensaje: d.mensaje.trim(),
+                contacto: (d.contacto || '').trim() || '(no indicado)',
+                version: 'v2.5.0',
+                perfil: (this.mainUser && this.mainUser.name) || '',
+                navegador: navigator.userAgent,
+              }),
+            });
+            const out = await res.json().catch(() => ({}));
+            if (res.ok && out.success) { UI.toast('¡Enviado! Gracias por tu mensaje 🙌'); return; }
+            UI.toast('No se pudo enviar: ' + (out.message || 'inténtalo de nuevo'), 'err');
+          } catch (e) {
+            UI.toast('Fallo de red: inténtalo de nuevo', 'err');
+          } finally {
+            btn.textContent = prev; btn.disabled = false;
+          }
+          return false; // error → mantener el formulario abierto
+        } },
+      ],
+    });
+  },
+
   // ---- Vista MÁS ----
   renderMore() {
     const rows = [
@@ -304,10 +357,14 @@ const app = {
     ].filter(r => !r.cnp || this.isCnp());
     return `<div class="section">
       ${rows.map(r => `<button class="big-row" data-link="${r.v}"><span class="big-row-icon tile" style="background:${r.color}">${UI.icon(r.icon, 20)}</span><span class="big-row-text"><strong>${r.label}</strong><span class="dim">${r.sub}</span></span><span class="chev">›</span></button>`).join('')}
-      <p class="version-foot">Traindía · v2.4.1 · ${Object.keys(this.usersById).length} perfil(es)<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
+      <button class="big-row" data-feedback><span class="big-row-icon tile" style="background:var(--strong)">${UI.icon('chat', 20)}</span><span class="big-row-text"><strong>Sugerencias y reportes</strong><span class="dim">Envíame ideas o fallos</span></span><span class="chev">›</span></button>
+      <p class="version-foot">Traindía · v2.5.0 · ${Object.keys(this.usersById).length} perfil(es)<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
     </div>`;
   },
-  bindMore() {},
+  bindMore(root) {
+    const fb = root && root.querySelector('[data-feedback]');
+    if (fb) fb.addEventListener('click', () => this.openFeedback());
+  },
 
   // ---- Vista PERFILES ----
   async renderProfiles() {
@@ -412,7 +469,7 @@ const app = {
         <button class="btn danger block" id="resetApp">Borrar todos los datos</button>
         <p class="field-hint">Restablece la app al estado inicial (se borran todos los perfiles, sesiones y progreso).</p>
       </div>
-      <p class="version-foot">Traindía · v2.4.1</p>
+      <p class="version-foot">Traindía · v2.5.0</p>
     </div>`;
   },
 

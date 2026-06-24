@@ -82,6 +82,7 @@ const VData = (() => {
       <div class="card">
         <div class="card-label">Exportar</div>
         <button class="btn primary block" id="expProfile">Perfil completo (${UI.esc(app.mainUser.name)})</button>
+        <button class="btn ghost block" id="expPlan">Plan completo (semana)</button>
         <button class="btn ghost block" id="expDay">Un día concreto</button>
         <button class="btn ghost block" id="expSessions">Sesiones (individuales o por fechas)</button>
         <button class="btn ghost block" id="expProgress">Progreso</button>
@@ -98,6 +99,7 @@ const VData = (() => {
 
   function bind(app, root) {
     root.querySelector('#expProfile').addEventListener('click', () => backupProfile(app));
+    root.querySelector('#expPlan').addEventListener('click', () => exportPlan(app));
     root.querySelector('#expDay').addEventListener('click', () => exportDay(app));
     root.querySelector('#expSessions').addEventListener('click', () => exportSessions(app));
     root.querySelector('#expProgress').addEventListener('click', () => exportProgress(app));
@@ -110,6 +112,7 @@ const VData = (() => {
     UI.modal({
       title: 'Compartir / Datos',
       bodyHTML: `<div class="menu-list">
+        <button class="menu-row" data-act="exp-plan"><span>${UI.icon('upload', 17)} Exportar plan (semana)</span><span class="chev">›</span></button>
         <button class="menu-row" data-act="exp-day"><span>${UI.icon('upload', 17)} Exportar un día</span><span class="chev">›</span></button>
         <button class="menu-row" data-act="exp-profile"><span>${UI.icon('upload', 17)} Exportar perfil completo</span><span class="chev">›</span></button>
         <button class="menu-row" data-act="exp-sessions"><span>${UI.icon('upload', 17)} Exportar sesiones</span><span class="chev">›</span></button>
@@ -121,6 +124,7 @@ const VData = (() => {
       actions: [{ label: 'Cerrar', kind: 'ghost' }],
       onMount: (root) => {
         const go = (fn) => { UI.closeModal(); fn(); };
+        root.querySelector('[data-act="exp-plan"]').addEventListener('click', () => go(() => exportPlan(app)));
         root.querySelector('[data-act="exp-day"]').addEventListener('click', () => go(() => exportDay(app)));
         root.querySelector('[data-act="exp-profile"]').addEventListener('click', () => go(() => backupProfile(app)));
         root.querySelector('[data-act="exp-sessions"]').addEventListener('click', () => go(() => exportSessions(app)));
@@ -170,7 +174,88 @@ const VData = (() => {
   function routeImport(app, payload) {
     if (!payload || payload.format !== FORMAT || !payload.data) { UI.toast('No es un export de Traindía', 'err'); return; }
     if (payload.kind === 'day' && payload.data.day) importDay(app, payload);
+    else if (payload.kind === 'plan' && payload.data.routine) importPlan(app, payload);
     else importFlow(app, payload);
+  }
+
+  // ---------- EXPORTAR PLAN (semana completa = la rutina activa) ----------
+  function exportPlan(app) {
+    const routine = app.routine;
+    if (!routine) { UI.toast('No hay plan activo', 'err'); return; }
+    doExportPlan(app, routine);
+  }
+  async function doExportPlan(app, routine) {
+    const allEx = await DB.exercisesOf(app.mainUser.id);
+    const byId = Object.fromEntries(allEx.map(e => [e.id, e]));
+    const ids = new Set();
+    (routine.days || []).forEach(d => (d.blocks || []).forEach(bl => bl.exercises.forEach(x => {
+      if (x.exerciseId) { ids.add(x.exerciseId); (byId[x.exerciseId]?.substitutes || []).forEach(sid => ids.add(sid)); }
+    })));
+    download({
+      format: FORMAT, version: 2, kind: 'plan', exportedAt: new Date().toISOString(),
+      user: { name: app.mainUser.name, color: app.mainUser.color },
+      data: { routine, exercises: exercisesByIds(allEx, [...ids]) },
+    }, `traindia-plan-${stamp()}.json`);
+    UI.toast('Plan exportado');
+  }
+
+  // Crea un plan NUEVO (no activo) en el perfil destino, con los días elegidos y
+  // sus ejercicios remapeados al catálogo del destino. Reutilizado por importPlan
+  // y por la importación de perfil completo.
+  async function createImportedPlan(targetUserId, routine, dayIds, name, exercises) {
+    const idMap = await mapExercisesToCatalog(targetUserId, exercises || []);
+    const newDays = JSON.parse(JSON.stringify((routine.days || []).filter(d => dayIds.has(d.id))));
+    newDays.forEach(d => {
+      d.id = DB.uid('day'); // id propio para el nuevo plan
+      (d.blocks || []).forEach(b => (b.exercises || []).forEach(e => { if (e.exerciseId && idMap[e.exerciseId]) e.exerciseId = idMap[e.exerciseId]; }));
+    });
+    await DB.put('routines', { id: DB.uid('rt'), userId: targetUserId, planType: routine.planType || 'cnp', name, days: newDays, order: Date.now(), createdAt: Date.now(), isPrimary: false });
+  }
+  // Fusiona los días elegidos del plan del archivo DENTRO del plan activo del destino:
+  // sustituye el día con el mismo nombre (conserva su id/orden) o lo añade si no existe.
+  async function mergeDaysIntoPlan(targetUserId, routine, dayIds, exercises) {
+    const idMap = await mapExercisesToCatalog(targetUserId, exercises || []);
+    const rts = await DB.routinesOf(targetUserId);
+    const target = rts.find(r => r.isPrimary) || rts[0];
+    if (!target) { await createImportedPlan(targetUserId, routine, dayIds, routine.name || 'Plan importado', exercises); return; }
+    (routine.days || []).filter(d => dayIds.has(d.id)).forEach(sd => {
+      const copy = JSON.parse(JSON.stringify(sd));
+      (copy.blocks || []).forEach(b => (b.exercises || []).forEach(e => { if (e.exerciseId && idMap[e.exerciseId]) e.exerciseId = idMap[e.exerciseId]; }));
+      const idx = target.days.findIndex(d => (d.name || '').trim().toLowerCase() === (sd.name || '').trim().toLowerCase());
+      if (idx >= 0) { copy.id = target.days[idx].id; copy.order = target.days[idx].order; target.days[idx] = copy; }
+      else { copy.id = DB.uid('day'); target.days.push(copy); }
+    });
+    await DB.put('routines', target);
+  }
+  // Lista de casillas de días de un plan (marcados por defecto).
+  function dayChecksHTML(days) {
+    return (days || []).map(d => `<label class="check-row"><input type="checkbox" data-day="${UI.esc(d.id)}" checked><span>${UI.esc(d.name)}${d.isRest ? ' (descanso)' : ` — ${(d.blocks || []).reduce((a, b) => a + (b.exercises || []).length, 0)} ej`}</span></label>`).join('');
+  }
+
+  // ---------- IMPORTAR PLAN: se añade como un plan NUEVO (no activo) ----------
+  function importPlan(app, payload) {
+    const routine = payload.data.routine || {};
+    const sender = payload.user?.name || 'alguien';
+    UI.modal({
+      title: `Importar plan de ${UI.esc(sender)}`, size: 'wide',
+      bodyHTML: `
+        ${UI.field('Nombre del plan', UI.input('planName', routine.name ? `${routine.name} (de ${sender})` : `Plan de ${sender}`))}
+        <span class="field-label">Días a incluir</span>
+        <p class="field-hint" style="margin-top:0">Se añade como un plan NUEVO. Lo activas cuando quieras desde "El plan".</p>
+        <div class="check-list">${dayChecksHTML(routine.days)}</div>`,
+      actions: [
+        { label: 'Cancelar', kind: 'ghost' },
+        { label: 'Añadir plan', kind: 'primary', onClick: async (root) => {
+          const chosen = new Set([...root.querySelectorAll('[data-day]:checked')].map(c => c.dataset.day));
+          if (!chosen.size) { UI.toast('Marca al menos un día', 'err'); return false; }
+          const name = root.querySelector('input[name="planName"]').value.trim() || `Plan de ${sender}`;
+          await createImportedPlan(app.mainUser.id, routine, chosen, name, payload.data.exercises);
+          await app.refreshRoutine();
+          app.render();
+          UI.toast('Plan añadido · actívalo en "El plan"');
+        } },
+      ],
+    });
   }
 
   // ---------- EXPORTAR SESIONES ----------
@@ -302,15 +387,19 @@ const VData = (() => {
   async function importFlow(app, payload) {
     const users = await DB.getUsers();
     const counts = payload.data;
-    const SECTIONS = [
+    const sender = payload.user?.name || 'desconocido';
+    const routines = counts.routines || [];
+    const planRoutine = routines.find(r => r.isPrimary) || routines[0] || null; // el plan del archivo
+    const hasPlan = !!planRoutine;
+    const DATA_SECTIONS = [
       { key: 'exercises', label: 'Ejercicios' },
-      { key: 'routines', label: 'Rutinas' },
       { key: 'sessions', label: 'Sesiones' },
       { key: 'progress', label: 'Progreso' },
       { key: 'journal', label: 'Diario' },
     ].filter(s => (counts[s.key] || []).length);
+    const hasData = DATA_SECTIONS.length > 0;
 
-    // sección con checkbox global + lista de elementos editable (para quitar lo que no quieras)
+    // sección de datos: casilla global + lista de elementos editable
     const sectionHTML = (s) => {
       const items = counts[s.key];
       const editable = items.length > 1 && items.length <= 60;
@@ -319,31 +408,44 @@ const VData = (() => {
         ${editable ? `<div class="imp-items" data-items="${s.key}" style="display:none">${items.map(it => `<label class="check-row sub"><input type="checkbox" data-item="${s.key}" data-id="${UI.esc(String(it.id))}" checked><span>${importItemLabel(s.key, it)}</span></label>`).join('')}</div>` : ''}
       </div>`;
     };
+    // sección "Días del plan": desmarcada por defecto (no toca tu plan salvo que la actives),
+    // con destino (a tu plan actual / plan nuevo) y casillas por día.
+    const daysSection = hasPlan ? `<div class="imp-sec">
+      <label class="check-row imp-sec-head"><input type="checkbox" data-sec="days"><span>Días del plan <span class="dim">(${(planRoutine.days || []).length})</span></span><button type="button" class="imp-toggle" data-toggle="days">editar</button></label>
+      <div class="imp-items" data-items="days" style="display:none">
+        <div style="margin-bottom:6px">
+          <label class="check-row"><input type="radio" name="daysdest" value="merge" checked><span>A mi plan actual (sustituye esos días)</span></label>
+          <label class="check-row"><input type="radio" name="daysdest" value="new"><span>Como plan nuevo aparte</span></label>
+        </div>
+        <div id="daysNewName" style="display:none;margin-bottom:6px">${UI.field('Nombre del plan nuevo', UI.input('planName', planRoutine.name ? `${planRoutine.name} (de ${sender})` : `Plan de ${sender}`))}</div>
+        ${dayChecksHTML(planRoutine.days)}
+      </div>
+    </div>` : '';
 
     UI.modal({
-      title: 'Importar datos', size: 'wide',
+      title: 'Importar', size: 'wide',
       bodyHTML: `
-        <p class="modal-text">Archivo de <strong>${UI.esc(payload.user?.name || 'desconocido')}</strong>.</p>
+        <p class="modal-text">Archivo de <strong>${UI.esc(sender)}</strong>.</p>
         <div id="impForm">
           <span class="field-label">Asignar a perfil(es)</span>
-          <p class="field-hint" style="margin-top:0;margin-bottom:8px">Puedes marcar varios: se importan los mismos datos a cada uno (luego editas el de cada perfil por separado).</p>
+          <p class="field-hint" style="margin-top:0;margin-bottom:8px">Puedes marcar varios: se importa lo mismo a cada uno.</p>
           <div class="check-list" style="max-height:none;margin-bottom:10px">
             ${users.map((u, i) => `<label class="check-row"><input type="checkbox" data-user="${u.id}"${i === 0 ? ' checked' : ''}><span>${UI.esc(u.name)}${u.isMain ? ' (principal)' : ' (invitado)'}</span></label>`).join('')}
             <label class="check-row"><input type="checkbox" data-newguest><span>+ Crear nuevo invitado</span></label>
           </div>
           <div id="newGuestBox" style="display:none">
-            ${UI.field('Nombre del invitado', UI.input('guestName', payload.user?.name || '', { placeholder: 'Nombre' }))}
+            ${UI.field('Nombre del invitado', UI.input('guestName', sender, { placeholder: 'Nombre' }))}
             ${UI.field('Color', UI.colorPicker('guestColor', payload.user?.color || UI.ESSENTIALS[1]))}
           </div>
           <span class="field-label">Qué importar</span>
+          <p class="field-hint" style="margin-top:0;margin-bottom:8px">Marca lo que quieras. En "Días" pulsa <em>editar</em> para elegir días sueltos y si van a tu plan o a uno nuevo.</p>
           <div style="margin-bottom:12px">
-            ${SECTIONS.length ? SECTIONS.map(sectionHTML).join('') : '<p class="dim" style="padding:2px">El archivo no tiene datos.</p>'}
+            ${daysSection}${DATA_SECTIONS.map(sectionHTML).join('')}
+            ${(!hasPlan && !hasData) ? '<p class="dim" style="padding:2px">El archivo no tiene datos.</p>' : ''}
           </div>
-          <span class="field-label">Si ya tienes esos datos</span>
-          ${UI.select('policy', [
-            { value: 'duplicate', label: 'Añadir como copia nueva' },
-            { value: 'overwrite', label: 'Reemplazar lo que coincida' }], 'duplicate')}
-          <p class="field-hint" id="policyHint"></p>
+          ${hasData ? `<span class="field-label">Si ya tienes esos datos</span>
+          ${UI.select('policy', [{ value: 'duplicate', label: 'Añadir como copia nueva' }, { value: 'overwrite', label: 'Reemplazar lo que coincida' }], 'duplicate')}
+          <p class="field-hint" id="policyHint"></p>` : ''}
         </div>`,
       actions: [
         { label: 'Cancelar', kind: 'ghost' },
@@ -352,21 +454,31 @@ const VData = (() => {
           const newGuest = root.querySelector('[data-newguest]').checked;
           if (!targetIds.length && !newGuest) { UI.toast('Elige al menos un perfil', 'err'); return false; }
 
-          // secciones + filtrado por elemento
+          // Días del plan
+          let dayIds = null, daysDest = 'merge', planName = '';
+          const daysChk = root.querySelector('[data-sec="days"]');
+          const wantDays = hasPlan && daysChk && daysChk.checked;
+          if (wantDays) {
+            dayIds = new Set([...root.querySelectorAll('[data-day]:checked')].map(c => c.dataset.day));
+            if (!dayIds.size) { UI.toast('Marca al menos un día del plan', 'err'); return false; }
+            daysDest = root.querySelector('[name="daysdest"]:checked')?.value || 'merge';
+            planName = (root.querySelector('input[name="planName"]')?.value || '').trim() || `Plan de ${sender}`;
+          }
+
+          // Datos (sin rutinas: los días se gestionan en su sección)
           const chosen = new Set();
           const filtered = {};
-          for (const s of SECTIONS) {
+          for (const s of DATA_SECTIONS) {
             const secChk = root.querySelector(`[data-sec="${s.key}"]`);
             if (!secChk || !secChk.checked) continue;
             const itemsBox = root.querySelector(`[data-items="${s.key}"]`);
             let sel;
-            if (itemsBox) {
-              const ids = new Set([...root.querySelectorAll(`[data-item="${s.key}"]:checked`)].map(c => c.dataset.id));
-              sel = (counts[s.key] || []).filter(it => ids.has(String(it.id)));
-            } else sel = (counts[s.key] || []);
+            if (itemsBox) { const ids = new Set([...root.querySelectorAll(`[data-item="${s.key}"]:checked`)].map(c => c.dataset.id)); sel = (counts[s.key] || []).filter(it => ids.has(String(it.id))); }
+            else sel = (counts[s.key] || []);
             if (sel.length) { filtered[s.key] = sel; chosen.add(s.key); }
           }
-          if (!chosen.size) { UI.toast('Marca al menos algo que importar', 'err'); return false; }
+
+          if (!wantDays && !chosen.size) { UI.toast('Marca al menos algo que importar', 'err'); return false; }
 
           if (newGuest) {
             const name = (root.querySelector('input[name="guestName"]').value || '').trim();
@@ -376,10 +488,17 @@ const VData = (() => {
             targetIds.push(g.id);
           }
 
-          // con varios perfiles se duplica siempre (un mismo id no puede ser de dos perfiles)
-          const policy = targetIds.length > 1 ? 'duplicate' : root.querySelector('select[name="policy"]').value;
-          const payload2 = { ...payload, data: { exercises: [], routines: [], sessions: [], progress: [], journal: [], ...filtered } };
-          for (const tid of targetIds) await applyImport(app, payload2, tid, policy, chosen);
+          const policy = targetIds.length > 1 ? 'duplicate' : (root.querySelector('select[name="policy"]')?.value || 'duplicate');
+          for (const tid of targetIds) {
+            if (chosen.size) {
+              const payload2 = { ...payload, data: { exercises: [], routines: [], sessions: [], progress: [], journal: [], ...filtered } };
+              await applyImport(app, payload2, tid, policy, chosen);
+            }
+            if (wantDays) {
+              if (daysDest === 'new') await createImportedPlan(tid, planRoutine, dayIds, planName, counts.exercises || []);
+              else await mergeDaysIntoPlan(tid, planRoutine, dayIds, counts.exercises || []);
+            }
+          }
 
           await app.loadUsers();
           await app.refreshRoutine();
@@ -390,25 +509,30 @@ const VData = (() => {
       onMount: (root) => {
         UI.bindColorPicker(root);
         const ng = root.querySelector('[data-newguest]');
-        const box = root.querySelector('#newGuestBox');
-        ng.addEventListener('change', () => { box.style.display = ng.checked ? '' : 'none'; });
+        const gbox = root.querySelector('#newGuestBox');
+        ng.addEventListener('change', () => { gbox.style.display = ng.checked ? '' : 'none'; });
         root.querySelectorAll('[data-toggle]').forEach(b => b.addEventListener('click', () => {
           const items = root.querySelector(`[data-items="${b.dataset.toggle}"]`);
           const open = items.style.display === 'none';
           items.style.display = open ? '' : 'none';
           b.textContent = open ? 'ocultar' : 'editar';
+          if (open && b.dataset.toggle === 'days') { const c = root.querySelector('[data-sec="days"]'); if (c && !c.checked) c.checked = true; } // al editar días, activarlos
         }));
         root.querySelectorAll('[data-sec]').forEach(sc => sc.addEventListener('change', () => {
           root.querySelectorAll(`[data-item="${sc.dataset.sec}"]`).forEach(ic => { ic.checked = sc.checked; });
         }));
+        const daysNewName = root.querySelector('#daysNewName');
+        root.querySelectorAll('[name="daysdest"]').forEach(r => r.addEventListener('change', () => {
+          if (daysNewName) daysNewName.style.display = (root.querySelector('[name="daysdest"]:checked').value === 'new') ? '' : 'none';
+        }));
         const pol = root.querySelector('select[name="policy"]');
         const hint = root.querySelector('#policyHint');
-        const setHint = () => {
-          hint.textContent = pol.value === 'duplicate'
-            ? 'Recomendado. Se añade como entradas NUEVAS; nunca borra ni pisa lo que ya tienes (si ya lo tenías idéntico, quedará duplicado).'
-            : 'Si un dato coincide exactamente con uno tuyo (mismo identificador interno), lo actualiza con el del archivo; el resto se añade.';
-        };
-        pol.addEventListener('change', setHint); setHint();
+        if (pol && hint) {
+          const setHint = () => { hint.textContent = pol.value === 'duplicate'
+            ? 'Se añade como entradas NUEVAS; nunca pisa lo que ya tienes (si lo tenías idéntico, se duplica).'
+            : 'Actualiza en su sitio lo que coincida (mismo identificador); el resto se añade. Ideal para RESTAURAR tus propios datos.'; };
+          pol.addEventListener('change', setHint); setHint();
+        }
       },
     });
   }
@@ -417,27 +541,36 @@ const VData = (() => {
     const data = payload.data || {};
     const duplicate = policy === 'duplicate';
     const want = sections || new Set(['exercises', 'routines', 'sessions', 'progress', 'journal']);
-    const exMap = {}; // oldId -> newId (para reescribir referencias)
+    let exMap = {}; // idOrigen -> idLocal (para reescribir referencias)
 
-    // 1) Ejercicios
-    if (want.has('exercises')) for (const ex of (data.exercises || [])) {
-      const oldId = ex.id;
-      const newId = duplicate ? DB.uid('ex') : ex.id;
-      exMap[oldId] = newId;
-      await DB.put('exercises', { ...ex, id: newId, userId: targetUserId });
+    // 1) Ejercicios — SIEMPRE se emparejan por NOMBRE con el catálogo, así que
+    //    nunca se duplican: si ya tienes ese ejercicio (aunque con otro id) se
+    //    reutiliza; solo se crean los que te falten. (El progreso va por nombre.)
+    if (want.has('exercises')) {
+      exMap = await mapExercisesToCatalog(targetUserId, data.exercises || [], { overwrite: !duplicate });
     }
     const remapEx = (id) => (id && exMap[id]) ? exMap[id] : (id || null);
 
     // 2) Rutinas (reescribe exerciseId en bloques)
-    if (want.has('routines')) for (const rt of (data.routines || [])) {
-      const days = (rt.days || []).map(day => ({
-        ...day,
-        blocks: (day.blocks || []).map(b => ({
-          ...b,
-          exercises: (b.exercises || []).map(e => ({ ...e, exerciseId: remapEx(e.exerciseId) })),
-        })),
-      }));
-      await DB.put('routines', { ...rt, id: duplicate ? DB.uid('rt') : rt.id, userId: targetUserId, days, isPrimary: false });
+    if (want.has('routines')) {
+      for (const rt of (data.routines || [])) {
+        const days = (rt.days || []).map(day => ({
+          ...day,
+          blocks: (day.blocks || []).map(b => ({
+            ...b,
+            exercises: (b.exercises || []).map(e => ({ ...e, exerciseId: remapEx(e.exerciseId) })),
+          })),
+        }));
+        // copia nueva: nunca activa (no pisa tu plan). Reemplazar: conserva si era el activo
+        // (así reimportar tu propio perfil restaura/actualiza los días en su sitio).
+        await DB.put('routines', { ...rt, id: duplicate ? DB.uid('rt') : rt.id, userId: targetUserId, days, isPrimary: duplicate ? false : !!rt.isPrimary });
+      }
+      // garantizar exactamente un plan activo en el destino
+      const rts = await DB.routinesOf(targetUserId);
+      if (rts.length && rts.filter(r => r.isPrimary).length !== 1) {
+        const keep = rts.find(r => r.isPrimary) || rts[0];
+        for (const r of rts) { const want1 = r.id === keep.id; if (!!r.isPrimary !== want1) { r.isPrimary = want1; await DB.put('routines', r); } }
+      }
     }
 
     // 3) Sesiones (reescribe exerciseId en entries)
@@ -493,11 +626,14 @@ const VData = (() => {
 
   // Asegura que los ejercicios importados existen en el catálogo del usuario (por nombre).
   // Devuelve idMap: idOrigen -> idLocal. Crea los que falten y remapea sus suplentes.
-  async function mapExercisesToCatalog(userId, importedExercises) {
+  // Con opts.overwrite, además ACTUALIZA los existentes con los datos importados
+  // (grupo, tipo, métricas y suplentes) — para la política "Reemplazar".
+  async function mapExercisesToCatalog(userId, importedExercises, opts = {}) {
+    const overwrite = !!opts.overwrite;
     const local = await DB.exercisesOf(userId);
     const byName = new Map(local.map(e => [e.name.trim().toLowerCase(), e]));
     const idMap = {};
-    const created = [];
+    const created = [], updated = [];
     for (const ie of (importedExercises || [])) {
       const key = (ie.name || '').trim().toLowerCase();
       let ex = byName.get(key);
@@ -505,12 +641,25 @@ const VData = (() => {
         ex = { id: DB.uid('ex'), userId, name: (ie.name || '').trim(), muscleGroup: ie.muscleGroup || 'General', type: ie.type || 'weight', substitutes: [], createdAt: Date.now() };
         if (Array.isArray(ie.metrics)) ex.metrics = ie.metrics.slice(); // conservar datos a registrar (tiempo)
         await DB.put('exercises', ex); byName.set(key, ex); created.push({ ex, srcSubs: ie.substitutes || [] });
+      } else if (overwrite) {
+        // reemplazar: vuelca los datos importados en tu ejercicio (mantiene id y createdAt)
+        if (ie.muscleGroup) ex.muscleGroup = ie.muscleGroup;
+        if (ie.type) ex.type = ie.type;
+        if (Array.isArray(ie.metrics)) ex.metrics = ie.metrics.slice();
+        else if (ie.type && ie.type !== 'time') delete ex.metrics; // un no-cardio no lleva métricas
+        updated.push({ ex, srcSubs: ie.substitutes || [] });
       }
       idMap[ie.id] = ex.id;
     }
+    // 2º pase: remapea suplentes ya con el idMap completo.
     for (const { ex, srcSubs } of created) {
       const subs = srcSubs.map(sid => idMap[sid]).filter(Boolean);
       if (subs.length) { ex.substitutes = subs; await DB.put('exercises', ex); }
+    }
+    for (const { ex, srcSubs } of updated) {
+      const subs = srcSubs.map(sid => idMap[sid]).filter(Boolean);
+      if (subs.length) ex.substitutes = subs; // si el import no trae suplentes, conserva los tuyos
+      await DB.put('exercises', ex);
     }
     return idMap;
   }
