@@ -350,6 +350,13 @@ const VProgress = (() => {
       ${helpOpen ? `<div class="e1-help">
         <p><strong>Qué es el 1RM estimado</strong><br>Una predicción de cuánto levantarías a <strong>1 repetición</strong>, calculada con la fórmula de Epley a partir del peso y las reps de tus series.</p>
         <p><strong>El tick "solo esfuerzo"</strong><br>Cuenta solo las series donde marcaste el esfuerzo, dejando fuera los calentamientos. Si lo quitas, usa todas (las no marcadas se asumen al fallo). El % de esfuerzo indica las reps que te quedaban: 100% = al fallo, 90% ≈ 1, 80% ≈ 2…</p>
+        <p><strong>Es una estimación, no un valor exacto</strong><br>Es una media estadística: tu número real puede variar. Para que se acerque lo máximo posible:</p>
+        <ul class="e1-tips">
+          <li>Marca bien el <strong>esfuerzo</strong> de tus series, sobre todo la más dura.</li>
+          <li>Es más fiable con <strong>pocas reps (1–6)</strong>; con 10+ se desvía más.</li>
+          <li>Mantén <strong>técnica y rango</strong> de movimiento consistentes.</li>
+          <li>Influye estar <strong>descansado</strong> o fatigado por series previas.</li>
+        </ul>
       </div>` : ''}` : '';
 
     host.innerHTML = `
