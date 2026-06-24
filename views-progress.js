@@ -214,24 +214,51 @@ const VProgress = (() => {
     const records = await computeRecords(app, app.activeUser.id);
     if (!records.length) { host.innerHTML = `<div class="empty-state"><p class="dim">Aún no hay récords. Registra sesiones para verlos aquí.</p></div>`; return; }
     const sort = host._recSort || 'recent';
+    const cat = host._recCat || '__all__';
+    const search = host._recSearch || '';
+    const cats = [...new Set(records.map(r => r.ex.muscleGroup || 'General'))].sort((a, b) => a.localeCompare(b));
     const list = records.slice();
     if (sort === 'name') list.sort((a, b) => a.ex.name.localeCompare(b.ex.name));
-    const rows = list.map(r => `
-      <div class="rec-row">
+    const rows = list.map(r => {
+      const grp = r.ex.muscleGroup || 'General';
+      return `<div class="rec-row" data-search="${UI.esc(UI.norm(r.ex.name + ' ' + grp))}" data-cat="${UI.esc(grp)}">
         <span class="rec-medal">🏆</span>
         <div class="rec-main">
           <div class="rec-name">${UI.esc(r.ex.name)}</div>
-          <div class="rec-meta">${UI.esc(METRIC_LABEL[r.metric] || r.metric)} · ${UI.fmtDateShort(r.point.x)}</div>
+          <div class="rec-meta">${UI.esc(METRIC_LABEL[r.metric] || r.metric)} · ${UI.esc(grp)} · ${UI.fmtDateShort(r.point.x)}</div>
         </div>
         <span class="rec-val">${UI.esc(fmtMetricPoint(r.metric, r.point))}</span>
-      </div>`).join('');
+      </div>`;
+    }).join('');
     host.innerHTML = `
+      <input class="inp" id="recSearch" placeholder="Buscar ejercicio…" autocomplete="off" value="${UI.esc(search)}" style="margin-bottom:10px">
       <div class="chips-row small" style="margin-bottom:8px">
         <button class="chip${sort === 'recent' ? ' on' : ''}" data-sort="recent">Recientes</button>
         <button class="chip${sort === 'name' ? ' on' : ''}" data-sort="name">A-Z</button>
       </div>
-      <div class="card" style="padding:0">${rows}</div>`;
+      ${cats.length > 1 ? `<div class="chips-row small rec-cats" style="margin-bottom:8px">
+        <button class="chip${cat === '__all__' ? ' on' : ''}" data-cat="__all__">Todas</button>
+        ${cats.map(c => `<button class="chip${cat === c ? ' on' : ''}" data-cat="${UI.esc(c)}">${UI.esc(c)}</button>`).join('')}
+      </div>` : ''}
+      <div class="card" style="padding:0" id="recList">${rows}</div>
+      <p class="dim" id="recNoRes" style="display:none;padding:12px 2px">Sin resultados.</p>`;
+
+    const applyFilter = () => {
+      const q = UI.norm(host._recSearch || '');
+      const c = host._recCat || '__all__';
+      let any = false;
+      host.querySelectorAll('.rec-row').forEach(row => {
+        const vis = (!q || row.dataset.search.includes(q)) && (c === '__all__' || row.dataset.cat === c);
+        row.style.display = vis ? '' : 'none';
+        if (vis) any = true;
+      });
+      host.querySelector('#recNoRes').style.display = any ? 'none' : '';
+    };
+    const si = host.querySelector('#recSearch');
+    si.addEventListener('input', () => { host._recSearch = si.value; applyFilter(); }); // filtra sin re-render (mantiene foco)
     host.querySelectorAll('[data-sort]').forEach(b => b.addEventListener('click', () => { host._recSort = b.dataset.sort; renderRecords(app, host); }));
+    host.querySelectorAll('.rec-cats [data-cat]').forEach(b => b.addEventListener('click', () => { host._recCat = b.dataset.cat; renderRecords(app, host); }));
+    applyFilter();
   }
 
   // ====================================================
