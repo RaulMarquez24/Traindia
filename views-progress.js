@@ -219,7 +219,7 @@ const VProgress = (() => {
     const catalog = (await DB.exercisesOf(app.mainUser.id)).sort((a, b) => a.name.localeCompare(b.name));
     const subjectKey = host._subject || 'body:weight';
 
-    let series = [], unit = '';
+    let series = [], unit = '', exMetrics = EX_METRICS, exMetric = 'maxWeight';
     if (subjectKey === 'body:weight') {
       const mainPts = (await DB.progressOf(app.mainUser.id)).filter(e => e.weight != null && e.weight !== '').map(e => ({ x: e.date, y: parseFloat(e.weight) }));
       const guestPts = (await DB.progressOf(guest.id)).filter(e => e.weight != null && e.weight !== '').map(e => ({ x: e.date, y: parseFloat(e.weight) }));
@@ -230,14 +230,16 @@ const VProgress = (() => {
       unit = 'Peso corporal (kg)';
     } else {
       const exName = subjectKey.slice(3);
-      const metric = host._exMetric || 'maxWeight';
-      const mainPts = await exerciseSeries(app.mainUser.id, exName, metric);
-      const guestPts = await exerciseSeries(guest.id, exName, metric);
+      const subjEx = catalog.find(c => c.name === exName);
+      exMetrics = (subjEx && subjEx.type === 'time') ? TIME_METRICS : EX_METRICS; // métricas según el tipo
+      exMetric = (host._exMetric && exMetrics.some(m => m.key === host._exMetric)) ? host._exMetric : exMetrics[0].key;
+      const mainPts = await exerciseSeries(app.mainUser.id, exName, exMetric);
+      const guestPts = await exerciseSeries(guest.id, exName, exMetric);
       series = [
         { label: app.mainUser.name, color: app.mainUser.color, points: mainPts },
         { label: guest.name, color: guest.color, points: guestPts },
       ];
-      unit = `${exName} — ${(EX_METRICS.find(m => m.key === metric) || {}).label || metric}`;
+      unit = `${exName} — ${(exMetrics.find(m => m.key === exMetric) || {}).label || exMetric}`;
     }
 
     const subjectOptions = [{ value: 'body:weight', label: 'Peso corporal' }]
@@ -248,9 +250,9 @@ const VProgress = (() => {
       <div class="card">
         ${UI.field('Comparar con', UI.select('guestSel', guests.map(g => ({ value: g.id, label: g.name })), guestId))}
         ${UI.field('Métrica', UI.selectButton('subjectSelBtn', (subjectOptions.find(o => o.value === subjectKey) || subjectOptions[0]).label))}
-        ${showExMetric ? `<div class="chips-row small">${EX_METRICS.map(m => `<button class="chip${(host._exMetric || 'maxWeight') === m.key ? ' on' : ''}" data-exmetric="${m.key}">${m.label}</button>`).join('')}</div>` : ''}
+        ${showExMetric ? `<div class="chips-row small">${exMetrics.map(m => `<button class="chip${exMetric === m.key ? ' on' : ''}" data-exmetric="${m.key}">${m.label}</button>`).join('')}</div>` : ''}
         <div class="chart-title">${UI.esc(unit)}</div>
-        ${UI.lineChart(series, { width: 320, height: 160 })}
+        ${UI.lineChart(series, { width: 320, height: 160, fmtY: exMetric === 'maxTime' ? fmtSecs : undefined })}
       </div>`;
 
     host.querySelector('select[name="guestSel"]').addEventListener('change', e => { host._guestId = e.target.value; renderCompare(app, host, params); });
