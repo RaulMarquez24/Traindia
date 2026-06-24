@@ -41,11 +41,14 @@ const VProgress = (() => {
   // métricas devuelve la serie normal.
   async function metricSeries(userId, name, metric, effortOnly, formula) {
     if (metric !== 'e1rm' || !effortOnly) {
-      return { points: await exerciseSeries(userId, name, metric, { effortOnly: false, formula }), fellBack: false };
+      return { points: await exerciseSeries(userId, name, metric, { effortOnly: false, formula }), noEffort: false };
     }
+    // tick activo: solo series con esfuerzo. Si no hay ninguna pero sí hay datos,
+    // se deja la gráfica vacía y se marca noEffort para avisar (no se usan todas).
     const pts = await exerciseSeries(userId, name, metric, { effortOnly: true, formula });
-    if (pts.length) return { points: pts, fellBack: false };
-    return { points: await exerciseSeries(userId, name, metric, { effortOnly: false, formula }), fellBack: true };
+    if (pts.length) return { points: pts, noEffort: false };
+    const all = await exerciseSeries(userId, name, metric, { effortOnly: false, formula });
+    return { points: [], noEffort: all.length > 0 };
   }
 
   // Formatea segundos: <60s → "45s"; <60min → "m:ss"; ≥60min → "h:mm:ss".
@@ -339,7 +342,7 @@ const VProgress = (() => {
     const isE1 = metric === 'e1rm';
     const effortOnly = isE1 ? (host._effortOnly !== false) : false; // por defecto activado
     const formula = app._e1Formula || 'epley';
-    const { points, fellBack } = await metricSeries(app.activeUser.id, ex.name, metric, effortOnly, formula);
+    const { points, noEffort } = await metricSeries(app.activeUser.id, ex.name, metric, effortOnly, formula);
 
     const isTime = metric === 'maxTime';
     const prPoint = bestPoint(points);
@@ -348,18 +351,17 @@ const VProgress = (() => {
     const isPR = (p) => prPoint && p.y === prPoint.y && (p.tie || 0) === (prPoint.tie || 0);
     const recent = points.slice(-8).reverse().map(p => `<li><span>${UI.fmtDateShort(p.x)}</span><strong>${fmtPoint(p)}${isPR(p) ? ' 🏆' : ''}</strong></li>`).join('');
 
-    const effectiveOnly = effortOnly && !fellBack; // si no hay esfuerzo, el tick se ve apagado
     const helpOpen = host._e1Help === true;        // explicación plegada por defecto
     const e1Panel = isE1 ? `
       <div class="e1-bar">
-        <label class="check-row e1-toggle"><input type="checkbox" id="effOnly"${effectiveOnly ? ' checked' : ''}><span>Usar solo series con esfuerzo marcado</span></label>
+        <label class="check-row e1-toggle"><input type="checkbox" id="effOnly"${effortOnly ? ' checked' : ''}><span>Usar solo series con esfuerzo marcado</span></label>
         <button type="button" class="e1-help-btn" id="e1Help">${helpOpen ? 'Ocultar' : '¿Cómo funciona?'}</button>
       </div>
       <div class="e1-formula-row"><span class="e1-formula-label">Fórmula</span><div class="chips-row small">${E1_FORMULAS.map(f => `<button class="chip${formula === f.key ? ' on' : ''}" data-formula="${f.key}">${f.label}</button>`).join('')}</div></div>
-      ${fellBack ? `<p class="e1-note">Este ejercicio no tiene series con esfuerzo marcado, así que se usan todas. Marca el % en tus series para afinar.</p>` : ''}
+      ${noEffort ? `<p class="e1-alert">${UI.icon('star', 14)} No tienes series con <strong>esfuerzo marcado</strong> en este ejercicio, por eso la gráfica está vacía. Marca el % de esfuerzo en tus series o desmarca el tick para calcular con todas.</p>` : ''}
       ${helpOpen ? `<div class="e1-help">
         <p><strong>Qué es el 1RM estimado</strong><br>Una predicción de cuánto levantarías a <strong>1 repetición</strong>, a partir del peso y las reps de tus series.</p>
-        <p><strong>Epley vs Brzycki</strong><br>Dos fórmulas distintas para el mismo cálculo; puedes alternarlas a tu gusto. Suelen dar números parecidos: Brzycki tiende a estimar algo más alto en reps medias y Epley en reps altas. Quédate con la que más te encaje y úsala siempre para comparar tu progreso.</p>
+        <p><strong>Epley vs Brzycki</strong><br>Dos fórmulas distintas para el mismo cálculo; puedes alternarlas a tu gusto. Coinciden casi exactamente <strong>alrededor de las 10 reps</strong>; por debajo de 10 Epley estima algo más alto y por encima de 10, Brzycki. Quédate con una y úsala siempre para comparar tu progreso.</p>
         <p><strong>El tick "solo esfuerzo"</strong><br>Cuenta solo las series donde marcaste el esfuerzo, dejando fuera los calentamientos. Si lo quitas, usa todas (las no marcadas se asumen al fallo). El % de esfuerzo indica las reps que te quedaban: 100% = al fallo, 90% ≈ 1, 80% ≈ 2…</p>
         <p><strong>Es una estimación, no un valor exacto</strong><br>Es una media estadística: tu número real puede variar. Para que se acerque lo máximo posible:</p>
         <ul class="e1-tips">
@@ -378,7 +380,7 @@ const VProgress = (() => {
         ${prPoint ? `<div class="pr-stat">${UI.icon('star', 16)}<div class="pr-stat-text"><span class="pr-stat-label">Récord · ${UI.esc(metricLabel)}</span><span class="pr-stat-date">${UI.fmtDateShort(prPoint.x)}</span></div><span class="pr-stat-val">${fmtPoint(prPoint)}</span></div>` : ''}
         ${UI.lineChart([{ label: ex.name, color: app.activeUser.color, points }], { width: 320, height: 150, fmtY: isTime ? fmtSecs : undefined, fmtPoint })}
       </div>
-      ${points.length ? `<div class="block"><div class="block-label">Últimos registros</div><ul class="kv-list">${recent}</ul></div>` : '<div class="empty-state"><p class="dim">Aún no has registrado este ejercicio en ninguna sesión.</p></div>'}`;
+      ${points.length ? `<div class="block"><div class="block-label">Últimos registros</div><ul class="kv-list">${recent}</ul></div>` : (noEffort ? '' : '<div class="empty-state"><p class="dim">Aún no has registrado este ejercicio en ninguna sesión.</p></div>')}`;
 
     host.querySelector('#exSelBtn').addEventListener('click', () => UI.pickFromList({
       title: 'Elegir ejercicio',
