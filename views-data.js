@@ -199,34 +199,41 @@ const VData = (() => {
     UI.toast('Plan exportado');
   }
 
+  // Crea un plan NUEVO (no activo) en el perfil destino, con los días elegidos y
+  // sus ejercicios remapeados al catálogo del destino. Reutilizado por importPlan
+  // y por la importación de perfil completo.
+  async function createImportedPlan(targetUserId, routine, dayIds, name, exercises) {
+    const idMap = await mapExercisesToCatalog(targetUserId, exercises || []);
+    const newDays = JSON.parse(JSON.stringify((routine.days || []).filter(d => dayIds.has(d.id))));
+    newDays.forEach(d => {
+      d.id = DB.uid('day'); // id propio para el nuevo plan
+      (d.blocks || []).forEach(b => (b.exercises || []).forEach(e => { if (e.exerciseId && idMap[e.exerciseId]) e.exerciseId = idMap[e.exerciseId]; }));
+    });
+    await DB.put('routines', { id: DB.uid('rt'), userId: targetUserId, planType: routine.planType || 'cnp', name, days: newDays, order: Date.now(), createdAt: Date.now(), isPrimary: false });
+  }
+  // Lista de casillas de días de un plan (marcados por defecto).
+  function dayChecksHTML(days) {
+    return (days || []).map(d => `<label class="check-row"><input type="checkbox" data-day="${UI.esc(d.id)}" checked><span>${UI.esc(d.name)}${d.isRest ? ' (descanso)' : ` — ${(d.blocks || []).reduce((a, b) => a + (b.exercises || []).length, 0)} ej`}</span></label>`).join('');
+  }
+
   // ---------- IMPORTAR PLAN: se añade como un plan NUEVO (no activo) ----------
-  // Puedes elegir qué días incluir; luego lo activas desde "El plan".
   function importPlan(app, payload) {
     const routine = payload.data.routine || {};
     const sender = payload.user?.name || 'alguien';
-    const days = routine.days || [];
     UI.modal({
       title: `Importar plan de ${UI.esc(sender)}`, size: 'wide',
       bodyHTML: `
         ${UI.field('Nombre del plan', UI.input('planName', routine.name ? `${routine.name} (de ${sender})` : `Plan de ${sender}`))}
         <span class="field-label">Días a incluir</span>
         <p class="field-hint" style="margin-top:0">Se añade como un plan NUEVO. Lo activas cuando quieras desde "El plan".</p>
-        <div class="check-list">
-          ${days.map(d => `<label class="check-row"><input type="checkbox" data-day="${UI.esc(d.id)}" checked><span>${UI.esc(d.name)}${d.isRest ? ' (descanso)' : ` — ${(d.blocks || []).reduce((a, b) => a + (b.exercises || []).length, 0)} ej`}</span></label>`).join('')}
-        </div>`,
+        <div class="check-list">${dayChecksHTML(routine.days)}</div>`,
       actions: [
         { label: 'Cancelar', kind: 'ghost' },
         { label: 'Añadir plan', kind: 'primary', onClick: async (root) => {
           const chosen = new Set([...root.querySelectorAll('[data-day]:checked')].map(c => c.dataset.day));
           if (!chosen.size) { UI.toast('Marca al menos un día', 'err'); return false; }
           const name = root.querySelector('input[name="planName"]').value.trim() || `Plan de ${sender}`;
-          const idMap = await mapExercisesToCatalog(app.mainUser.id, payload.data.exercises);
-          const newDays = JSON.parse(JSON.stringify(days.filter(d => chosen.has(d.id))));
-          newDays.forEach(d => {
-            d.id = DB.uid('day'); // id propio para el nuevo plan
-            (d.blocks || []).forEach(b => (b.exercises || []).forEach(e => { if (e.exerciseId && idMap[e.exerciseId]) e.exerciseId = idMap[e.exerciseId]; }));
-          });
-          await DB.put('routines', { id: DB.uid('rt'), userId: app.mainUser.id, planType: routine.planType || 'cnp', name, days: newDays, order: Date.now(), createdAt: Date.now(), isPrimary: false });
+          await createImportedPlan(app.mainUser.id, routine, chosen, name, payload.data.exercises);
           await app.refreshRoutine();
           app.render();
           UI.toast('Plan añadido · actívalo en "El plan"');
@@ -364,57 +371,65 @@ const VData = (() => {
   async function importFlow(app, payload) {
     const users = await DB.getUsers();
     const counts = payload.data;
-    const SECTIONS = [
+    const sender = payload.user?.name || 'desconocido';
+    const routines = counts.routines || [];
+    const planRoutine = routines.find(r => r.isPrimary) || routines[0] || null; // el plan del archivo
+    const hasPlan = !!planRoutine;
+    const DATA_SECTIONS = [
       { key: 'exercises', label: 'Ejercicios' },
-      { key: 'routines', label: 'Rutinas' },
       { key: 'sessions', label: 'Sesiones' },
       { key: 'progress', label: 'Progreso' },
       { key: 'journal', label: 'Diario' },
     ].filter(s => (counts[s.key] || []).length);
+    const hasData = DATA_SECTIONS.length > 0;
+    const both = hasPlan && hasData;
 
-    // texto del contador: las rutinas muestran también los días que llevan dentro
-    const countLabel = (s) => {
-      const items = counts[s.key];
-      if (s.key === 'routines') {
-        const days = items.reduce((a, rt) => a + (rt.days || []).length, 0);
-        return `${items.length} plan${items.length === 1 ? '' : 'es'} · ${days} día${days === 1 ? '' : 's'}`;
-      }
-      return String(items.length);
-    };
-    // sección con checkbox global + lista de elementos editable (para quitar lo que no quieras)
     const sectionHTML = (s) => {
       const items = counts[s.key];
       const editable = items.length > 1 && items.length <= 60;
       return `<div class="imp-sec">
-        <label class="check-row imp-sec-head"><input type="checkbox" data-sec="${s.key}" checked><span>${s.label} <span class="dim">(${countLabel(s)})</span></span>${editable ? `<button type="button" class="imp-toggle" data-toggle="${s.key}">editar</button>` : ''}</label>
+        <label class="check-row imp-sec-head"><input type="checkbox" data-sec="${s.key}" checked><span>${s.label} <span class="dim">(${items.length})</span></span>${editable ? `<button type="button" class="imp-toggle" data-toggle="${s.key}">editar</button>` : ''}</label>
         ${editable ? `<div class="imp-items" data-items="${s.key}" style="display:none">${items.map(it => `<label class="check-row sub"><input type="checkbox" data-item="${s.key}" data-id="${UI.esc(String(it.id))}" checked><span>${importItemLabel(s.key, it)}</span></label>`).join('')}</div>` : ''}
       </div>`;
     };
+    const planBlock = hasPlan ? `<div id="planBlock">
+      <span class="field-label">Plan a añadir (entra como plan NUEVO; lo activas en "El plan")</span>
+      ${UI.field('Nombre del plan', UI.input('planName', planRoutine.name ? `${planRoutine.name} (de ${sender})` : `Plan de ${sender}`))}
+      <p class="field-hint" style="margin-top:-6px;margin-bottom:6px">Días a incluir:</p>
+      <div class="check-list">${dayChecksHTML(planRoutine.days)}</div>
+    </div>` : '';
+    const dataBlock = hasData ? `<div id="dataBlock">
+      <span class="field-label">Datos</span>
+      <div style="margin-bottom:10px">${DATA_SECTIONS.map(sectionHTML).join('')}</div>
+      <span class="field-label">Si ya tienes esos datos</span>
+      ${UI.select('policy', [{ value: 'duplicate', label: 'Añadir como copia nueva' }, { value: 'overwrite', label: 'Reemplazar lo que coincida' }], 'duplicate')}
+      <p class="field-hint" id="policyHint"></p>
+    </div>` : '';
 
     UI.modal({
       title: 'Importar datos', size: 'wide',
       bodyHTML: `
-        <p class="modal-text">Archivo de <strong>${UI.esc(payload.user?.name || 'desconocido')}</strong>.</p>
+        <p class="modal-text">Archivo de <strong>${UI.esc(sender)}</strong>.</p>
         <div id="impForm">
           <span class="field-label">Asignar a perfil(es)</span>
-          <p class="field-hint" style="margin-top:0;margin-bottom:8px">Puedes marcar varios: se importan los mismos datos a cada uno (luego editas el de cada perfil por separado).</p>
+          <p class="field-hint" style="margin-top:0;margin-bottom:8px">Puedes marcar varios: se importa lo mismo a cada uno.</p>
           <div class="check-list" style="max-height:none;margin-bottom:10px">
             ${users.map((u, i) => `<label class="check-row"><input type="checkbox" data-user="${u.id}"${i === 0 ? ' checked' : ''}><span>${UI.esc(u.name)}${u.isMain ? ' (principal)' : ' (invitado)'}</span></label>`).join('')}
             <label class="check-row"><input type="checkbox" data-newguest><span>+ Crear nuevo invitado</span></label>
           </div>
           <div id="newGuestBox" style="display:none">
-            ${UI.field('Nombre del invitado', UI.input('guestName', payload.user?.name || '', { placeholder: 'Nombre' }))}
+            ${UI.field('Nombre del invitado', UI.input('guestName', sender, { placeholder: 'Nombre' }))}
             ${UI.field('Color', UI.colorPicker('guestColor', payload.user?.color || UI.ESSENTIALS[1]))}
           </div>
-          <span class="field-label">Qué importar</span>
-          <div style="margin-bottom:12px">
-            ${SECTIONS.length ? SECTIONS.map(sectionHTML).join('') : '<p class="dim" style="padding:2px">El archivo no tiene datos.</p>'}
-          </div>
-          <span class="field-label">Si ya tienes esos datos</span>
-          ${UI.select('policy', [
-            { value: 'duplicate', label: 'Añadir como copia nueva' },
-            { value: 'overwrite', label: 'Reemplazar lo que coincida' }], 'duplicate')}
-          <p class="field-hint" id="policyHint"></p>
+          ${both ? `<span class="field-label">¿Qué quieres importar?</span>
+          <div class="imp-modes" style="margin-bottom:12px">
+            <label class="check-row"><input type="radio" name="impmode" value="both" checked><span>Plan nuevo + sus datos</span></label>
+            <label class="check-row"><input type="radio" name="impmode" value="plan"><span>Solo el plan</span></label>
+            <label class="check-row"><input type="radio" name="impmode" value="data"><span>Solo los datos (sin traer su plan)</span></label>
+          </div>` : ''}
+          ${planBlock}
+          ${dataBlock}
+          ${(!hasPlan && !hasData) ? '<p class="dim" style="padding:2px">El archivo no tiene datos.</p>' : ''}
         </div>`,
       actions: [
         { label: 'Cancelar', kind: 'ghost' },
@@ -422,22 +437,30 @@ const VData = (() => {
           const targetIds = [...root.querySelectorAll('[data-user]:checked')].map(c => c.dataset.user);
           const newGuest = root.querySelector('[data-newguest]').checked;
           if (!targetIds.length && !newGuest) { UI.toast('Elige al menos un perfil', 'err'); return false; }
+          const mode = both ? (root.querySelector('[name="impmode"]:checked')?.value || 'both') : (hasPlan ? 'plan' : 'data');
+          const wantPlan = hasPlan && (mode === 'plan' || mode === 'both');
+          const wantData = hasData && (mode === 'data' || mode === 'both');
 
-          // secciones + filtrado por elemento
+          // datos seleccionados (sin rutinas: el plan se gestiona aparte)
           const chosen = new Set();
           const filtered = {};
-          for (const s of SECTIONS) {
+          if (wantData) for (const s of DATA_SECTIONS) {
             const secChk = root.querySelector(`[data-sec="${s.key}"]`);
             if (!secChk || !secChk.checked) continue;
             const itemsBox = root.querySelector(`[data-items="${s.key}"]`);
             let sel;
-            if (itemsBox) {
-              const ids = new Set([...root.querySelectorAll(`[data-item="${s.key}"]:checked`)].map(c => c.dataset.id));
-              sel = (counts[s.key] || []).filter(it => ids.has(String(it.id)));
-            } else sel = (counts[s.key] || []);
+            if (itemsBox) { const ids = new Set([...root.querySelectorAll(`[data-item="${s.key}"]:checked`)].map(c => c.dataset.id)); sel = (counts[s.key] || []).filter(it => ids.has(String(it.id))); }
+            else sel = (counts[s.key] || []);
             if (sel.length) { filtered[s.key] = sel; chosen.add(s.key); }
           }
-          if (!chosen.size) { UI.toast('Marca al menos algo que importar', 'err'); return false; }
+          // días del plan
+          let planDays = null, planName = '';
+          if (wantPlan) {
+            planDays = new Set([...root.querySelectorAll('[data-day]:checked')].map(c => c.dataset.day));
+            if (!planDays.size) { UI.toast('Marca al menos un día del plan', 'err'); return false; }
+            planName = (root.querySelector('input[name="planName"]').value || '').trim() || `Plan de ${sender}`;
+          }
+          if (!wantPlan && !chosen.size) { UI.toast('Marca al menos algo que importar', 'err'); return false; }
 
           if (newGuest) {
             const name = (root.querySelector('input[name="guestName"]').value || '').trim();
@@ -447,10 +470,14 @@ const VData = (() => {
             targetIds.push(g.id);
           }
 
-          // con varios perfiles se duplica siempre (un mismo id no puede ser de dos perfiles)
-          const policy = targetIds.length > 1 ? 'duplicate' : root.querySelector('select[name="policy"]').value;
-          const payload2 = { ...payload, data: { exercises: [], routines: [], sessions: [], progress: [], journal: [], ...filtered } };
-          for (const tid of targetIds) await applyImport(app, payload2, tid, policy, chosen);
+          const policy = targetIds.length > 1 ? 'duplicate' : (root.querySelector('select[name="policy"]')?.value || 'duplicate');
+          for (const tid of targetIds) {
+            if (chosen.size) {
+              const payload2 = { ...payload, data: { exercises: [], routines: [], sessions: [], progress: [], journal: [], ...filtered } };
+              await applyImport(app, payload2, tid, policy, chosen);
+            }
+            if (wantPlan) await createImportedPlan(tid, planRoutine, planDays, planName, counts.exercises || []);
+          }
 
           await app.loadUsers();
           await app.refreshRoutine();
@@ -461,8 +488,8 @@ const VData = (() => {
       onMount: (root) => {
         UI.bindColorPicker(root);
         const ng = root.querySelector('[data-newguest]');
-        const box = root.querySelector('#newGuestBox');
-        ng.addEventListener('change', () => { box.style.display = ng.checked ? '' : 'none'; });
+        const gbox = root.querySelector('#newGuestBox');
+        ng.addEventListener('change', () => { gbox.style.display = ng.checked ? '' : 'none'; });
         root.querySelectorAll('[data-toggle]').forEach(b => b.addEventListener('click', () => {
           const items = root.querySelector(`[data-items="${b.dataset.toggle}"]`);
           const open = items.style.display === 'none';
@@ -472,14 +499,23 @@ const VData = (() => {
         root.querySelectorAll('[data-sec]').forEach(sc => sc.addEventListener('change', () => {
           root.querySelectorAll(`[data-item="${sc.dataset.sec}"]`).forEach(ic => { ic.checked = sc.checked; });
         }));
+        // mostrar/ocultar bloques según el modo elegido
+        const planB = root.querySelector('#planBlock'), dataB = root.querySelector('#dataBlock');
+        const applyMode = () => {
+          const mode = both ? (root.querySelector('[name="impmode"]:checked')?.value || 'both') : (hasPlan ? 'plan' : 'data');
+          if (planB) planB.style.display = (mode === 'plan' || mode === 'both') ? '' : 'none';
+          if (dataB) dataB.style.display = (mode === 'data' || mode === 'both') ? '' : 'none';
+        };
+        root.querySelectorAll('[name="impmode"]').forEach(r => r.addEventListener('change', applyMode));
+        applyMode();
         const pol = root.querySelector('select[name="policy"]');
         const hint = root.querySelector('#policyHint');
-        const setHint = () => {
-          hint.textContent = pol.value === 'duplicate'
-            ? 'Se añade como entradas NUEVAS; nunca borra ni pisa lo que ya tienes. Tu plan y días actuales NO cambian (la rutina entra como un plan aparte, sin activar).'
-            : 'Actualiza en su sitio lo que coincida (mismo identificador) con lo del archivo; el resto se añade. Ideal para RESTAURAR tu propio perfil: tus días vuelven a como están en el archivo.';
-        };
-        pol.addEventListener('change', setHint); setHint();
+        if (pol && hint) {
+          const setHint = () => { hint.textContent = pol.value === 'duplicate'
+            ? 'Se añade como entradas NUEVAS; nunca pisa lo que ya tienes (si lo tenías idéntico, se duplica).'
+            : 'Actualiza en su sitio lo que coincida (mismo identificador); el resto se añade. Ideal para RESTAURAR tus propios datos.'; };
+          pol.addEventListener('change', setHint); setHint();
+        }
       },
     });
   }
