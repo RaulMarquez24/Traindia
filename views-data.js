@@ -211,6 +211,22 @@ const VData = (() => {
     });
     await DB.put('routines', { id: DB.uid('rt'), userId: targetUserId, planType: routine.planType || 'cnp', name, days: newDays, order: Date.now(), createdAt: Date.now(), isPrimary: false });
   }
+  // Fusiona los días elegidos del plan del archivo DENTRO del plan activo del destino:
+  // sustituye el día con el mismo nombre (conserva su id/orden) o lo añade si no existe.
+  async function mergeDaysIntoPlan(targetUserId, routine, dayIds, exercises) {
+    const idMap = await mapExercisesToCatalog(targetUserId, exercises || []);
+    const rts = await DB.routinesOf(targetUserId);
+    const target = rts.find(r => r.isPrimary) || rts[0];
+    if (!target) { await createImportedPlan(targetUserId, routine, dayIds, routine.name || 'Plan importado', exercises); return; }
+    (routine.days || []).filter(d => dayIds.has(d.id)).forEach(sd => {
+      const copy = JSON.parse(JSON.stringify(sd));
+      (copy.blocks || []).forEach(b => (b.exercises || []).forEach(e => { if (e.exerciseId && idMap[e.exerciseId]) e.exerciseId = idMap[e.exerciseId]; }));
+      const idx = target.days.findIndex(d => (d.name || '').trim().toLowerCase() === (sd.name || '').trim().toLowerCase());
+      if (idx >= 0) { copy.id = target.days[idx].id; copy.order = target.days[idx].order; target.days[idx] = copy; }
+      else { copy.id = DB.uid('day'); target.days.push(copy); }
+    });
+    await DB.put('routines', target);
+  }
   // Lista de casillas de días de un plan (marcados por defecto).
   function dayChecksHTML(days) {
     return (days || []).map(d => `<label class="check-row"><input type="checkbox" data-day="${UI.esc(d.id)}" checked><span>${UI.esc(d.name)}${d.isRest ? ' (descanso)' : ` — ${(d.blocks || []).reduce((a, b) => a + (b.exercises || []).length, 0)} ej`}</span></label>`).join('');
@@ -382,8 +398,8 @@ const VData = (() => {
       { key: 'journal', label: 'Diario' },
     ].filter(s => (counts[s.key] || []).length);
     const hasData = DATA_SECTIONS.length > 0;
-    const both = hasPlan && hasData;
 
+    // sección de datos: casilla global + lista de elementos editable
     const sectionHTML = (s) => {
       const items = counts[s.key];
       const editable = items.length > 1 && items.length <= 60;
@@ -392,22 +408,22 @@ const VData = (() => {
         ${editable ? `<div class="imp-items" data-items="${s.key}" style="display:none">${items.map(it => `<label class="check-row sub"><input type="checkbox" data-item="${s.key}" data-id="${UI.esc(String(it.id))}" checked><span>${importItemLabel(s.key, it)}</span></label>`).join('')}</div>` : ''}
       </div>`;
     };
-    const planBlock = hasPlan ? `<div id="planBlock">
-      <span class="field-label">Plan a añadir (entra como plan NUEVO; lo activas en "El plan")</span>
-      ${UI.field('Nombre del plan', UI.input('planName', planRoutine.name ? `${planRoutine.name} (de ${sender})` : `Plan de ${sender}`))}
-      <p class="field-hint" style="margin-top:-6px;margin-bottom:6px">Días a incluir:</p>
-      <div class="check-list">${dayChecksHTML(planRoutine.days)}</div>
-    </div>` : '';
-    const dataBlock = hasData ? `<div id="dataBlock">
-      <span class="field-label">Datos</span>
-      <div style="margin-bottom:10px">${DATA_SECTIONS.map(sectionHTML).join('')}</div>
-      <span class="field-label">Si ya tienes esos datos</span>
-      ${UI.select('policy', [{ value: 'duplicate', label: 'Añadir como copia nueva' }, { value: 'overwrite', label: 'Reemplazar lo que coincida' }], 'duplicate')}
-      <p class="field-hint" id="policyHint"></p>
+    // sección "Días del plan": desmarcada por defecto (no toca tu plan salvo que la actives),
+    // con destino (a tu plan actual / plan nuevo) y casillas por día.
+    const daysSection = hasPlan ? `<div class="imp-sec">
+      <label class="check-row imp-sec-head"><input type="checkbox" data-sec="days"><span>Días del plan <span class="dim">(${(planRoutine.days || []).length})</span></span><button type="button" class="imp-toggle" data-toggle="days">editar</button></label>
+      <div class="imp-items" data-items="days" style="display:none">
+        <div style="margin-bottom:6px">
+          <label class="check-row"><input type="radio" name="daysdest" value="merge" checked><span>A mi plan actual (sustituye esos días)</span></label>
+          <label class="check-row"><input type="radio" name="daysdest" value="new"><span>Como plan nuevo aparte</span></label>
+        </div>
+        <div id="daysNewName" style="display:none;margin-bottom:6px">${UI.field('Nombre del plan nuevo', UI.input('planName', planRoutine.name ? `${planRoutine.name} (de ${sender})` : `Plan de ${sender}`))}</div>
+        ${dayChecksHTML(planRoutine.days)}
+      </div>
     </div>` : '';
 
     UI.modal({
-      title: 'Importar datos', size: 'wide',
+      title: 'Importar', size: 'wide',
       bodyHTML: `
         <p class="modal-text">Archivo de <strong>${UI.esc(sender)}</strong>.</p>
         <div id="impForm">
@@ -421,15 +437,15 @@ const VData = (() => {
             ${UI.field('Nombre del invitado', UI.input('guestName', sender, { placeholder: 'Nombre' }))}
             ${UI.field('Color', UI.colorPicker('guestColor', payload.user?.color || UI.ESSENTIALS[1]))}
           </div>
-          ${both ? `<span class="field-label">¿Qué quieres importar?</span>
-          <div class="imp-modes" style="margin-bottom:12px">
-            <label class="check-row"><input type="radio" name="impmode" value="both" checked><span>Plan nuevo + sus datos</span></label>
-            <label class="check-row"><input type="radio" name="impmode" value="plan"><span>Solo el plan</span></label>
-            <label class="check-row"><input type="radio" name="impmode" value="data"><span>Solo los datos (sin traer su plan)</span></label>
-          </div>` : ''}
-          ${planBlock}
-          ${dataBlock}
-          ${(!hasPlan && !hasData) ? '<p class="dim" style="padding:2px">El archivo no tiene datos.</p>' : ''}
+          <span class="field-label">Qué importar</span>
+          <p class="field-hint" style="margin-top:0;margin-bottom:8px">Marca lo que quieras. En "Días" pulsa <em>editar</em> para elegir días sueltos y si van a tu plan o a uno nuevo.</p>
+          <div style="margin-bottom:12px">
+            ${daysSection}${DATA_SECTIONS.map(sectionHTML).join('')}
+            ${(!hasPlan && !hasData) ? '<p class="dim" style="padding:2px">El archivo no tiene datos.</p>' : ''}
+          </div>
+          ${hasData ? `<span class="field-label">Si ya tienes esos datos</span>
+          ${UI.select('policy', [{ value: 'duplicate', label: 'Añadir como copia nueva' }, { value: 'overwrite', label: 'Reemplazar lo que coincida' }], 'duplicate')}
+          <p class="field-hint" id="policyHint"></p>` : ''}
         </div>`,
       actions: [
         { label: 'Cancelar', kind: 'ghost' },
@@ -437,14 +453,22 @@ const VData = (() => {
           const targetIds = [...root.querySelectorAll('[data-user]:checked')].map(c => c.dataset.user);
           const newGuest = root.querySelector('[data-newguest]').checked;
           if (!targetIds.length && !newGuest) { UI.toast('Elige al menos un perfil', 'err'); return false; }
-          const mode = both ? (root.querySelector('[name="impmode"]:checked')?.value || 'both') : (hasPlan ? 'plan' : 'data');
-          const wantPlan = hasPlan && (mode === 'plan' || mode === 'both');
-          const wantData = hasData && (mode === 'data' || mode === 'both');
 
-          // datos seleccionados (sin rutinas: el plan se gestiona aparte)
+          // Días del plan
+          let dayIds = null, daysDest = 'merge', planName = '';
+          const daysChk = root.querySelector('[data-sec="days"]');
+          const wantDays = hasPlan && daysChk && daysChk.checked;
+          if (wantDays) {
+            dayIds = new Set([...root.querySelectorAll('[data-day]:checked')].map(c => c.dataset.day));
+            if (!dayIds.size) { UI.toast('Marca al menos un día del plan', 'err'); return false; }
+            daysDest = root.querySelector('[name="daysdest"]:checked')?.value || 'merge';
+            planName = (root.querySelector('input[name="planName"]')?.value || '').trim() || `Plan de ${sender}`;
+          }
+
+          // Datos (sin rutinas: los días se gestionan en su sección)
           const chosen = new Set();
           const filtered = {};
-          if (wantData) for (const s of DATA_SECTIONS) {
+          for (const s of DATA_SECTIONS) {
             const secChk = root.querySelector(`[data-sec="${s.key}"]`);
             if (!secChk || !secChk.checked) continue;
             const itemsBox = root.querySelector(`[data-items="${s.key}"]`);
@@ -453,14 +477,8 @@ const VData = (() => {
             else sel = (counts[s.key] || []);
             if (sel.length) { filtered[s.key] = sel; chosen.add(s.key); }
           }
-          // días del plan
-          let planDays = null, planName = '';
-          if (wantPlan) {
-            planDays = new Set([...root.querySelectorAll('[data-day]:checked')].map(c => c.dataset.day));
-            if (!planDays.size) { UI.toast('Marca al menos un día del plan', 'err'); return false; }
-            planName = (root.querySelector('input[name="planName"]').value || '').trim() || `Plan de ${sender}`;
-          }
-          if (!wantPlan && !chosen.size) { UI.toast('Marca al menos algo que importar', 'err'); return false; }
+
+          if (!wantDays && !chosen.size) { UI.toast('Marca al menos algo que importar', 'err'); return false; }
 
           if (newGuest) {
             const name = (root.querySelector('input[name="guestName"]').value || '').trim();
@@ -476,7 +494,10 @@ const VData = (() => {
               const payload2 = { ...payload, data: { exercises: [], routines: [], sessions: [], progress: [], journal: [], ...filtered } };
               await applyImport(app, payload2, tid, policy, chosen);
             }
-            if (wantPlan) await createImportedPlan(tid, planRoutine, planDays, planName, counts.exercises || []);
+            if (wantDays) {
+              if (daysDest === 'new') await createImportedPlan(tid, planRoutine, dayIds, planName, counts.exercises || []);
+              else await mergeDaysIntoPlan(tid, planRoutine, dayIds, counts.exercises || []);
+            }
           }
 
           await app.loadUsers();
@@ -495,19 +516,15 @@ const VData = (() => {
           const open = items.style.display === 'none';
           items.style.display = open ? '' : 'none';
           b.textContent = open ? 'ocultar' : 'editar';
+          if (open && b.dataset.toggle === 'days') { const c = root.querySelector('[data-sec="days"]'); if (c && !c.checked) c.checked = true; } // al editar días, activarlos
         }));
         root.querySelectorAll('[data-sec]').forEach(sc => sc.addEventListener('change', () => {
           root.querySelectorAll(`[data-item="${sc.dataset.sec}"]`).forEach(ic => { ic.checked = sc.checked; });
         }));
-        // mostrar/ocultar bloques según el modo elegido
-        const planB = root.querySelector('#planBlock'), dataB = root.querySelector('#dataBlock');
-        const applyMode = () => {
-          const mode = both ? (root.querySelector('[name="impmode"]:checked')?.value || 'both') : (hasPlan ? 'plan' : 'data');
-          if (planB) planB.style.display = (mode === 'plan' || mode === 'both') ? '' : 'none';
-          if (dataB) dataB.style.display = (mode === 'data' || mode === 'both') ? '' : 'none';
-        };
-        root.querySelectorAll('[name="impmode"]').forEach(r => r.addEventListener('change', applyMode));
-        applyMode();
+        const daysNewName = root.querySelector('#daysNewName');
+        root.querySelectorAll('[name="daysdest"]').forEach(r => r.addEventListener('change', () => {
+          if (daysNewName) daysNewName.style.display = (root.querySelector('[name="daysdest"]:checked').value === 'new') ? '' : 'none';
+        }));
         const pol = root.querySelector('select[name="policy"]');
         const hint = root.querySelector('#policyHint');
         if (pol && hint) {
