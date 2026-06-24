@@ -82,6 +82,7 @@ const VData = (() => {
       <div class="card">
         <div class="card-label">Exportar</div>
         <button class="btn primary block" id="expProfile">Perfil completo (${UI.esc(app.mainUser.name)})</button>
+        <button class="btn ghost block" id="expPlan">Plan completo (semana)</button>
         <button class="btn ghost block" id="expDay">Un día concreto</button>
         <button class="btn ghost block" id="expSessions">Sesiones (individuales o por fechas)</button>
         <button class="btn ghost block" id="expProgress">Progreso</button>
@@ -98,6 +99,7 @@ const VData = (() => {
 
   function bind(app, root) {
     root.querySelector('#expProfile').addEventListener('click', () => backupProfile(app));
+    root.querySelector('#expPlan').addEventListener('click', () => exportPlan(app));
     root.querySelector('#expDay').addEventListener('click', () => exportDay(app));
     root.querySelector('#expSessions').addEventListener('click', () => exportSessions(app));
     root.querySelector('#expProgress').addEventListener('click', () => exportProgress(app));
@@ -110,6 +112,7 @@ const VData = (() => {
     UI.modal({
       title: 'Compartir / Datos',
       bodyHTML: `<div class="menu-list">
+        <button class="menu-row" data-act="exp-plan"><span>${UI.icon('upload', 17)} Exportar plan (semana)</span><span class="chev">›</span></button>
         <button class="menu-row" data-act="exp-day"><span>${UI.icon('upload', 17)} Exportar un día</span><span class="chev">›</span></button>
         <button class="menu-row" data-act="exp-profile"><span>${UI.icon('upload', 17)} Exportar perfil completo</span><span class="chev">›</span></button>
         <button class="menu-row" data-act="exp-sessions"><span>${UI.icon('upload', 17)} Exportar sesiones</span><span class="chev">›</span></button>
@@ -121,6 +124,7 @@ const VData = (() => {
       actions: [{ label: 'Cerrar', kind: 'ghost' }],
       onMount: (root) => {
         const go = (fn) => { UI.closeModal(); fn(); };
+        root.querySelector('[data-act="exp-plan"]').addEventListener('click', () => go(() => exportPlan(app)));
         root.querySelector('[data-act="exp-day"]').addEventListener('click', () => go(() => exportDay(app)));
         root.querySelector('[data-act="exp-profile"]').addEventListener('click', () => go(() => backupProfile(app)));
         root.querySelector('[data-act="exp-sessions"]').addEventListener('click', () => go(() => exportSessions(app)));
@@ -170,7 +174,65 @@ const VData = (() => {
   function routeImport(app, payload) {
     if (!payload || payload.format !== FORMAT || !payload.data) { UI.toast('No es un export de Traindía', 'err'); return; }
     if (payload.kind === 'day' && payload.data.day) importDay(app, payload);
+    else if (payload.kind === 'plan' && payload.data.routine) importPlan(app, payload);
     else importFlow(app, payload);
+  }
+
+  // ---------- EXPORTAR PLAN (semana completa = la rutina activa) ----------
+  function exportPlan(app) {
+    const routine = app.routine;
+    if (!routine) { UI.toast('No hay plan activo', 'err'); return; }
+    doExportPlan(app, routine);
+  }
+  async function doExportPlan(app, routine) {
+    const allEx = await DB.exercisesOf(app.mainUser.id);
+    const byId = Object.fromEntries(allEx.map(e => [e.id, e]));
+    const ids = new Set();
+    (routine.days || []).forEach(d => (d.blocks || []).forEach(bl => bl.exercises.forEach(x => {
+      if (x.exerciseId) { ids.add(x.exerciseId); (byId[x.exerciseId]?.substitutes || []).forEach(sid => ids.add(sid)); }
+    })));
+    download({
+      format: FORMAT, version: 2, kind: 'plan', exportedAt: new Date().toISOString(),
+      user: { name: app.mainUser.name, color: app.mainUser.color },
+      data: { routine, exercises: exercisesByIds(allEx, [...ids]) },
+    }, `traindia-plan-${stamp()}.json`);
+    UI.toast('Plan exportado');
+  }
+
+  // ---------- IMPORTAR PLAN: se añade como un plan NUEVO (no activo) ----------
+  // Puedes elegir qué días incluir; luego lo activas desde "El plan".
+  function importPlan(app, payload) {
+    const routine = payload.data.routine || {};
+    const sender = payload.user?.name || 'alguien';
+    const days = routine.days || [];
+    UI.modal({
+      title: `Importar plan de ${UI.esc(sender)}`, size: 'wide',
+      bodyHTML: `
+        ${UI.field('Nombre del plan', UI.input('planName', routine.name ? `${routine.name} (de ${sender})` : `Plan de ${sender}`))}
+        <span class="field-label">Días a incluir</span>
+        <p class="field-hint" style="margin-top:0">Se añade como un plan NUEVO. Lo activas cuando quieras desde "El plan".</p>
+        <div class="check-list">
+          ${days.map(d => `<label class="check-row"><input type="checkbox" data-day="${UI.esc(d.id)}" checked><span>${UI.esc(d.name)}${d.isRest ? ' (descanso)' : ` — ${(d.blocks || []).reduce((a, b) => a + (b.exercises || []).length, 0)} ej`}</span></label>`).join('')}
+        </div>`,
+      actions: [
+        { label: 'Cancelar', kind: 'ghost' },
+        { label: 'Añadir plan', kind: 'primary', onClick: async (root) => {
+          const chosen = new Set([...root.querySelectorAll('[data-day]:checked')].map(c => c.dataset.day));
+          if (!chosen.size) { UI.toast('Marca al menos un día', 'err'); return false; }
+          const name = root.querySelector('input[name="planName"]').value.trim() || `Plan de ${sender}`;
+          const idMap = await mapExercisesToCatalog(app.mainUser.id, payload.data.exercises);
+          const newDays = JSON.parse(JSON.stringify(days.filter(d => chosen.has(d.id))));
+          newDays.forEach(d => {
+            d.id = DB.uid('day'); // id propio para el nuevo plan
+            (d.blocks || []).forEach(b => (b.exercises || []).forEach(e => { if (e.exerciseId && idMap[e.exerciseId]) e.exerciseId = idMap[e.exerciseId]; }));
+          });
+          await DB.put('routines', { id: DB.uid('rt'), userId: app.mainUser.id, planType: routine.planType || 'cnp', name, days: newDays, order: Date.now(), createdAt: Date.now(), isPrimary: false });
+          await app.refreshRoutine();
+          app.render();
+          UI.toast('Plan añadido · actívalo en "El plan"');
+        } },
+      ],
+    });
   }
 
   // ---------- EXPORTAR SESIONES ----------
