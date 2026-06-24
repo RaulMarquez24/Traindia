@@ -607,35 +607,100 @@ const VPlan = (() => {
     return usage;
   }
 
-  // ---------- Ejercicios duplicados (mismo nombre) ----------
-  // Devuelve los ejercicios repetidos que se pueden borrar: NO predefinidos, NO
-  // usados en ningún día (de ninguna rutina) y dejando al menos uno por nombre.
-  async function dedupeRemovable(app) {
+  // ---------- Ejercicios duplicados (idénticos) ----------
+  // "Firma" de identidad: dos ejercicios con la misma firma son el mismo ejercicio
+  // (igual nombre, tipo y grupo muscular) → se pueden fusionar. Las métricas (qué
+  // campos se registran en cardio) NO entran en la firma: al fusionar se conserva
+  // la unión de todas, así que no se pierde ningún campo.
+  function exSignature(e) {
+    return [
+      (e.name || '').trim().toLowerCase(),
+      e.type || '',
+      UI.norm(e.muscleGroup || ''),
+    ].join('@@');
+  }
+  // Unión de las métricas de un cluster, preservando el orden de la más completa.
+  function unionMetrics(group) {
+    const lists = group.map(e => e.metrics).filter(m => Array.isArray(m) && m.length);
+    if (!lists.length) return null;
+    lists.sort((a, b) => b.length - a.length);
+    const out = [...lists[0]];
+    lists.slice(1).forEach(m => m.forEach(k => { if (!out.includes(k)) out.push(k); }));
+    return out;
+  }
+
+  // Agrupa los ejercicios idénticos en clusters { keep, remove[] }. Conserva uno
+  // por cluster con prioridad: usado en el plan > predefinido > con más suplentes.
+  async function mergeableClusters(app) {
     const list = await DB.exercisesOf(app.activeUser.id);
     const routines = await DB.routinesOf(app.activeUser.id);
-    const usedIds = new Set(), usedNamesNoId = new Set();
-    routines.forEach(rt => (rt.days || []).forEach(d => (d.blocks || []).forEach(b => (b.exercises || []).forEach(e => {
-      if (e.exerciseId) usedIds.add(e.exerciseId);
-      else if (e.name) usedNamesNoId.add(e.name.trim().toLowerCase());
-    }))));
-    const isUsed = (ex) => usedIds.has(ex.id) || usedNamesNoId.has((ex.name || '').trim().toLowerCase());
+    const usedIds = new Set();
+    routines.forEach(rt => (rt.days || []).forEach(d => (d.blocks || []).forEach(b => (b.exercises || []).forEach(e => { if (e.exerciseId) usedIds.add(e.exerciseId); }))));
     const groups = {};
-    list.forEach(e => { const k = (e.name || '').trim().toLowerCase(); if (k) (groups[k] = groups[k] || []).push(e); });
-    const removable = [];
+    list.forEach(e => { if ((e.name || '').trim()) { const k = exSignature(e); (groups[k] = groups[k] || []).push(e); } });
+    const clusters = [];
     Object.values(groups).forEach(g => {
       if (g.length < 2) return;
-      const kept = g.filter(e => e.isDefault || isUsed(e));
-      const candidates = g.filter(e => !e.isDefault && !isUsed(e));
-      removable.push(...(kept.length >= 1 ? candidates : candidates.slice(1))); // si no hay ninguno "fijo", conserva uno
+      g.sort((a, b) =>
+        ((usedIds.has(b.id) ? 1 : 0) - (usedIds.has(a.id) ? 1 : 0))
+        || ((b.isDefault ? 1 : 0) - (a.isDefault ? 1 : 0))
+        || ((b.substitutes || []).length - (a.substitutes || []).length));
+      clusters.push({ keep: g[0], remove: g.slice(1) });
     });
-    return removable;
+    return clusters;
   }
+
+  // Lista plana de duplicados borrables (para contar/avisar).
+  async function dedupeRemovable(app) {
+    return (await mergeableClusters(app)).flatMap(c => c.remove);
+  }
+
+  // Elimina los duplicados idénticos dejando uno de cada y REAPUNTANDO las
+  // referencias (plan y sesiones) al que se conserva, para no perder nada.
+  // El progreso se calcula por nombre de ejercicio, así que no se ve afectado.
   async function cleanupDuplicates(app) {
-    const rem = await dedupeRemovable(app);
-    for (const e of rem) await DB.del('exercises', e.id);
-    return rem.length;
+    const clusters = await mergeableClusters(app);
+    if (!clusters.length) return 0;
+    const remap = {}; // idBorrado -> idConservado
+    clusters.forEach(c => c.remove.forEach(e => { remap[e.id] = c.keep.id; }));
+    const removedIds = new Set(Object.keys(remap));
+
+    // 1) Reapunta los ejercicios en los días del plan (todas las rutinas).
+    for (const rt of await DB.routinesOf(app.activeUser.id)) {
+      let changed = false;
+      (rt.days || []).forEach(d => (d.blocks || []).forEach(b => (b.exercises || []).forEach(e => {
+        if (e.exerciseId && remap[e.exerciseId]) { e.exerciseId = remap[e.exerciseId]; changed = true; }
+      })));
+      if (changed) await DB.put('routines', rt);
+    }
+    // 2) Reapunta los ejercicios en las sesiones ya registradas.
+    for (const s of await DB.sessionsOf(app.activeUser.id)) {
+      let changed = false;
+      (s.entries || []).forEach(e => { if (e.exerciseId && remap[e.exerciseId]) { e.exerciseId = remap[e.exerciseId]; changed = true; } });
+      if (changed) await DB.put('sessions', s);
+    }
+    // 3) Funde en el conservado: suplentes + la unión de métricas (config más
+    //    completa de cardio); reapunta los suplentes del resto.
+    for (const c of clusters) {
+      const keep = await DB.get('exercises', c.keep.id);
+      const subs = [...(keep.substitutes || []), ...c.remove.flatMap(e => e.substitutes || [])]
+        .map(sid => remap[sid] || sid).filter(sid => sid !== keep.id && !removedIds.has(sid));
+      keep.substitutes = [...new Set(subs)];
+      const metrics = unionMetrics([c.keep, ...c.remove]);
+      if (metrics) keep.metrics = metrics;
+      await DB.put('exercises', keep);
+    }
+    for (const ex of await DB.exercisesOf(app.activeUser.id)) {
+      if (removedIds.has(ex.id) || !(ex.substitutes || []).length) continue;
+      const subs = [...new Set(ex.substitutes.map(sid => remap[sid] || sid).filter(sid => sid !== ex.id && !removedIds.has(sid)))];
+      if (subs.length !== ex.substitutes.length || subs.some((s, i) => s !== ex.substitutes[i])) { ex.substitutes = subs; await DB.put('exercises', ex); }
+    }
+    // 4) Borra los duplicados.
+    for (const id of removedIds) await DB.del('exercises', id);
+    return removedIds.size;
   }
-  // Aviso al entrar en la app si hay duplicados borrables.
+
+  // Aviso al entrar en la app si hay duplicados idénticos.
   async function checkDuplicates(app) {
     if (document.querySelector('.modal-overlay')) return; // no encimar otros avisos
     const rem = await dedupeRemovable(app);
@@ -643,7 +708,7 @@ const VPlan = (() => {
     const names = [...new Set(rem.map(e => e.name))];
     UI.modal({
       title: 'Ejercicios duplicados',
-      bodyHTML: `<p class="modal-text">Hay <strong>${rem.length}</strong> ejercicio${rem.length === 1 ? '' : 's'} repetido${rem.length === 1 ? '' : 's'} sin usar (${names.slice(0, 3).map(n => UI.esc(n)).join(', ')}${names.length > 3 ? '…' : ''}). ¿Quieres eliminar los repetidos que no estás usando? Se conserva uno de cada.</p>`,
+      bodyHTML: `<p class="modal-text">Hay <strong>${rem.length}</strong> ejercicio${rem.length === 1 ? '' : 's'} idéntico${rem.length === 1 ? '' : 's'} repetido${rem.length === 1 ? '' : 's'} (${names.slice(0, 3).map(n => UI.esc(n)).join(', ')}${names.length > 3 ? '…' : ''}). ¿Eliminar los repetidos y dejar uno de cada? Se conserva uno y se mantienen tanto tu plan como tus registros y progreso.</p>`,
       actions: [
         { label: 'Ahora no', kind: 'ghost' },
         { label: `Eliminar ${rem.length}`, kind: 'danger', onClick: async () => { const n = await cleanupDuplicates(app); UI.toast(`${n} duplicado${n === 1 ? '' : 's'} eliminado${n === 1 ? '' : 's'}`); app.render(); } },
@@ -707,7 +772,7 @@ const VPlan = (() => {
       ${unused.length ? `<ul class="ex-list">${unused.map(e => item(e, !e.isDefault)).join('')}</ul>` : '<p class="dim" style="padding:2px 0">No hay ejercicios en desuso.</p>'}
       </div>
       <p class="dim" id="catalogNoResults" style="display:none;padding:12px 2px">Sin resultados.</p>
-      ${removableDup.length ? `<button class="btn ghost danger block" id="cleanDups" style="margin-top:16px">${UI.icon('trash', 16)} Eliminar ${removableDup.length} duplicado${removableDup.length === 1 ? '' : 's'} sin usar</button>` : ''}
+      ${removableDup.length ? `<button class="btn ghost danger block" id="cleanDups" style="margin-top:16px">${UI.icon('trash', 16)} Eliminar ${removableDup.length} duplicado${removableDup.length === 1 ? '' : 's'} idéntico${removableDup.length === 1 ? '' : 's'}</button>` : ''}
       <button class="btn primary block" id="addEx" style="margin-top:16px">+ Nuevo ejercicio</button>
     </div>`;
   }
@@ -734,7 +799,7 @@ const VPlan = (() => {
     const cleanBtn = root.querySelector('#cleanDups');
     if (cleanBtn) cleanBtn.addEventListener('click', async () => {
       const rem = await dedupeRemovable(app);
-      const ok = await UI.confirm({ title: 'Eliminar duplicados', message: `Se eliminarán ${rem.length} ejercicio(s) repetido(s) que no usas (se conserva uno de cada). No afecta a las sesiones ya registradas.`, confirmLabel: 'Eliminar', danger: true });
+      const ok = await UI.confirm({ title: 'Eliminar duplicados', message: `Se eliminarán ${rem.length} ejercicio(s) idéntico(s) repetido(s) y se conservará uno de cada. Tu plan, tus sesiones y tu progreso se mantienen.`, confirmLabel: 'Eliminar', danger: true });
       if (!ok) return;
       const n = await cleanupDuplicates(app);
       app.render(); UI.toast(`${n} duplicado(s) eliminado(s)`);
