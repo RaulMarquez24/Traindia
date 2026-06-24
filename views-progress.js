@@ -339,10 +339,18 @@ const VProgress = (() => {
     const isPR = (p) => prPoint && p.y === prPoint.y && (p.tie || 0) === (prPoint.tie || 0);
     const recent = points.slice(-8).reverse().map(p => `<li><span>${UI.fmtDateShort(p.x)}</span><strong>${fmtPoint(p)}${isPR(p) ? ' 🏆' : ''}</strong></li>`).join('');
 
+    const effectiveOnly = effortOnly && !fellBack; // si no hay esfuerzo, el tick se ve apagado
+    const helpOpen = host._e1Help === true;        // explicación plegada por defecto
     const e1Panel = isE1 ? `
-      <label class="check-row e1-toggle"><input type="checkbox" id="effOnly"${effortOnly ? ' checked' : ''}><span>Usar solo series con esfuerzo marcado</span></label>
-      <p class="field-hint">El <strong>1RM estimado</strong> predice cuánto levantarías a <strong>1 repetición</strong> (fórmula de Epley). El esfuerzo que marcas por serie indica cuántas reps te quedaban (100% = al fallo, 90% ≈ 1 en reserva, 80% ≈ 2…). Con el tick activado solo cuentan tus series con esfuerzo marcado (deja fuera los calentamientos); si lo quitas, se usan todas y las no marcadas se asumen al fallo.</p>
-      ${fellBack ? `<p class="field-hint e1-warn">No has marcado el esfuerzo en este ejercicio, así que se están usando todas las series. Marca el % en tus series para afinar el cálculo.</p>` : ''}` : '';
+      <div class="e1-bar">
+        <label class="check-row e1-toggle"><input type="checkbox" id="effOnly"${effectiveOnly ? ' checked' : ''}><span>Usar solo series con esfuerzo marcado</span></label>
+        <button type="button" class="e1-help-btn" id="e1Help">${helpOpen ? 'Ocultar' : '¿Cómo funciona?'}</button>
+      </div>
+      ${fellBack ? `<p class="e1-note">Este ejercicio no tiene series con esfuerzo marcado, así que se usan todas. Marca el % en tus series para afinar.</p>` : ''}
+      ${helpOpen ? `<div class="e1-help">
+        <p><strong>Qué es el 1RM estimado</strong><br>Una predicción de cuánto levantarías a <strong>1 repetición</strong>, calculada con la fórmula de Epley a partir del peso y las reps de tus series.</p>
+        <p><strong>El tick "solo esfuerzo"</strong><br>Cuenta solo las series donde marcaste el esfuerzo, dejando fuera los calentamientos. Si lo quitas, usa todas (las no marcadas se asumen al fallo). El % de esfuerzo indica las reps que te quedaban: 100% = al fallo, 90% ≈ 1, 80% ≈ 2…</p>
+      </div>` : ''}` : '';
 
     host.innerHTML = `
       <div class="card">
@@ -363,6 +371,8 @@ const VProgress = (() => {
     host.querySelectorAll('[data-metric]').forEach(c => c.addEventListener('click', () => { host._metric = c.dataset.metric; host._exId = ex.id; renderExercise(app, host, params); }));
     const effChk = host.querySelector('#effOnly');
     if (effChk) effChk.addEventListener('change', () => { host._effortOnly = effChk.checked; host._exId = ex.id; renderExercise(app, host, params); });
+    const helpBtn = host.querySelector('#e1Help');
+    if (helpBtn) helpBtn.addEventListener('click', () => { host._e1Help = !host._e1Help; host._exId = ex.id; renderExercise(app, host, params); });
   }
 
   // ---------- COMPARATIVA ----------
