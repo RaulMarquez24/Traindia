@@ -121,7 +121,7 @@ const VProgress = (() => {
       // condiciones de la marca + desempate. La "tie" mayor = mejor marca a igual valor.
       let detail = '', tie = 0;
       if (metric === 'maxWeight' && bestW) { detail = bestW.r ? `× ${bestW.r}` : ''; tie = bestW.r; }            // + reps a igual peso
-      else if (metric === 'e1rm' && best1rmSet) { detail = `${best1rmSet.w}×${best1rmSet.r}${best1rmSet.eff ? ` · ${best1rmSet.eff}` : ''}`; tie = best1rmSet.w; } // serie origen del 1RM
+      else if (metric === 'e1rm' && best1rmSet) { detail = `de ${best1rmSet.w}×${best1rmSet.r}${best1rmSet.eff ? ` · ${best1rmSet.eff}` : ''}`; tie = best1rmSet.w; } // serie origen del 1RM
       else if (metric === 'maxReps' && bestR) { detail = bestR.w ? `@ ${bestR.w} kg` : ''; tie = bestR.w; }       // + peso a iguales reps
       else if (metric === 'distance' && distance > 0) { detail = totalTime ? `en ${fmtSecs(totalTime)}` : ''; tie = -totalTime; } // − tiempo a igual distancia
       else if (metric === 'kcal' && kcal > 0) { detail = totalTime ? `en ${fmtSecs(totalTime)}` : ''; }
@@ -358,7 +358,7 @@ const VProgress = (() => {
         <button type="button" class="e1-help-btn" id="e1Help">${helpOpen ? 'Ocultar' : '¿Cómo funciona?'}</button>
       </div>
       <div class="e1-formula-row"><span class="e1-formula-label">Fórmula</span><div class="chips-row small">${E1_FORMULAS.map(f => `<button class="chip${formula === f.key ? ' on' : ''}" data-formula="${f.key}">${f.label}</button>`).join('')}</div></div>
-      ${noEffort ? `<p class="e1-alert">${UI.icon('star', 14)} No tienes series con <strong>esfuerzo marcado</strong> en este ejercicio, por eso la gráfica está vacía. Marca el % de esfuerzo en tus series o desmarca el tick para calcular con todas.</p>` : ''}
+      ${noEffort ? `<div class="e1-alert">${UI.icon('star', 15)}<span>No tienes series con <strong>esfuerzo marcado</strong> en este ejercicio, por eso la gráfica está vacía. Marca el % en tus series o desmarca el tick para calcular con todas.</span></div>` : ''}
       ${helpOpen ? `<div class="e1-help">
         <p><strong>Qué es el 1RM estimado</strong><br>Una predicción de cuánto levantarías a <strong>1 repetición</strong>, a partir del peso y las reps de tus series.</p>
         <p><strong>Epley vs Brzycki</strong><br>Dos fórmulas distintas para el mismo cálculo; puedes alternarlas a tu gusto. Coinciden casi exactamente <strong>alrededor de las 10 reps</strong>; por debajo de 10 Epley estima algo más alto y por encima de 10, Brzycki. Quédate con una y úsala siempre para comparar tu progreso.</p>
@@ -377,7 +377,7 @@ const VProgress = (() => {
         ${UI.field('Ejercicio', UI.selectButton('exSelBtn', ex.name))}
         <div class="chips-row small">${metrics.map(m => `<button class="chip${m.key === metric ? ' on' : ''}" data-metric="${m.key}">${m.label}</button>`).join('')}</div>
         ${e1Panel}
-        ${prPoint ? `<div class="pr-stat">${UI.icon('star', 16)}<div class="pr-stat-text"><span class="pr-stat-label">Récord · ${UI.esc(metricLabel)}</span><span class="pr-stat-date">${UI.fmtDateShort(prPoint.x)}</span></div><span class="pr-stat-val">${fmtPoint(prPoint)}</span></div>` : ''}
+        ${prPoint ? `<div class="pr-stat">${UI.icon('star', 16)}<div class="pr-stat-text"><span class="pr-stat-label">Récord · ${UI.esc(metricLabel)}</span><span class="pr-stat-date">${UI.fmtDateShort(prPoint.x)}</span></div><span class="pr-stat-val">${isTime ? fmtSecs(prPoint.y) : `${prPoint.y}${METRIC_UNIT[metric] || ''}`}${prPoint.detail ? `<span class="pr-stat-cond">${UI.esc(prPoint.detail)}</span>` : ''}</span></div>` : ''}
         ${UI.lineChart([{ label: ex.name, color: app.activeUser.color, points }], { width: 320, height: 150, fmtY: isTime ? fmtSecs : undefined, fmtPoint })}
       </div>
       ${points.length ? `<div class="block"><div class="block-label">Últimos registros</div><ul class="kv-list">${recent}</ul></div>` : (noEffort ? '' : '<div class="empty-state"><p class="dim">Aún no has registrado este ejercicio en ninguna sesión.</p></div>')}`;
