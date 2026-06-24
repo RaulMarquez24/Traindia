@@ -405,8 +405,8 @@ const VData = (() => {
         const hint = root.querySelector('#policyHint');
         const setHint = () => {
           hint.textContent = pol.value === 'duplicate'
-            ? 'Recomendado. Se añade como entradas NUEVAS; nunca borra ni pisa lo que ya tienes (si ya lo tenías idéntico, quedará duplicado).'
-            : 'Si un dato coincide exactamente con uno tuyo (mismo identificador interno), lo actualiza con el del archivo; el resto se añade.';
+            ? 'Se añade como entradas NUEVAS; nunca borra ni pisa lo que ya tienes. Tu plan y días actuales NO cambian (la rutina entra como un plan aparte, sin activar).'
+            : 'Actualiza en su sitio lo que coincida (mismo identificador) con lo del archivo; el resto se añade. Ideal para RESTAURAR tu propio perfil: tus días vuelven a como están en el archivo.';
         };
         pol.addEventListener('change', setHint); setHint();
       },
@@ -429,15 +429,25 @@ const VData = (() => {
     const remapEx = (id) => (id && exMap[id]) ? exMap[id] : (id || null);
 
     // 2) Rutinas (reescribe exerciseId en bloques)
-    if (want.has('routines')) for (const rt of (data.routines || [])) {
-      const days = (rt.days || []).map(day => ({
-        ...day,
-        blocks: (day.blocks || []).map(b => ({
-          ...b,
-          exercises: (b.exercises || []).map(e => ({ ...e, exerciseId: remapEx(e.exerciseId) })),
-        })),
-      }));
-      await DB.put('routines', { ...rt, id: duplicate ? DB.uid('rt') : rt.id, userId: targetUserId, days, isPrimary: false });
+    if (want.has('routines')) {
+      for (const rt of (data.routines || [])) {
+        const days = (rt.days || []).map(day => ({
+          ...day,
+          blocks: (day.blocks || []).map(b => ({
+            ...b,
+            exercises: (b.exercises || []).map(e => ({ ...e, exerciseId: remapEx(e.exerciseId) })),
+          })),
+        }));
+        // copia nueva: nunca activa (no pisa tu plan). Reemplazar: conserva si era el activo
+        // (así reimportar tu propio perfil restaura/actualiza los días en su sitio).
+        await DB.put('routines', { ...rt, id: duplicate ? DB.uid('rt') : rt.id, userId: targetUserId, days, isPrimary: duplicate ? false : !!rt.isPrimary });
+      }
+      // garantizar exactamente un plan activo en el destino
+      const rts = await DB.routinesOf(targetUserId);
+      if (rts.length && rts.filter(r => r.isPrimary).length !== 1) {
+        const keep = rts.find(r => r.isPrimary) || rts[0];
+        for (const r of rts) { const want1 = r.id === keep.id; if (!!r.isPrimary !== want1) { r.isPrimary = want1; await DB.put('routines', r); } }
+      }
     }
 
     // 3) Sesiones (reescribe exerciseId en entries)
