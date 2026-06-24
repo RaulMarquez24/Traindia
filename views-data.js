@@ -541,14 +541,13 @@ const VData = (() => {
     const data = payload.data || {};
     const duplicate = policy === 'duplicate';
     const want = sections || new Set(['exercises', 'routines', 'sessions', 'progress', 'journal']);
-    const exMap = {}; // oldId -> newId (para reescribir referencias)
+    let exMap = {}; // idOrigen -> idLocal (para reescribir referencias)
 
-    // 1) Ejercicios
-    if (want.has('exercises')) for (const ex of (data.exercises || [])) {
-      const oldId = ex.id;
-      const newId = duplicate ? DB.uid('ex') : ex.id;
-      exMap[oldId] = newId;
-      await DB.put('exercises', { ...ex, id: newId, userId: targetUserId });
+    // 1) Ejercicios — SIEMPRE se emparejan por NOMBRE con el catálogo, así que
+    //    nunca se duplican: si ya tienes ese ejercicio (aunque con otro id) se
+    //    reutiliza; solo se crean los que te falten. (El progreso va por nombre.)
+    if (want.has('exercises')) {
+      exMap = await mapExercisesToCatalog(targetUserId, data.exercises || []);
     }
     const remapEx = (id) => (id && exMap[id]) ? exMap[id] : (id || null);
 
