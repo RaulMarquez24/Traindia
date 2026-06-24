@@ -39,13 +39,13 @@ const VProgress = (() => {
   // Serie del 1RM respetando "solo esfuerzo"; si no hay ninguna serie con
   // esfuerzo marcado, cae a usar todas (y avisa con fellBack). Para el resto de
   // métricas devuelve la serie normal.
-  async function metricSeries(userId, name, metric, effortOnly) {
+  async function metricSeries(userId, name, metric, effortOnly, formula) {
     if (metric !== 'e1rm' || !effortOnly) {
-      return { points: await exerciseSeries(userId, name, metric, { effortOnly: false }), fellBack: false };
+      return { points: await exerciseSeries(userId, name, metric, { effortOnly: false, formula }), fellBack: false };
     }
-    const pts = await exerciseSeries(userId, name, metric, { effortOnly: true });
+    const pts = await exerciseSeries(userId, name, metric, { effortOnly: true, formula });
     if (pts.length) return { points: pts, fellBack: false };
-    return { points: await exerciseSeries(userId, name, metric, { effortOnly: false }), fellBack: true };
+    return { points: await exerciseSeries(userId, name, metric, { effortOnly: false, formula }), fellBack: true };
   }
 
   // Formatea segundos: <60s → "45s"; <60min → "m:ss"; ≥60min → "h:mm:ss".
@@ -67,10 +67,18 @@ const VProgress = (() => {
     return Math.max(0, (100 - pct) / 10);
   }
 
+  // 1RM estimado a partir del peso y las reps totales (hasta el fallo).
+  const E1_FORMULAS = [{ key: 'epley', label: 'Epley' }, { key: 'brzycki', label: 'Brzycki' }];
+  function estimate1rm(weight, totalReps, formula) {
+    if (formula === 'brzycki' && totalReps < 37) return weight * 36 / (37 - totalReps);
+    return weight * (1 + totalReps / 30); // Epley (y respaldo si Brzycki se sale de rango)
+  }
+
   // ---- cálculo de series por ejercicio desde sesiones ----
   // opts.effortOnly (solo para 1RM): solo cuenta las series con esfuerzo marcado.
   async function exerciseSeries(userId, exName, metric, opts = {}) {
     const effortOnly = !!opts.effortOnly;
+    const formula = opts.formula || 'epley';
     let sessions = (await DB.sessionsOf(userId)).filter(s => !s.draft);
     sessions.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
     const points = [];
@@ -93,10 +101,10 @@ const VProgress = (() => {
           kcal += parseFloat(set.kcal) || 0;
           if (w > 0 && (!bestW || w > bestW.w || (w === bestW.w && r > bestW.r))) bestW = { w, r };
           if (r > 0 && (!bestR || r > bestR.r || (r === bestR.r && w > bestR.w))) bestR = { w, r };
-          if (w > 0 && r > 0) { // 1RM Epley con reps en reserva según el esfuerzo
+          if (w > 0 && r > 0) { // 1RM con reps en reserva según el esfuerzo
             const rir = repsInReserve(set.effort);
             if (!effortOnly || rir != null) {
-              const e1 = w * (1 + (r + (rir || 0)) / 30);
+              const e1 = estimate1rm(w, r + (rir || 0), formula);
               if (e1 > best1rm) { best1rm = e1; best1rmSet = { w, r, eff: set.effort || null }; }
             }
           }
@@ -330,7 +338,8 @@ const VProgress = (() => {
 
     const isE1 = metric === 'e1rm';
     const effortOnly = isE1 ? (host._effortOnly !== false) : false; // por defecto activado
-    const { points, fellBack } = await metricSeries(app.activeUser.id, ex.name, metric, effortOnly);
+    const formula = app._e1Formula || 'epley';
+    const { points, fellBack } = await metricSeries(app.activeUser.id, ex.name, metric, effortOnly, formula);
 
     const isTime = metric === 'maxTime';
     const prPoint = bestPoint(points);
@@ -346,9 +355,11 @@ const VProgress = (() => {
         <label class="check-row e1-toggle"><input type="checkbox" id="effOnly"${effectiveOnly ? ' checked' : ''}><span>Usar solo series con esfuerzo marcado</span></label>
         <button type="button" class="e1-help-btn" id="e1Help">${helpOpen ? 'Ocultar' : '¿Cómo funciona?'}</button>
       </div>
+      <div class="e1-formula-row"><span class="e1-formula-label">Fórmula</span><div class="chips-row small">${E1_FORMULAS.map(f => `<button class="chip${formula === f.key ? ' on' : ''}" data-formula="${f.key}">${f.label}</button>`).join('')}</div></div>
       ${fellBack ? `<p class="e1-note">Este ejercicio no tiene series con esfuerzo marcado, así que se usan todas. Marca el % en tus series para afinar.</p>` : ''}
       ${helpOpen ? `<div class="e1-help">
-        <p><strong>Qué es el 1RM estimado</strong><br>Una predicción de cuánto levantarías a <strong>1 repetición</strong>, calculada con la fórmula de Epley a partir del peso y las reps de tus series.</p>
+        <p><strong>Qué es el 1RM estimado</strong><br>Una predicción de cuánto levantarías a <strong>1 repetición</strong>, a partir del peso y las reps de tus series.</p>
+        <p><strong>Epley vs Brzycki</strong><br>Dos fórmulas distintas para el mismo cálculo; puedes alternarlas a tu gusto. Suelen dar números parecidos: Brzycki tiende a estimar algo más alto en reps medias y Epley en reps altas. Quédate con la que más te encaje y úsala siempre para comparar tu progreso.</p>
         <p><strong>El tick "solo esfuerzo"</strong><br>Cuenta solo las series donde marcaste el esfuerzo, dejando fuera los calentamientos. Si lo quitas, usa todas (las no marcadas se asumen al fallo). El % de esfuerzo indica las reps que te quedaban: 100% = al fallo, 90% ≈ 1, 80% ≈ 2…</p>
         <p><strong>Es una estimación, no un valor exacto</strong><br>Es una media estadística: tu número real puede variar. Para que se acerque lo máximo posible:</p>
         <ul class="e1-tips">
@@ -380,6 +391,7 @@ const VProgress = (() => {
     if (effChk) effChk.addEventListener('change', () => { host._effortOnly = effChk.checked; host._exId = ex.id; renderExercise(app, host, params); });
     const helpBtn = host.querySelector('#e1Help');
     if (helpBtn) helpBtn.addEventListener('click', () => { host._e1Help = !host._e1Help; host._exId = ex.id; renderExercise(app, host, params); });
+    host.querySelectorAll('[data-formula]').forEach(b => b.addEventListener('click', () => { app._e1Formula = b.dataset.formula; host._exId = ex.id; renderExercise(app, host, params); }));
   }
 
   // ---------- COMPARATIVA ----------
@@ -413,8 +425,9 @@ const VProgress = (() => {
       exMetrics = (subjEx && subjEx.type === 'time') ? TIME_METRICS : EX_METRICS; // métricas según el tipo
       exMetric = (host._exMetric && exMetrics.some(m => m.key === host._exMetric)) ? host._exMetric : exMetrics[0].key;
       // el 1RM se compara solo con series de esfuerzo marcado (cae a todas si no hay)
-      const mainPts = (await metricSeries(app.mainUser.id, exName, exMetric, exMetric === 'e1rm')).points;
-      const guestPts = (await metricSeries(guest.id, exName, exMetric, exMetric === 'e1rm')).points;
+      const e1f = app._e1Formula || 'epley';
+      const mainPts = (await metricSeries(app.mainUser.id, exName, exMetric, exMetric === 'e1rm', e1f)).points;
+      const guestPts = (await metricSeries(guest.id, exName, exMetric, exMetric === 'e1rm', e1f)).points;
       series = [
         { label: app.mainUser.name, color: app.mainUser.color, points: mainPts },
         { label: guest.name, color: guest.color, points: guestPts },
