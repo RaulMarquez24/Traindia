@@ -36,6 +36,18 @@ const VProgress = (() => {
     return p.detail ? `${base} ${p.detail}` : base;
   }
 
+  // Serie del 1RM respetando "solo esfuerzo"; si no hay ninguna serie con
+  // esfuerzo marcado, cae a usar todas (y avisa con fellBack). Para el resto de
+  // métricas devuelve la serie normal.
+  async function metricSeries(userId, name, metric, effortOnly) {
+    if (metric !== 'e1rm' || !effortOnly) {
+      return { points: await exerciseSeries(userId, name, metric, { effortOnly: false }), fellBack: false };
+    }
+    const pts = await exerciseSeries(userId, name, metric, { effortOnly: true });
+    if (pts.length) return { points: pts, fellBack: false };
+    return { points: await exerciseSeries(userId, name, metric, { effortOnly: false }), fellBack: true };
+  }
+
   // Formatea segundos: <60s → "45s"; <60min → "m:ss"; ≥60min → "h:mm:ss".
   function fmtSecs(v) {
     v = Math.max(0, Math.round(v || 0));
@@ -46,8 +58,19 @@ const VProgress = (() => {
     return `${s}s`;
   }
 
+  // Reps "en reserva" según el esfuerzo marcado ('100%' = al fallo → 0;
+  // '90%' ≈ 1; '80%' ≈ 2; …). Sin esfuerzo marcado devuelve null.
+  function repsInReserve(effort) {
+    if (!effort) return null;
+    const pct = parseFloat(effort);
+    if (isNaN(pct)) return null;
+    return Math.max(0, (100 - pct) / 10);
+  }
+
   // ---- cálculo de series por ejercicio desde sesiones ----
-  async function exerciseSeries(userId, exName, metric) {
+  // opts.effortOnly (solo para 1RM): solo cuenta las series con esfuerzo marcado.
+  async function exerciseSeries(userId, exName, metric, opts = {}) {
+    const effortOnly = !!opts.effortOnly;
     let sessions = (await DB.sessionsOf(userId)).filter(s => !s.draft);
     sessions.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
     const points = [];
@@ -70,17 +93,24 @@ const VProgress = (() => {
           kcal += parseFloat(set.kcal) || 0;
           if (w > 0 && (!bestW || w > bestW.w || (w === bestW.w && r > bestW.r))) bestW = { w, r };
           if (r > 0 && (!bestR || r > bestR.r || (r === bestR.r && w > bestR.w))) bestR = { w, r };
-          if (w > 0 && r > 0) { const e1 = w * (1 + r / 30); if (e1 > best1rm) { best1rm = e1; best1rmSet = { w, r }; } } // Epley
+          if (w > 0 && r > 0) { // 1RM Epley con reps en reserva según el esfuerzo
+            const rir = repsInReserve(set.effort);
+            if (!effortOnly || rir != null) {
+              const e1 = w * (1 + (r + (rir || 0)) / 30);
+              if (e1 > best1rm) { best1rm = e1; best1rmSet = { w, r, eff: set.effort || null }; }
+            }
+          }
         });
       });
       if (!found) return;
       const distR = Math.round(distance * 100) / 100;
       const map = { maxWeight, volume, maxReps, maxTime, distance: distR, kcal: Math.round(kcal), e1rm: Math.round(best1rm) };
       const y = map[metric] || 0;
+      if (metric === 'e1rm' && best1rm <= 0) return; // sin series válidas (p.ej. effortOnly y sin esfuerzo)
       // condiciones de la marca + desempate. La "tie" mayor = mejor marca a igual valor.
       let detail = '', tie = 0;
       if (metric === 'maxWeight' && bestW) { detail = bestW.r ? `× ${bestW.r}` : ''; tie = bestW.r; }            // + reps a igual peso
-      else if (metric === 'e1rm' && best1rmSet) { detail = `${best1rmSet.w}×${best1rmSet.r}`; tie = best1rmSet.w; } // serie origen del 1RM
+      else if (metric === 'e1rm' && best1rmSet) { detail = `${best1rmSet.w}×${best1rmSet.r}${best1rmSet.eff ? ` · ${best1rmSet.eff}` : ''}`; tie = best1rmSet.w; } // serie origen del 1RM
       else if (metric === 'maxReps' && bestR) { detail = bestR.w ? `@ ${bestR.w} kg` : ''; tie = bestR.w; }       // + peso a iguales reps
       else if (metric === 'distance' && distance > 0) { detail = totalTime ? `en ${fmtSecs(totalTime)}` : ''; tie = -totalTime; } // − tiempo a igual distancia
       else if (metric === 'kcal' && kcal > 0) { detail = totalTime ? `en ${fmtSecs(totalTime)}` : ''; }
@@ -298,7 +328,9 @@ const VProgress = (() => {
     const metrics = ex.type === 'time' ? TIME_METRICS : EX_METRICS;
     const metric = (host._metric && metrics.some(m => m.key === host._metric)) ? host._metric : metrics[0].key;
 
-    const points = await exerciseSeries(app.activeUser.id, ex.name, metric);
+    const isE1 = metric === 'e1rm';
+    const effortOnly = isE1 ? (host._effortOnly !== false) : false; // por defecto activado
+    const { points, fellBack } = await metricSeries(app.activeUser.id, ex.name, metric, effortOnly);
 
     const isTime = metric === 'maxTime';
     const prPoint = bestPoint(points);
@@ -307,10 +339,16 @@ const VProgress = (() => {
     const isPR = (p) => prPoint && p.y === prPoint.y && (p.tie || 0) === (prPoint.tie || 0);
     const recent = points.slice(-8).reverse().map(p => `<li><span>${UI.fmtDateShort(p.x)}</span><strong>${fmtPoint(p)}${isPR(p) ? ' 🏆' : ''}</strong></li>`).join('');
 
+    const e1Panel = isE1 ? `
+      <label class="check-row e1-toggle"><input type="checkbox" id="effOnly"${effortOnly ? ' checked' : ''}><span>Usar solo series con esfuerzo marcado</span></label>
+      <p class="field-hint">El <strong>1RM estimado</strong> predice cuánto levantarías a <strong>1 repetición</strong> (fórmula de Epley). El esfuerzo que marcas por serie indica cuántas reps te quedaban (100% = al fallo, 90% ≈ 1 en reserva, 80% ≈ 2…). Con el tick activado solo cuentan tus series con esfuerzo marcado (deja fuera los calentamientos); si lo quitas, se usan todas y las no marcadas se asumen al fallo.</p>
+      ${fellBack ? `<p class="field-hint e1-warn">No has marcado el esfuerzo en este ejercicio, así que se están usando todas las series. Marca el % en tus series para afinar el cálculo.</p>` : ''}` : '';
+
     host.innerHTML = `
       <div class="card">
         ${UI.field('Ejercicio', UI.selectButton('exSelBtn', ex.name))}
         <div class="chips-row small">${metrics.map(m => `<button class="chip${m.key === metric ? ' on' : ''}" data-metric="${m.key}">${m.label}</button>`).join('')}</div>
+        ${e1Panel}
         ${prPoint ? `<div class="pr-stat">${UI.icon('star', 16)}<div class="pr-stat-text"><span class="pr-stat-label">Récord · ${UI.esc(metricLabel)}</span><span class="pr-stat-date">${UI.fmtDateShort(prPoint.x)}</span></div><span class="pr-stat-val">${fmtPoint(prPoint)}</span></div>` : ''}
         ${UI.lineChart([{ label: ex.name, color: app.activeUser.color, points }], { width: 320, height: 150, fmtY: isTime ? fmtSecs : undefined, fmtPoint })}
       </div>
@@ -323,6 +361,8 @@ const VProgress = (() => {
       onPick: (val) => { host._exId = val; host._metric = null; renderExercise(app, host, params); },
     }));
     host.querySelectorAll('[data-metric]').forEach(c => c.addEventListener('click', () => { host._metric = c.dataset.metric; host._exId = ex.id; renderExercise(app, host, params); }));
+    const effChk = host.querySelector('#effOnly');
+    if (effChk) effChk.addEventListener('change', () => { host._effortOnly = effChk.checked; host._exId = ex.id; renderExercise(app, host, params); });
   }
 
   // ---------- COMPARATIVA ----------
@@ -355,8 +395,9 @@ const VProgress = (() => {
       const subjEx = catalog.find(c => c.name === exName);
       exMetrics = (subjEx && subjEx.type === 'time') ? TIME_METRICS : EX_METRICS; // métricas según el tipo
       exMetric = (host._exMetric && exMetrics.some(m => m.key === host._exMetric)) ? host._exMetric : exMetrics[0].key;
-      const mainPts = await exerciseSeries(app.mainUser.id, exName, exMetric);
-      const guestPts = await exerciseSeries(guest.id, exName, exMetric);
+      // el 1RM se compara solo con series de esfuerzo marcado (cae a todas si no hay)
+      const mainPts = (await metricSeries(app.mainUser.id, exName, exMetric, exMetric === 'e1rm')).points;
+      const guestPts = (await metricSeries(guest.id, exName, exMetric, exMetric === 'e1rm')).points;
       series = [
         { label: app.mainUser.name, color: app.mainUser.color, points: mainPts },
         { label: guest.name, color: guest.color, points: guestPts },
