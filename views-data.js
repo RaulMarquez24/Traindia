@@ -310,12 +310,21 @@ const VData = (() => {
       { key: 'journal', label: 'Diario' },
     ].filter(s => (counts[s.key] || []).length);
 
+    // texto del contador: las rutinas muestran también los días que llevan dentro
+    const countLabel = (s) => {
+      const items = counts[s.key];
+      if (s.key === 'routines') {
+        const days = items.reduce((a, rt) => a + (rt.days || []).length, 0);
+        return `${items.length} plan${items.length === 1 ? '' : 'es'} · ${days} día${days === 1 ? '' : 's'}`;
+      }
+      return String(items.length);
+    };
     // sección con checkbox global + lista de elementos editable (para quitar lo que no quieras)
     const sectionHTML = (s) => {
       const items = counts[s.key];
       const editable = items.length > 1 && items.length <= 60;
       return `<div class="imp-sec">
-        <label class="check-row imp-sec-head"><input type="checkbox" data-sec="${s.key}" checked><span>${s.label} <span class="dim">(${items.length})</span></span>${editable ? `<button type="button" class="imp-toggle" data-toggle="${s.key}">editar</button>` : ''}</label>
+        <label class="check-row imp-sec-head"><input type="checkbox" data-sec="${s.key}" checked><span>${s.label} <span class="dim">(${countLabel(s)})</span></span>${editable ? `<button type="button" class="imp-toggle" data-toggle="${s.key}">editar</button>` : ''}</label>
         ${editable ? `<div class="imp-items" data-items="${s.key}" style="display:none">${items.map(it => `<label class="check-row sub"><input type="checkbox" data-item="${s.key}" data-id="${UI.esc(String(it.id))}" checked><span>${importItemLabel(s.key, it)}</span></label>`).join('')}</div>` : ''}
       </div>`;
     };
