@@ -14,6 +14,7 @@ const VProgress = (() => {
 
   const EX_METRICS = [
     { key: 'maxWeight', label: 'Peso máx (kg)' },
+    { key: 'e1rm', label: '1RM est.' },
     { key: 'volume', label: 'Volumen (kg)' },
     { key: 'maxReps', label: 'Reps máx' },
   ];
@@ -22,6 +23,18 @@ const VProgress = (() => {
     { key: 'distance', label: 'Distancia (km)' },
     { key: 'kcal', label: 'Kcal' },
   ];
+  const METRIC_UNIT = { maxWeight: ' kg', e1rm: ' kg', volume: ' kg', maxReps: ' reps', distance: ' km', kcal: ' kcal' };
+  const METRIC_LABEL = {};
+  EX_METRICS.concat(TIME_METRICS).forEach(m => { METRIC_LABEL[m.key] = m.label; });
+
+  // récord = mejor punto; a igual valor, gana el de mejor condición (más reps / más peso / menos tiempo)
+  const better = (p, b) => p.y > b.y || (p.y === b.y && (p.tie || 0) > (b.tie || 0));
+  const bestPoint = (points) => (points.length ? points.reduce((b, p) => (better(p, b) ? p : b), points[0]) : null);
+  // valor formateado de un punto con su unidad + condiciones (ej. "90 kg × 3")
+  function fmtMetricPoint(metric, p) {
+    const base = metric === 'maxTime' ? fmtSecs(p.y) : `${p.y}${METRIC_UNIT[metric] || ''}`;
+    return p.detail ? `${base} ${p.detail}` : base;
+  }
 
   // Formatea segundos: <60s → "45s"; <60min → "m:ss"; ≥60min → "h:mm:ss".
   function fmtSecs(v) {
@@ -42,6 +55,7 @@ const VProgress = (() => {
     sessions.forEach(s => {
       let maxWeight = 0, volume = 0, maxReps = 0, maxTime = 0, distance = 0, kcal = 0, totalTime = 0, found = false;
       let bestW = null, bestR = null; // mejor serie por peso (desempata reps) y por reps (desempata peso)
+      let best1rm = 0, best1rmSet = null; // mejor 1RM estimado (Epley) y la serie que lo produce
       (s.entries || []).forEach(e => {
         if ((e.name || '').toLowerCase() !== lname) return;
         found = true;
@@ -56,15 +70,17 @@ const VProgress = (() => {
           kcal += parseFloat(set.kcal) || 0;
           if (w > 0 && (!bestW || w > bestW.w || (w === bestW.w && r > bestW.r))) bestW = { w, r };
           if (r > 0 && (!bestR || r > bestR.r || (r === bestR.r && w > bestR.w))) bestR = { w, r };
+          if (w > 0 && r > 0) { const e1 = w * (1 + r / 30); if (e1 > best1rm) { best1rm = e1; best1rmSet = { w, r }; } } // Epley
         });
       });
       if (!found) return;
       const distR = Math.round(distance * 100) / 100;
-      const map = { maxWeight, volume, maxReps, maxTime, distance: distR, kcal: Math.round(kcal) };
+      const map = { maxWeight, volume, maxReps, maxTime, distance: distR, kcal: Math.round(kcal), e1rm: Math.round(best1rm) };
       const y = map[metric] || 0;
       // condiciones de la marca + desempate. La "tie" mayor = mejor marca a igual valor.
       let detail = '', tie = 0;
       if (metric === 'maxWeight' && bestW) { detail = bestW.r ? `× ${bestW.r}` : ''; tie = bestW.r; }            // + reps a igual peso
+      else if (metric === 'e1rm' && best1rmSet) { detail = `${best1rmSet.w}×${best1rmSet.r}`; tie = best1rmSet.w; } // serie origen del 1RM
       else if (metric === 'maxReps' && bestR) { detail = bestR.w ? `@ ${bestR.w} kg` : ''; tie = bestR.w; }       // + peso a iguales reps
       else if (metric === 'distance' && distance > 0) { detail = totalTime ? `en ${fmtSecs(totalTime)}` : ''; tie = -totalTime; } // − tiempo a igual distancia
       else if (metric === 'kcal' && kcal > 0) { detail = totalTime ? `en ${fmtSecs(totalTime)}` : ''; }
@@ -74,26 +90,134 @@ const VProgress = (() => {
     return points;
   }
 
+  // Métrica representativa de cada ejercicio para "récords" (la primera con datos).
+  function recordMetrics(ex) {
+    if (ex.type === 'time') return ['distance', 'maxTime', 'kcal'];
+    if (ex.type === 'reps') return ['maxReps'];
+    return ['maxWeight'];
+  }
+
+  // Récord (PR) de cada ejercicio del catálogo. Cacheado por usuario + nº de sesiones.
+  async function computeRecords(app, userId) {
+    const sessions = (await DB.sessionsOf(userId)).filter(s => !s.draft);
+    const cacheKey = userId + ':' + sessions.length;
+    app._recCache = app._recCache || {};
+    if (app._recCache[cacheKey]) return app._recCache[cacheKey];
+    // sólo ejercicios realmente entrenados (evita recorrer todo el catálogo)
+    const trained = new Set();
+    sessions.forEach(s => (s.entries || []).forEach(e => { if (e.name) trained.add(e.name.toLowerCase()); }));
+    const catalog = await DB.exercisesOf(userId);
+    const seen = new Set(); // un récord por nombre (hay ejercicios duplicados en el catálogo)
+    const out = [];
+    for (const ex of catalog) {
+      const nl = ex.name.toLowerCase();
+      if (!trained.has(nl) || seen.has(nl)) continue;
+      seen.add(nl);
+      for (const metric of recordMetrics(ex)) {
+        const pts = await exerciseSeries(userId, ex.name, metric);
+        const best = bestPoint(pts);
+        if (best && best.y > 0) { out.push({ ex, metric, point: best }); break; }
+      }
+    }
+    out.sort((a, b) => (b.point.x || '').localeCompare(a.point.x || '')); // marca más reciente primero
+    app._recCache[cacheKey] = out;
+    return out;
+  }
+
+  // Lunes de la semana de una fecha, como índice entero de semanas (Mon=inicio).
+  function weekIndex(d) {
+    const dt = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    dt.setDate(dt.getDate() - ((dt.getDay() + 6) % 7));
+    return Math.floor(dt.getTime() / (7 * 86400000));
+  }
+
+  // ---------- PANEL "TUS NÚMEROS" ----------
+  async function renderSummary(app, host) {
+    const uid = app.activeUser.id;
+    const sessions = (await DB.sessionsOf(uid)).filter(s => !s.draft && s.date);
+    const now = new Date();
+    const curWk = weekIndex(now);
+    const monthPrefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    let thisWeek = 0, thisMonth = 0;
+    const weeks = new Set();
+    sessions.forEach(s => {
+      const wk = weekIndex(new Date(s.date));
+      weeks.add(wk);
+      if (wk === curWk) thisWeek++;
+      if ((s.date || '').startsWith(monthPrefix)) thisMonth++;
+    });
+    // racha = semanas consecutivas con ≥1 entreno, ancladas a la semana actual o la anterior
+    let streak = 0, anchor = weeks.has(curWk) ? curWk : (weeks.has(curWk - 1) ? curWk - 1 : null);
+    if (anchor != null) { let w = anchor; while (weeks.has(w)) { streak++; w--; } }
+
+    const records = await computeRecords(app, uid);
+    const last = records[0]; // ya ordenado por fecha desc
+
+    const tiles = [
+      [thisWeek, 'esta semana'],
+      [thisMonth, 'este mes'],
+      [streak, streak === 1 ? 'sem. racha' : 'sem. racha'],
+      [sessions.length, 'entrenos'],
+    ];
+    host.innerHTML = `
+      <div class="card summary-card">
+        <div class="stat-grid">
+          ${tiles.map(([n, cap]) => `<div class="stat-tile"><span class="stat-num">${n}</span><span class="stat-cap">${cap}</span></div>`).join('')}
+        </div>
+        ${last ? `<div class="summary-pr">${UI.icon('star', 15)}<span>Última marca · <strong>${UI.esc(last.ex.name)}</strong> ${UI.esc(fmtMetricPoint(last.metric, last.point))} <span class="dim">· ${UI.fmtDateShort(last.point.x)}</span></span></div>` : ''}
+      </div>`;
+  }
+
+  // ---------- LISTA "TUS RÉCORDS" ----------
+  async function renderRecords(app, host) {
+    const records = await computeRecords(app, app.activeUser.id);
+    if (!records.length) { host.innerHTML = `<div class="empty-state"><p class="dim">Aún no hay récords. Registra sesiones para verlos aquí.</p></div>`; return; }
+    const sort = host._recSort || 'recent';
+    const list = records.slice();
+    if (sort === 'name') list.sort((a, b) => a.ex.name.localeCompare(b.ex.name));
+    const rows = list.map(r => `
+      <div class="rec-row">
+        <span class="rec-medal">🏆</span>
+        <div class="rec-main">
+          <div class="rec-name">${UI.esc(r.ex.name)}</div>
+          <div class="rec-meta">${UI.esc(METRIC_LABEL[r.metric] || r.metric)} · ${UI.fmtDateShort(r.point.x)}</div>
+        </div>
+        <span class="rec-val">${UI.esc(fmtMetricPoint(r.metric, r.point))}</span>
+      </div>`).join('');
+    host.innerHTML = `
+      <div class="chips-row small" style="margin-bottom:8px">
+        <button class="chip${sort === 'recent' ? ' on' : ''}" data-sort="recent">Recientes</button>
+        <button class="chip${sort === 'name' ? ' on' : ''}" data-sort="name">A-Z</button>
+      </div>
+      <div class="card" style="padding:0">${rows}</div>`;
+    host.querySelectorAll('[data-sort]').forEach(b => b.addEventListener('click', () => { host._recSort = b.dataset.sort; renderRecords(app, host); }));
+  }
+
   // ====================================================
   function render(app, params) {
     const tab = params.tab || 'body';
     const tabs = [
       { id: 'body', label: 'Corporal' },
       { id: 'exercise', label: 'Por ejercicio' },
+      { id: 'records', label: 'Récords' },
       { id: 'compare', label: 'Comparativa' },
     ];
     const tabBar = `<div class="tabs">${tabs.map(t => `<button class="tab${tab === t.id ? ' on' : ''}" data-tab="${t.id}">${t.label}</button>`).join('')}</div>`;
+    const summary = `<div id="progSummary"></div>`;
 
-    if (tab === 'body') return tabBar + `<div id="tabBody">${'<div class="loading">Cargando…</div>'}</div>`;
-    if (tab === 'exercise') return tabBar + `<div id="tabEx"><div class="loading">Cargando…</div></div>`;
-    return tabBar + `<div id="tabCompare"><div class="loading">Cargando…</div></div>`;
+    if (tab === 'body') return summary + tabBar + `<div id="tabBody">${'<div class="loading">Cargando…</div>'}</div>`;
+    if (tab === 'exercise') return summary + tabBar + `<div id="tabEx"><div class="loading">Cargando…</div></div>`;
+    if (tab === 'records') return summary + tabBar + `<div id="tabRecords"><div class="loading">Cargando…</div></div>`;
+    return summary + tabBar + `<div id="tabCompare"><div class="loading">Cargando…</div></div>`;
   }
 
   function bind(app, root, params) {
     const tab = params.tab || 'body';
+    renderSummary(app, root.querySelector('#progSummary'));
     root.querySelectorAll('[data-tab]').forEach(b => b.addEventListener('click', () => app.go('progress', { tab: b.dataset.tab }, true)));
     if (tab === 'body') renderBody(app, root.querySelector('#tabBody'));
     else if (tab === 'exercise') renderExercise(app, root.querySelector('#tabEx'), params);
+    else if (tab === 'records') renderRecords(app, root.querySelector('#tabRecords'));
     else renderCompare(app, root.querySelector('#tabCompare'), params);
   }
 
@@ -107,6 +231,7 @@ const VProgress = (() => {
       .map(e => ({ x: e.date, y: parseFloat(e[metric]) }))
       .filter(p => !isNaN(p.y));
 
+    const metricUnit = (MEASURES.find(m => m.key === metric) || {}).unit || '';
     const metricChips = (available.length ? available : [MEASURES[0]])
       .map(m => `<button class="chip${m.key === metric ? ' on' : ''}" data-metric="${m.key}">${m.label}</button>`).join('');
 
@@ -122,7 +247,7 @@ const VProgress = (() => {
     host.innerHTML = `
       <div class="card">
         <div class="chips-row small">${metricChips}</div>
-        ${UI.lineChart([{ label: app.activeUser.name, color: app.activeUser.color, points: chartPoints }], { width: 320, height: 150 })}
+        ${UI.lineChart([{ label: app.activeUser.name, color: app.activeUser.color, points: chartPoints }], { width: 320, height: 150, fmtPoint: (p) => `${p.y}${metricUnit}` })}
       </div>
       <button class="btn primary block" id="addProg">+ Registrar medida</button>
       ${rows || '<div class="empty-state"><p>Sin registros de progreso.</p></div>'}`;
@@ -176,11 +301,8 @@ const VProgress = (() => {
     const points = await exerciseSeries(app.activeUser.id, ex.name, metric);
 
     const isTime = metric === 'maxTime';
-    const unit = { maxWeight: ' kg', volume: ' kg', maxReps: ' reps', distance: ' km', kcal: ' kcal' }[metric] || '';
-    // récord = mejor punto; a igual valor, gana el de mejor condición (más reps / más peso)
-    const better = (p, b) => p.y > b.y || (p.y === b.y && (p.tie || 0) > (b.tie || 0));
-    const prPoint = points.length ? points.reduce((b, p) => (better(p, b) ? p : b), points[0]) : null;
-    const fmtPoint = (p) => { const base = isTime ? fmtSecs(p.y) : `${p.y}${unit}`; return p.detail ? `${base} ${p.detail}` : base; };
+    const prPoint = bestPoint(points);
+    const fmtPoint = (p) => fmtMetricPoint(metric, p);
     const metricLabel = (metrics.find(m => m.key === metric) || {}).label || '';
     const isPR = (p) => prPoint && p.y === prPoint.y && (p.tie || 0) === (prPoint.tie || 0);
     const recent = points.slice(-8).reverse().map(p => `<li><span>${UI.fmtDateShort(p.x)}</span><strong>${fmtPoint(p)}${isPR(p) ? ' 🏆' : ''}</strong></li>`).join('');
@@ -190,7 +312,7 @@ const VProgress = (() => {
         ${UI.field('Ejercicio', UI.selectButton('exSelBtn', ex.name))}
         <div class="chips-row small">${metrics.map(m => `<button class="chip${m.key === metric ? ' on' : ''}" data-metric="${m.key}">${m.label}</button>`).join('')}</div>
         ${prPoint ? `<div class="pr-stat">${UI.icon('star', 16)}<div class="pr-stat-text"><span class="pr-stat-label">Récord · ${UI.esc(metricLabel)}</span><span class="pr-stat-date">${UI.fmtDateShort(prPoint.x)}</span></div><span class="pr-stat-val">${fmtPoint(prPoint)}</span></div>` : ''}
-        ${UI.lineChart([{ label: ex.name, color: app.activeUser.color, points }], { width: 320, height: 150, fmtY: isTime ? fmtSecs : undefined })}
+        ${UI.lineChart([{ label: ex.name, color: app.activeUser.color, points }], { width: 320, height: 150, fmtY: isTime ? fmtSecs : undefined, fmtPoint })}
       </div>
       ${points.length ? `<div class="block"><div class="block-label">Últimos registros</div><ul class="kv-list">${recent}</ul></div>` : '<div class="empty-state"><p class="dim">Aún no has registrado este ejercicio en ninguna sesión.</p></div>'}`;
 
@@ -252,7 +374,7 @@ const VProgress = (() => {
         ${UI.field('Métrica', UI.selectButton('subjectSelBtn', (subjectOptions.find(o => o.value === subjectKey) || subjectOptions[0]).label))}
         ${showExMetric ? `<div class="chips-row small">${exMetrics.map(m => `<button class="chip${exMetric === m.key ? ' on' : ''}" data-exmetric="${m.key}">${m.label}</button>`).join('')}</div>` : ''}
         <div class="chart-title">${UI.esc(unit)}</div>
-        ${UI.lineChart(series, { width: 320, height: 160, fmtY: exMetric === 'maxTime' ? fmtSecs : undefined })}
+        ${UI.lineChart(series, { width: 320, height: 160, fmtY: exMetric === 'maxTime' ? fmtSecs : undefined, fmtPoint: subjectKey === 'body:weight' ? (p => `${p.y} kg`) : (p => fmtMetricPoint(exMetric, p)) })}
       </div>`;
 
     host.querySelector('select[name="guestSel"]').addEventListener('change', e => { host._guestId = e.target.value; renderCompare(app, host, params); });

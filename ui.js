@@ -363,19 +363,30 @@ const UI = (() => {
       grid += `<text x="2" y="${(yy + 3).toFixed(1)}" class="chart-axis">${esc(String(fmtY(yVal)))}</text>`;
     }
 
+    const multi = series.length > 1;
+    const pointInfo = (p, s) => {
+      const valTxt = opts.fmtPoint ? opts.fmtPoint(p) : (p.detail ? `${fmtY(p.y)} ${p.detail}` : String(fmtY(p.y)));
+      const pre = multi ? `${s.label}: ` : '';
+      return `${pre}${fmtDateShort(p.x)} · ${valTxt}`;
+    };
     const paths = series.map(s => {
       const pts = [...s.points].sort((a, b) => +new Date(a.x) - +new Date(b.x));
       if (pts.length === 0) return '';
       const d = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${sx(p.x).toFixed(1)},${sy(p.y).toFixed(1)}`).join(' ');
-      const dots = pts.map(p => `<circle cx="${sx(p.x).toFixed(1)}" cy="${sy(p.y).toFixed(1)}" r="2.5" fill="${s.color}"/>`).join('');
+      const dots = pts.map(p => {
+        const cx = sx(p.x).toFixed(1), cy = sy(p.y).toFixed(1);
+        // círculo visible + área de toque invisible (r grande) con la info del punto
+        return `<circle cx="${cx}" cy="${cy}" r="2.5" fill="${s.color}"/>`
+          + `<circle class="chart-hit" cx="${cx}" cy="${cy}" r="9" fill="transparent" data-cx="${cx}" data-cy="${cy}" data-color="${s.color}" data-info="${esc(pointInfo(p, s))}"/>`;
+      }).join('');
       return `<path d="${d}" fill="none" stroke="${s.color}" stroke-width="2" stroke-linejoin="round"/>${dots}`;
     }).join('');
 
-    const legend = series.length > 1
+    const legend = multi
       ? `<div class="chart-legend">${series.map(s => `<span><i style="background:${s.color}"></i>${esc(s.label)}</span>`).join('')}</div>`
       : '';
 
-    return `<div class="chart-wrap"><svg viewBox="0 0 ${W} ${H}" class="chart-svg" preserveAspectRatio="none">${grid}${paths}</svg>${legend}</div>`;
+    return `<div class="chart-wrap"><svg data-w="${W}" data-h="${H}" viewBox="0 0 ${W} ${H}" class="chart-svg" preserveAspectRatio="none">${grid}${paths}</svg><div class="chart-tip" hidden></div>${legend}</div>`;
   }
 
   // ---- Selector de ejercicios con buscador (móvil-friendly) ----
@@ -620,6 +631,36 @@ const UI = (() => {
       window.addEventListener('pointercancel', end);
     });
   }
+
+  // ---- Tooltip de las gráficas: tocar un punto muestra fecha + valor + condiciones ----
+  document.addEventListener('click', (ev) => {
+    const hit = ev.target.closest && ev.target.closest('.chart-hit');
+    if (!hit) {
+      // clic fuera de un punto: oculta cualquier tooltip abierto
+      document.querySelectorAll('.chart-tip:not([hidden])').forEach(t => { t.hidden = true; });
+      return;
+    }
+    const wrap = hit.closest('.chart-wrap');
+    const svg = hit.closest('.chart-svg');
+    const tip = wrap && wrap.querySelector('.chart-tip');
+    if (!tip || !svg) return;
+    const rect = svg.getBoundingClientRect();
+    const wrapRect = wrap.getBoundingClientRect();
+    const W = +svg.dataset.w || 320, Hh = +svg.dataset.h || 160;
+    const px = (+hit.dataset.cx / W) * rect.width + (rect.left - wrapRect.left);
+    const py = (+hit.dataset.cy / Hh) * rect.height + (rect.top - wrapRect.top);
+    tip.textContent = hit.dataset.info || '';
+    tip.style.setProperty('--tip-color', hit.dataset.color || 'var(--accent)');
+    tip.hidden = false;
+    tip.style.left = px + 'px';
+    tip.style.top = py + 'px';
+    // si se sale por un borde, ajusta para que no se corte
+    requestAnimationFrame(() => {
+      const tr = tip.getBoundingClientRect();
+      if (tr.left < wrapRect.left + 2) tip.style.left = (px + (wrapRect.left + 2 - tr.left)) + 'px';
+      if (tr.right > wrapRect.right - 2) tip.style.left = (px - (tr.right - (wrapRect.right - 2))) + 'px';
+    });
+  });
 
   return {
     esc, norm, toast, modal, closeModal, confirm,
