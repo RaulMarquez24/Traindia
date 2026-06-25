@@ -374,7 +374,7 @@ textarea.inp { resize: vertical; line-height: 1.4; }
 .ai-providers { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; }
 .ex-target { display: block; font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: var(--ink-dim); margin-top: 2px; }
 .set-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
-.set-row { display: flex; align-items: center; gap: 8px; position: relative; flex-wrap: wrap; row-gap: 6px; }
+.set-row { display: flex; align-items: center; gap: 6px; position: relative; flex-wrap: wrap; row-gap: 6px; }
 .set-row.done { opacity: .55; }
 .set-wrap { display: flex; flex-direction: column; gap: 5px; }
 .set-wrap.done { opacity: .55; }
@@ -410,7 +410,7 @@ textarea.inp { resize: vertical; line-height: 1.4; }
 .set-done { width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--ink-dim); font-size: 15px; cursor: pointer; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
 .set-done.on { background: var(--strong); border-color: var(--strong); color: #fff; }
 /* reps con lastre/asistencia */
-.set-load-mode { flex: 0 0 auto; width: auto; font-size: 12px; padding: 8px 6px; padding-right: 22px; }
+.set-load-mode { flex: 0 1 auto; min-width: 0; max-width: 110px; width: auto; font-size: 12px; padding: 8px 6px; padding-right: 22px; }
 .set-load { max-width: 64px; flex: 0 0 auto; }
 /* dropsets */
 .drop-row { display: flex; align-items: center; gap: 8px; padding-left: 0; }
@@ -550,7 +550,7 @@ textarea.inp { resize: vertical; line-height: 1.4; }
 .modal-head { display: flex; align-items: center; justify-content: space-between; padding: 16px 18px 10px; border-bottom: 1px solid var(--line); }
 .modal-head h3 { font-size: 17px; font-weight: 700; }
 .modal-x { background: none; border: none; font-size: 26px; line-height: 1; color: var(--ink-dim); cursor: pointer; padding: 0 4px; }
-.modal-body { padding: 16px 18px; overflow-y: auto; flex: 1; }
+.modal-body { padding: 16px 18px; overflow-y: auto; overflow-x: hidden; flex: 1; }
 .modal-text { font-size: 14px; color: var(--ink-soft); line-height: 1.5; margin-bottom: 12px; }
 .modal-actions { display: flex; gap: 8px; padding: 12px 18px 16px; border-top: 1px solid var(--line); }
 .modal-actions .btn { flex: 1; }

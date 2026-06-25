@@ -480,7 +480,7 @@ const VSessions = (() => {
       // weight / reps: fila principal + dropsets opcionales
       let mainFields;
       if (type === 'reps') {
-        mainFields = `<input class="inp set-f" data-f="reps" data-ei="${ei}" data-si="${si}" type="number" min="0" value="${UI.esc(s.reps)}" placeholder="reps"${dis}><span class="set-unit">reps</span>
+        mainFields = `<input class="inp set-f" data-f="reps" data-ei="${ei}" data-si="${si}" type="number" min="0" value="${UI.esc(s.reps)}" placeholder="reps"${dis}>
           <select class="inp set-f set-load-mode" data-f="loadMode" data-ei="${ei}" data-si="${si}"${dis}>
             <option value=""${!s.loadMode ? ' selected' : ''}>corporal</option>
             <option value="lastre"${s.loadMode === 'lastre' ? ' selected' : ''}>+ lastre</option>
