@@ -53,7 +53,8 @@
     background: var(--bg);
     color: var(--ink);
     -webkit-font-smoothing: antialiased;
-    overscroll-behavior-y: none;
+    overscroll-behavior: none;        /* sin rebote elástico vertical NI horizontal (iOS) */
+    width: 100%; max-width: 100%;
     min-height: 100vh;
     padding-bottom: calc(var(--nav-h) + var(--safe-bottom));
   }
