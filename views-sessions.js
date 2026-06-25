@@ -520,7 +520,7 @@ const VSessions = (() => {
         const lm = s.loadMode;
         const loadLabel = lm ? `${lm === 'asist' ? '−' : '+'} ${UI.esc(String(s.load || 0))} kg` : '+ carga';
         const loadChip = `<button type="button" class="load-chip${lm ? ' on' : ''}" data-set-load data-ei="${ei}" data-si="${si}"${dis}>${loadLabel}</button>`;
-        mainFields = `<input class="inp set-f set-reps" data-f="reps" data-ei="${ei}" data-si="${si}" type="number" min="0" value="${UI.esc(s.reps)}" placeholder="reps"${dis}><span class="set-unit">reps</span>${loadChip}`;
+        mainFields = `<input class="inp set-f set-reps" data-f="reps" data-ei="${ei}" data-si="${si}" type="number" min="0" value="${UI.esc(s.reps)}" placeholder="reps"${dis}>${loadChip}`;
       } else {
         mainFields = `<input class="inp set-f" data-f="reps" data-ei="${ei}" data-si="${si}" type="number" min="0" value="${UI.esc(s.reps)}" placeholder="reps"${dis}><span class="set-x">×</span><input class="inp set-f" data-f="weight" data-ei="${ei}" data-si="${si}" type="number" min="0" step="0.5" value="${UI.esc(s.weight)}" placeholder="kg"${dis}><span class="set-unit">kg</span>`;
       }
