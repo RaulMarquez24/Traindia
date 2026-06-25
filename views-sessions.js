@@ -548,9 +548,9 @@ const VSessions = (() => {
 
   function entryCardHTML(entry, ei, mode) {
     return `<div class="ex-card" data-ei="${ei}" data-sort-id="${ei}">
-      <button type="button" class="drag-handle" data-drag="card" title="Arrastra para reordenar" aria-label="Arrastrar">${UI.icon('grip', 18)}</button>
       <div class="ex-card-body">
         <div class="ex-card-head">
+          <button type="button" class="drag-handle" data-drag="card" title="Arrastra para reordenar" aria-label="Arrastrar">${UI.icon('grip', 18)}</button>
           <div class="ex-card-name"><strong>${UI.esc(entry.name)}</strong>${entry.target ? `<span class="ex-target">obj: ${UI.esc(entry.target)}</span>` : ''}</div>
           <span class="ex-card-actions">
             ${mode === 'live' ? `<button class="icon-btn" data-ai-ex data-ei="${ei}" title="Consultar a una IA sobre este ejercicio">${UI.icon('chat', 17)}</button>` : ''}

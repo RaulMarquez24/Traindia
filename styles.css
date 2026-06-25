@@ -268,12 +268,12 @@ textarea.inp { resize: vertical; line-height: 1.4; }
 .live-actions { display: flex; gap: 8px; margin-top: 14px; }
 .live-actions .btn { flex: 1; }
 
-/* La tarjeta es fila: [agarrador | cuerpo]. El agarrador es la columna fina de
-   la izquierda y TODO el contenido se alinea en una sola columna a su derecha. */
-.ex-card { display: flex; align-items: flex-start; gap: 6px; background: var(--bg-card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; margin-bottom: 10px; }
-.ex-card > .drag-handle { margin-top: 2px; }
-.ex-card-body { flex: 1; min-width: 0; }
-.ex-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+/* La tarjeta ocupa todo el ancho; el agarrador va dentro de la cabecera (junto
+   al título), así las series usan el ancho completo sin canalón en blanco. */
+.ex-card { background: var(--bg-card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; margin-bottom: 10px; }
+.ex-card-body { min-width: 0; }
+.ex-card-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.ex-card-head .drag-handle { margin-left: -4px; }
 .ex-card-head strong { font-size: 15px; }
 .ex-card-name { flex: 1; min-width: 0; }
 .ex-card-actions { display: flex; gap: 2px; flex-shrink: 0; }
