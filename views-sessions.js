@@ -505,8 +505,7 @@ const VSessions = (() => {
           <div class="set-row">
             <span class="set-n">${si + 1}</span>
             <div class="set-vals">
-              <input class="inp set-f" data-f="timemin" data-ei="${ei}" data-si="${si}" type="number" min="0" value="${mm}" placeholder="min"${dis}><span class="set-unit">m</span>
-              <input class="inp set-f" data-f="timesec" data-ei="${ei}" data-si="${si}" type="number" min="0" max="59" value="${ss}" placeholder="seg"${dis}><span class="set-unit">s</span>
+              <input class="inp set-f" data-f="timemin" data-ei="${ei}" data-si="${si}" type="number" min="0" value="${mm}" placeholder="min"${dis}><span class="set-x">:</span><input class="inp set-f" data-f="timesec" data-ei="${ei}" data-si="${si}" type="number" min="0" max="59" value="${ss}" placeholder="seg"${dis}>
             </div>
             <div class="set-acts">${effortBtn}${done}${rm}</div>
           </div>
@@ -522,12 +521,12 @@ const VSessions = (() => {
         const loadChip = `<button type="button" class="load-chip${lm ? ' on' : ''}" data-set-load data-ei="${ei}" data-si="${si}"${dis}>${loadLabel}</button>`;
         mainFields = `<input class="inp set-f set-reps" data-f="reps" data-ei="${ei}" data-si="${si}" type="number" min="0" value="${UI.esc(s.reps)}" placeholder="reps"${dis}>${loadChip}`;
       } else {
-        mainFields = `<input class="inp set-f" data-f="reps" data-ei="${ei}" data-si="${si}" type="number" min="0" value="${UI.esc(s.reps)}" placeholder="reps"${dis}><span class="set-x">×</span><input class="inp set-f" data-f="weight" data-ei="${ei}" data-si="${si}" type="number" min="0" step="0.5" value="${UI.esc(s.weight)}" placeholder="kg"${dis}><span class="set-unit">kg</span>`;
+        mainFields = `<input class="inp set-f" data-f="reps" data-ei="${ei}" data-si="${si}" type="number" min="0" value="${UI.esc(s.reps)}" placeholder="reps"${dis}><span class="set-x">×</span><input class="inp set-f" data-f="weight" data-ei="${ei}" data-si="${si}" type="number" min="0" step="0.5" value="${UI.esc(s.weight)}" placeholder="kg"${dis}>`;
       }
       const drops = (s.drops || []).map((d, di) => {
         let df;
         if (type === 'reps') {
-          df = `<input class="inp set-f" data-f="reps" data-ei="${ei}" data-si="${si}" data-di="${di}" type="number" min="0" value="${UI.esc(d.reps)}" placeholder="reps"${dis}><span class="set-unit">reps</span><input class="inp set-f set-load" data-f="load" data-ei="${ei}" data-si="${si}" data-di="${di}" type="number" min="0" step="0.5" value="${UI.esc(d.load)}" placeholder="kg"${dis}>`;
+          df = `<input class="inp set-f" data-f="reps" data-ei="${ei}" data-si="${si}" data-di="${di}" type="number" min="0" value="${UI.esc(d.reps)}" placeholder="reps"${dis}><span class="set-x">+</span><input class="inp set-f set-load" data-f="load" data-ei="${ei}" data-si="${si}" data-di="${di}" type="number" min="0" step="0.5" value="${UI.esc(d.load)}" placeholder="kg"${dis}>`;
         } else {
           df = `<input class="inp set-f" data-f="reps" data-ei="${ei}" data-si="${si}" data-di="${di}" type="number" min="0" value="${UI.esc(d.reps)}" placeholder="reps"${dis}><span class="set-x">×</span><input class="inp set-f" data-f="weight" data-ei="${ei}" data-si="${si}" data-di="${di}" type="number" min="0" step="0.5" value="${UI.esc(d.weight)}" placeholder="kg"${dis}>`;
         }
