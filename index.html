@@ -692,10 +692,22 @@
 <script src="views-data.js"></script>
 <script src="app.js"></script>
 <script>
-  // Service Worker
+  // Service Worker + auto-actualización
   if ('serviceWorker' in navigator) {
+    // Si YA había un SW controlando (no es la primera instalación) y entra uno
+    // nuevo, recarga una vez para servir la versión nueva.
+    if (navigator.serviceWorker.controller) {
+      let refreshing = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (refreshing) return;
+        refreshing = true;
+        window.location.reload();
+      });
+    }
     window.addEventListener('load', () => {
-      navigator.serviceWorker.register('sw.js').catch(err => console.log('SW error:', err));
+      navigator.serviceWorker.register('sw.js')
+        .then(reg => reg.update())   // comprueba si hay build nuevo en cada apertura
+        .catch(err => console.log('SW error:', err));
     });
   }
 

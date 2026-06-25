@@ -2,7 +2,9 @@
 // La versión visible de la app es v2.5.1 (ver pie en la app).
 // CACHE_NAME es solo la clave de caché: súbele el número de build en cada deploy
 // (build-6, build-7, …) para que los cambios lleguen a las apps ya instaladas.
-const CACHE_NAME = 'traindia-build-70';
+// Los fetch usan {cache:'reload'} para saltarse la caché HTTP del navegador/Pages
+// y traer SIEMPRE la última versión con red (offline tira de CACHE_NAME).
+const CACHE_NAME = 'traindia-build-71';
 const ASSETS = [
   './',
   './index.html',
@@ -25,11 +27,14 @@ const ASSETS = [
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(ASSETS).catch(err => {
-        console.log('Cache install error:', err);
-      });
-    })
+    caches.open(CACHE_NAME).then((cache) =>
+      // Precarga saltándose la caché HTTP, para guardar copias FRESCAS.
+      Promise.all(ASSETS.map((u) =>
+        fetch(new Request(u, { cache: 'reload' }))
+          .then((r) => { if (r && r.ok) return cache.put(u, r); })
+          .catch(() => {})
+      ))
+    )
   );
   self.skipWaiting();
 });
@@ -52,10 +57,10 @@ self.addEventListener('fetch', (event) => {
   const sameOrigin = url.origin === self.location.origin;
 
   if (sameOrigin) {
-    // Archivos de la app: NETWORK-FIRST. Con red siempre sirve lo último
-    // (las actualizaciones se ven al recargar); sin red, tira de la caché.
+    // Archivos de la app: NETWORK-FIRST sin caché HTTP. Con red siempre sirve lo
+    // último (las actualizaciones se ven al recargar); sin red, tira de la caché.
     event.respondWith(
-      fetch(req).then((response) => {
+      fetch(req, { cache: 'reload' }).then((response) => {
         if (response && response.status === 200) {
           const clone = response.clone();
           caches.open(CACHE_NAME).then((cache) => cache.put(req, clone).catch(() => {}));
