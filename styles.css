@@ -273,8 +273,6 @@ textarea.inp { resize: vertical; line-height: 1.4; }
 .ex-card { display: flex; align-items: flex-start; gap: 6px; background: var(--bg-card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; margin-bottom: 10px; }
 .ex-card > .drag-handle { margin-top: 2px; }
 .ex-card-body { flex: 1; min-width: 0; }
-/* "+ Serie" vuelve al borde izquierdo (alineado con el agarrador y los números). */
-.ex-card-body > [data-add-set] { margin-left: -32px; }
 .ex-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
 .ex-card-head strong { font-size: 15px; }
 .ex-card-name { flex: 1; min-width: 0; }
@@ -374,11 +372,18 @@ textarea.inp { resize: vertical; line-height: 1.4; }
 .ai-providers { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; }
 .ex-target { display: block; font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: var(--ink-dim); margin-top: 2px; }
 .set-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
-.set-row { display: flex; align-items: center; gap: 6px; position: relative; flex-wrap: wrap; row-gap: 6px; }
+/* Fila de serie: nº · valores · acciones (rejilla; las acciones nunca se parten) */
+.set-row { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; align-items: center; gap: 10px; }
+.set-vals { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.set-acts { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.set-reps { max-width: 90px; }
+.load-chip { flex: 0 0 auto; border: 1px solid var(--line); background: none; color: var(--ink-soft); font-size: 12px; font-weight: 600; padding: 6px 11px; border-radius: 999px; cursor: pointer; white-space: nowrap; line-height: 1; }
+.load-chip.on { background: var(--strong-bg); border-color: var(--strong); color: var(--strong); }
+.load-chip:disabled { opacity: .55; }
 .set-row.done { opacity: .55; }
 .set-wrap { display: flex; flex-direction: column; gap: 5px; }
 .set-wrap.done { opacity: .55; }
-.set-extra { display: flex; gap: 6px; padding-left: 0; flex-wrap: wrap; }
+.set-extra { display: flex; gap: 6px; padding-left: 28px; flex-wrap: wrap; }
 .ex-card-foot { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .metric-add { background: none; border: 1px dashed var(--line); color: var(--ink-soft); border-radius: 8px; padding: 5px 10px; font-size: 12px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; }
 .metric-add .ic { color: var(--strong); }
@@ -403,8 +408,8 @@ textarea.inp { resize: vertical; line-height: 1.4; }
 .set-extra .set-f { font-size: 12px; padding: 6px 8px; }
 /* El número de serie va en el canalón izquierdo (alineado con el agarrador),
    fuera del flujo, para que los inputs arranquen en el borde del contenido. */
-.set-n { position: absolute; left: -32px; width: 28px; top: 50%; transform: translateY(-50%); text-align: center; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: var(--ink-dim); }
-.set-f { flex: 1; min-width: 46px; padding: 8px 10px; font-size: 14px; }
+.set-n { text-align: center; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: var(--ink-dim); }
+.set-f { flex: 1; min-width: 40px; padding: 8px 10px; font-size: 14px; }
 .set-x { color: var(--ink-dim); }
 .set-unit { font-size: 11px; color: var(--ink-dim); flex-shrink: 0; }
 .set-done { width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--ink-dim); font-size: 15px; cursor: pointer; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
@@ -413,9 +418,9 @@ textarea.inp { resize: vertical; line-height: 1.4; }
 .set-load-mode { flex: 0 1 auto; min-width: 0; max-width: 110px; width: auto; font-size: 12px; padding: 8px 6px; padding-right: 22px; }
 .set-load { max-width: 64px; flex: 0 0 auto; }
 /* dropsets */
-.drop-row { display: flex; align-items: center; gap: 8px; padding-left: 0; }
+.drop-row { display: flex; align-items: center; gap: 8px; padding-left: 28px; }
 .drop-tag { font-family: 'IBM Plex Mono', monospace; font-size: 9px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--sub-accent); background: var(--sub-bg); padding: 2px 6px; border-radius: 4px; flex-shrink: 0; }
-.set-foot { padding-left: 22px; }
+.set-foot { padding-left: 28px; }
 .set-drop-btn { background: none; border: none; color: var(--sub-accent); font-size: 12px; font-weight: 600; cursor: pointer; padding: 2px 0; }
 .set-drop-btn:active { opacity: .6; }
 

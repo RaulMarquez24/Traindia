@@ -81,6 +81,41 @@ const VSessions = (() => {
     });
   }
 
+  // Carga de una serie de peso corporal: peso corporal / + lastre / − asistencia + kg.
+  // onPick(loadMode, kg) — loadMode '' = peso corporal.
+  function pickLoad(current, onPick) {
+    const cm = current.loadMode || '';
+    UI.modal({
+      title: 'Carga de la serie',
+      bodyHTML: `<div id="loadForm">
+          <span class="field-label">Tipo</span>
+          <div class="effort-pick" id="loadModes">
+            <button type="button" class="effort-opt${cm === '' ? ' sel' : ''}" data-mode="">Peso corporal</button>
+            <button type="button" class="effort-opt${cm === 'lastre' ? ' sel' : ''}" data-mode="lastre">+ Lastre</button>
+            <button type="button" class="effort-opt${cm === 'asist' ? ' sel' : ''}" data-mode="asist">− Asistencia</button>
+          </div>
+          <div id="loadKgWrap" style="margin-top:10px;${cm ? '' : 'display:none'}">${UI.field('Kilos', UI.input('load', current.load != null ? current.load : '', { type: 'number', min: 0, step: 0.5, placeholder: 'kg' }))}</div>
+        </div>`,
+      actions: [
+        { label: 'Cancelar', kind: 'ghost' },
+        { label: 'Aplicar', kind: 'primary', onClick: (root) => {
+          const mode = root.querySelector('#loadModes .sel')?.dataset.mode || '';
+          const kg = root.querySelector('input[name="load"]').value;
+          onPick(mode, mode ? kg : '');
+        } },
+      ],
+      onMount: (root) => {
+        const modes = root.querySelector('#loadModes'), kgWrap = root.querySelector('#loadKgWrap');
+        modes.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click', () => {
+          modes.querySelectorAll('.effort-opt').forEach(x => x.classList.remove('sel'));
+          b.classList.add('sel');
+          kgWrap.style.display = b.dataset.mode ? '' : 'none';
+          if (b.dataset.mode) setTimeout(() => root.querySelector('input[name="load"]').focus(), 60);
+        }));
+      },
+    });
+  }
+
   function emptySet(type) {
     if (type === 'time') return { time: '', distance: '', kcal: '', weight: '', speed: '', incline: '', level: '', done: false };
     if (type === 'reps') return { reps: '', load: '', loadMode: '', done: false };
@@ -469,9 +504,11 @@ const VSessions = (() => {
         return `<div class="set-wrap${s.done ? ' done' : ''}">
           <div class="set-row">
             <span class="set-n">${si + 1}</span>
-            <input class="inp set-f" data-f="timemin" data-ei="${ei}" data-si="${si}" type="number" min="0" value="${mm}" placeholder="min"${dis}><span class="set-unit">m</span>
-            <input class="inp set-f" data-f="timesec" data-ei="${ei}" data-si="${si}" type="number" min="0" max="59" value="${ss}" placeholder="seg"${dis}><span class="set-unit">s</span>
-            ${effortBtn}${done}${rm}
+            <div class="set-vals">
+              <input class="inp set-f" data-f="timemin" data-ei="${ei}" data-si="${si}" type="number" min="0" value="${mm}" placeholder="min"${dis}><span class="set-unit">m</span>
+              <input class="inp set-f" data-f="timesec" data-ei="${ei}" data-si="${si}" type="number" min="0" max="59" value="${ss}" placeholder="seg"${dis}><span class="set-unit">s</span>
+            </div>
+            <div class="set-acts">${effortBtn}${done}${rm}</div>
           </div>
           ${(() => { const ms = timeActiveMetrics(entry); return ms.length ? `<div class="set-extra">${ms.map(k => { const f = TIME_FIELD[k]; return `<input class="inp set-f" data-f="${k}" data-ei="${ei}" data-si="${si}" type="number" min="0" step="${f.step}" value="${UI.esc(s[k] || '')}" placeholder="${f.ph}"${dis}>`; }).join('')}</div>` : ''; })()}
         </div>`;
@@ -480,13 +517,10 @@ const VSessions = (() => {
       // weight / reps: fila principal + dropsets opcionales
       let mainFields;
       if (type === 'reps') {
-        mainFields = `<input class="inp set-f" data-f="reps" data-ei="${ei}" data-si="${si}" type="number" min="0" value="${UI.esc(s.reps)}" placeholder="reps"${dis}>
-          <select class="inp set-f set-load-mode" data-f="loadMode" data-ei="${ei}" data-si="${si}"${dis}>
-            <option value=""${!s.loadMode ? ' selected' : ''}>corporal</option>
-            <option value="lastre"${s.loadMode === 'lastre' ? ' selected' : ''}>+ lastre</option>
-            <option value="asist"${s.loadMode === 'asist' ? ' selected' : ''}>− asist.</option>
-          </select>
-          <input class="inp set-f set-load" data-f="load" data-ei="${ei}" data-si="${si}" type="number" min="0" step="0.5" value="${UI.esc(s.load)}" placeholder="kg"${dis}>`;
+        const lm = s.loadMode;
+        const loadLabel = lm ? `${lm === 'asist' ? '−' : '+'} ${UI.esc(String(s.load || 0))} kg` : '+ carga';
+        const loadChip = `<button type="button" class="load-chip${lm ? ' on' : ''}" data-set-load data-ei="${ei}" data-si="${si}"${dis}>${loadLabel}</button>`;
+        mainFields = `<input class="inp set-f set-reps" data-f="reps" data-ei="${ei}" data-si="${si}" type="number" min="0" value="${UI.esc(s.reps)}" placeholder="reps"${dis}><span class="set-unit">reps</span>${loadChip}`;
       } else {
         mainFields = `<input class="inp set-f" data-f="reps" data-ei="${ei}" data-si="${si}" type="number" min="0" value="${UI.esc(s.reps)}" placeholder="reps"${dis}><span class="set-x">×</span><input class="inp set-f" data-f="weight" data-ei="${ei}" data-si="${si}" type="number" min="0" step="0.5" value="${UI.esc(s.weight)}" placeholder="kg"${dis}><span class="set-unit">kg</span>`;
       }
@@ -501,7 +535,11 @@ const VSessions = (() => {
         return `<div class="drop-row"><span class="drop-tag">drop</span>${df}${dropRm}</div>`;
       }).join('');
       return `<div class="set-wrap${s.done ? ' done' : ''}">
-        <div class="set-row"><span class="set-n">${si + 1}</span>${mainFields}${effortBtn}${done}${rm}</div>
+        <div class="set-row">
+          <span class="set-n">${si + 1}</span>
+          <div class="set-vals">${mainFields}</div>
+          <div class="set-acts">${effortBtn}${done}${rm}</div>
+        </div>
         ${drops}
         ${locked ? '' : `<div class="set-foot"><button type="button" class="set-drop-btn" data-add-drop data-ei="${ei}" data-si="${si}">↧ dropset</button></div>`}
       </div>`;
@@ -663,6 +701,10 @@ const VSessions = (() => {
       root.querySelectorAll('[data-set-effort]').forEach(b => b.addEventListener('click', () => {
         sync(); const set = s.entries[+b.dataset.ei].sets[+b.dataset.si];
         pickSetEffort(set.effort, (eff) => { set.effort = eff || undefined; app.persistLive(); redraw(); });
+      }));
+      root.querySelectorAll('[data-set-load]').forEach(b => b.addEventListener('click', () => {
+        sync(); const set = s.entries[+b.dataset.ei].sets[+b.dataset.si];
+        pickLoad(set, (mode, kg) => { set.loadMode = mode || undefined; set.load = mode ? kg : ''; app.persistLive(); redraw(); });
       }));
     }
 
@@ -1088,6 +1130,10 @@ const VSessions = (() => {
       root.querySelectorAll('[data-set-effort]').forEach(b => b.addEventListener('click', () => {
         syncMeta(root); const set = draft.entries[+b.dataset.ei].sets[+b.dataset.si];
         pickSetEffort(set.effort, (eff) => { set.effort = eff || undefined; render(root); });
+      }));
+      root.querySelectorAll('[data-set-load]').forEach(b => b.addEventListener('click', () => {
+        syncMeta(root); const set = draft.entries[+b.dataset.ei].sets[+b.dataset.si];
+        pickLoad(set, (mode, kg) => { set.loadMode = mode || undefined; set.load = mode ? kg : ''; render(root); });
       }));
       root.querySelector('#sesAddEx').addEventListener('click', () => { syncMeta(root); addExerciseToSession(app, draft, () => render(root)); });
     };
