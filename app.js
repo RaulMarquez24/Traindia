@@ -32,9 +32,34 @@ const app = {
     await this.refreshRoutine();
     await DB.ensurePlaces(this.routine);
     this.go('week', {}, true);
+    // Unificación de cardio (v10): si hay variantes, avisa y deja hacer copia antes.
+    if (await DB.cardioUnifyPending()) { this.showCardioMigration(); return; }
+    if (((this.settings && this.settings.dataVersion) || 0) < 10) await DB.runCardioUnify(); // nada que cambiar: solo marca hecho
     await VSessions.checkResume(this);
     VData.checkBackupReminder(this); // recordatorio semanal de copia (si procede)
     VPlan.checkDuplicates(this);     // avisa si hay ejercicios duplicados sin usar
+  },
+
+  // Aviso de la reorganización de cardio (unificar máquinas + etiqueta), con copia.
+  showCardioMigration() {
+    UI.modal({
+      title: 'Ordenar tus ejercicios de cardio',
+      dismissable: false, // cambio obligatorio: no se puede cerrar sin continuar
+      bodyHTML: `<p class="modal-text">Una pequeña reorganización de una sola vez: tus variantes de cardio (Cinta Z2, Bici Z2, Elíptica…) se <strong>unen por máquina</strong> — <strong>Cinta</strong>, <strong>Bicicleta</strong>, <strong>Elíptica</strong> — guardando la variante (Z2, conversacional, suave…) como <strong>etiqueta</strong>.</p>
+        <p class="modal-text dim">Se actualizan tu catálogo, sesiones y plan; el progreso se conserva (podrás filtrar por etiqueta). Antes se guarda una <strong>copia interna</strong> (en "Más → Copias internas"); si quieres, descárgate también la tuya.</p>`,
+      actions: [
+        { label: 'Descargar copia', kind: 'ghost', onClick: async () => { await VData.backupProfile(this); return false; } },
+        { label: 'Continuar', kind: 'primary', onClick: async () => {
+          await DB.runCardioUnify();
+          await this.loadUsers();
+          await this.refreshRoutine();
+          this.settings = await DB.getSettings();
+          this.render();
+          UI.toast('Cardio reorganizado');
+          await VSessions.checkResume(this);
+        } },
+      ],
+    });
   },
 
   // ---- Sesión en curso (autoguardado + indicador) ----
@@ -80,6 +105,7 @@ const app = {
       profiles: { render: (a, p) => this.renderProfiles(),  bind: (a, r) => this.bindProfiles(r) },
       data:     { render: (a, p) => VData.render(a, p),     bind: (a, r, p) => VData.bind(a, r, p) },
       settings: { render: (a, p) => this.renderSettings(),  bind: (a, r) => this.bindSettings(r) },
+      backups:  { render: (a, p) => this.renderBackups(),   bind: (a, r) => this.bindBackups(r) },
     };
   },
 
@@ -172,7 +198,7 @@ const app = {
       week: 'Traindía', exercises: 'Ejercicios', places: 'Lugares', guides: 'Guías', info: 'El plan',
       sessions: 'Sesiones', live: 'Entreno', session: 'Sesión',
       progress: 'Progreso', journal: 'Diario',
-      more: 'Más', profiles: 'Perfiles', data: 'Datos', settings: 'Ajustes',
+      more: 'Más', profiles: 'Perfiles', data: 'Datos', settings: 'Ajustes', backups: 'Copias internas',
     };
     let label = titles[this.currentView] || 'Traindía';
     if (this.currentView === 'day' && this.routine) {
@@ -190,7 +216,7 @@ const app = {
       week: 'week', day: 'week', exercises: 'week',
       sessions: 'sessions', session: 'sessions', live: 'sessions',
       progress: 'progress', journal: 'journal',
-      more: 'more', profiles: 'more', data: 'more', settings: 'more', guides: 'more', guide: 'more', info: 'more', places: 'more',
+      more: 'more', profiles: 'more', data: 'more', settings: 'more', guides: 'more', guide: 'more', info: 'more', places: 'more', backups: 'more',
     };
     const active = map[this.currentView] || 'week';
     document.querySelectorAll('.nav-btn').forEach(btn => {
@@ -256,6 +282,8 @@ const app = {
       const user = await DB.createUser({ name: data.name, color: data.color, isMain: true });
       await DB.createPlan(user.id, planType, { activate: true });
       await DB.saveSettings({ mainUserId: user.id, activeUserId: user.id, seeded: true, version: 2, dataVersion: 8 });
+      await DB.migrate();
+      await DB.runCardioUnify(); // usuario nuevo: cardio ya unificado de inicio, sin aviso
       host.remove();
       document.getElementById('appShell').style.display = '';
       this.settings = await DB.getSettings();
@@ -325,7 +353,7 @@ const app = {
                 tipo: d.tipo,
                 mensaje: d.mensaje.trim(),
                 contacto: (d.contacto || '').trim() || '(no indicado)',
-                version: 'v2.5.1',
+                version: 'v2.6.0',
                 perfil: (this.mainUser && this.mainUser.name) || '',
                 navegador: navigator.userAgent,
               }),
@@ -353,17 +381,63 @@ const app = {
       { v: 'info', icon: 'info', color: 'var(--moderate)', label: 'El plan', sub: 'Tus planes de entrenamiento' },
       { v: 'profiles', icon: 'users', color: 'var(--sub-accent)', label: 'Perfiles', sub: 'Principal e invitados' },
       { v: 'data', icon: 'swap', color: 'var(--light)', label: 'Importar / Exportar', sub: 'Copias y traspasos JSON' },
+      { v: 'backups', icon: 'clock', color: 'var(--moderate)', label: 'Copias internas', sub: 'Puntos de restauración' },
       { v: 'settings', icon: 'settings', color: 'var(--rest)', label: 'Ajustes', sub: 'Perfil principal y app' },
     ].filter(r => !r.cnp || this.isCnp());
     return `<div class="section">
       ${rows.map(r => `<button class="big-row" data-link="${r.v}"><span class="big-row-icon tile" style="background:${r.color}">${UI.icon(r.icon, 20)}</span><span class="big-row-text"><strong>${r.label}</strong><span class="dim">${r.sub}</span></span><span class="chev">›</span></button>`).join('')}
       <button class="big-row" data-feedback><span class="big-row-icon tile" style="background:var(--strong)">${UI.icon('chat', 20)}</span><span class="big-row-text"><strong>Sugerencias y reportes</strong><span class="dim">Envíame ideas o fallos</span></span><span class="chev">›</span></button>
-      <p class="version-foot">Traindía · v2.5.1 · ${Object.keys(this.usersById).length} perfil(es)<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
+      <p class="version-foot">Traindía · v2.6.0 · ${Object.keys(this.usersById).length} perfil(es)<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
     </div>`;
   },
   bindMore(root) {
     const fb = root && root.querySelector('[data-feedback]');
     if (fb) fb.addEventListener('click', () => this.openFeedback());
+  },
+
+  // ---- Vista COPIAS INTERNAS ----
+  renderBackups() {
+    const list = DB.listInternalBackups();
+    const fmt = (at) => { try { return new Date(at).toLocaleString('es-ES', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }); } catch (e) { return ''; } };
+    const rows = list.map(b => `
+      <div class="bk-card">
+        <div class="bk-head">
+          <span class="big-row-icon tile" style="background:var(--moderate)">${UI.icon('clock', 18)}</span>
+          <div class="bk-meta"><strong>${UI.esc(b.reason || 'Copia')}</strong><span class="dim">${fmt(b.at)} · ${b.sizeKB} KB</span></div>
+        </div>
+        <div class="bk-actions">
+          <button class="btn ghost small" data-dl="${UI.esc(b.key)}">${UI.icon('upload', 14)} Descargar</button>
+          <button class="btn ghost small" data-restore="${UI.esc(b.key)}">${UI.icon('swap', 14)} Restaurar</button>
+          <button class="btn ghost small danger" data-del="${UI.esc(b.key)}">${UI.icon('trash', 14)} Borrar</button>
+        </div>
+      </div>`).join('');
+    return `<div class="section">
+      <p class="section-intro">Puntos de restauración guardados <strong>en este dispositivo</strong> antes de cambios importantes. Se conservan como mucho <strong>2</strong> (al crear una nueva se borra la más antigua).</p>
+      <p class="section-intro" style="color:var(--priority)">⚠️ Viven aquí dentro: si borras los datos de la app, la desinstalas o limpias el navegador, <strong>se pierden igual que el resto</strong>. Para una copia de verdad segura, usa <strong>Exportar</strong> en Datos y guarda el archivo fuera del móvil.</p>
+      ${list.length ? rows : '<div class="empty-state"><p class="dim">Aún no hay copias internas.</p></div>'}
+    </div>`;
+  },
+  bindBackups(root) {
+    root.querySelectorAll('[data-dl]').forEach(b => b.addEventListener('click', () => {
+      const raw = localStorage.getItem(b.dataset.dl); if (!raw) return;
+      const blob = new Blob([raw], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = 'traindia-copia-interna.json';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      UI.toast('Copia descargada');
+    }));
+    root.querySelectorAll('[data-restore]').forEach(b => b.addEventListener('click', async () => {
+      const ok = await UI.confirm({ title: 'Restaurar copia', message: 'Se REEMPLAZARÁN todos tus datos actuales (ejercicios, sesiones, plan, progreso, diario) por los de esta copia. No se puede deshacer.', confirmLabel: 'Restaurar', danger: true });
+      if (!ok) return;
+      await DB.restoreInternalBackup(b.dataset.restore);
+      UI.toast('Copia restaurada'); location.reload();
+    }));
+    root.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', async () => {
+      const ok = await UI.confirm({ title: 'Borrar copia', message: '¿Eliminar esta copia interna?', confirmLabel: 'Borrar', danger: true });
+      if (!ok) return;
+      DB.deleteInternalBackup(b.dataset.del); this.go('backups', {}, true);
+    }));
   },
 
   // ---- Vista PERFILES ----
@@ -469,7 +543,7 @@ const app = {
         <button class="btn danger block" id="resetApp">Borrar todos los datos</button>
         <p class="field-hint">Restablece la app al estado inicial (se borran todos los perfiles, sesiones y progreso).</p>
       </div>
-      <p class="version-foot">Traindía · v2.5.1</p>
+      <p class="version-foot">Traindía · v2.6.0</p>
     </div>`;
   },
 

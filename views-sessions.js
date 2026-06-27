@@ -7,13 +7,16 @@ const VSessions = (() => {
   // -------- helpers de modelo --------
   // Datos extra opcionales de los ejercicios de TIEMPO (cardio). Se eligen por
   // ejercicio (se recuerdan) y/o sobre la marcha; solo se muestran los activos.
+  // scope: 'set' = se registra en cada serie (intensidad); 'total' = se registra
+  // UNA vez por ejercicio (se lee de la máquina al terminar) y se guarda en entry.totals.
   const TIME_FIELDS = [
-    { key: 'distance', label: 'Distancia', unit: 'km', ph: 'km', step: '0.01' },
-    { key: 'kcal', label: 'Kcal', unit: 'kcal', ph: 'kcal', step: '1' },
-    { key: 'speed', label: 'Velocidad', unit: 'km/h', ph: 'km/h', step: '0.1' },
-    { key: 'incline', label: 'Inclinación', unit: '%', ph: 'incl %', step: '0.5' },
-    { key: 'level', label: 'Nivel', unit: '', ph: 'nivel', step: '1' },
-    { key: 'weight', label: 'Peso', unit: 'kg', ph: 'kg', step: '0.5' },
+    { key: 'distance', label: 'Distancia', unit: 'km', ph: 'km', step: '0.01', scope: 'total' },
+    { key: 'kcal', label: 'Kcal', unit: 'kcal', ph: 'kcal', step: '1', scope: 'total' },
+    { key: 'hr', label: 'Pulsaciones', unit: 'ppm', ph: 'ppm', step: '1', scope: 'total' },
+    { key: 'speed', label: 'Velocidad', unit: 'km/h', ph: 'km/h', step: '0.1', scope: 'set' },
+    { key: 'incline', label: 'Inclinación', unit: '%', ph: 'incl %', step: '0.5', scope: 'set' },
+    { key: 'level', label: 'Nivel', unit: '', ph: 'nivel', step: '1', scope: 'set' },
+    { key: 'weight', label: 'Peso', unit: 'kg', ph: 'kg', step: '0.5', scope: 'set' },
   ];
   const TIME_FIELD = Object.fromEntries(TIME_FIELDS.map(f => [f.key, f]));
   const DEFAULT_TIME_METRICS = ['distance', 'kcal'];
@@ -22,8 +25,20 @@ const VSessions = (() => {
   function timeActiveMetrics(entry) {
     const chosen = Array.isArray(entry.metrics) ? entry.metrics : DEFAULT_TIME_METRICS;
     const keys = new Set(chosen);
-    TIME_FIELDS.forEach(f => { if ((entry.sets || []).some(s => s[f.key])) keys.add(f.key); });
+    TIME_FIELDS.forEach(f => { if ((entry.sets || []).some(s => s[f.key]) || (entry.totals && entry.totals[f.key])) keys.add(f.key); });
     return TIME_FIELDS.filter(f => keys.has(f.key)).map(f => f.key);
+  }
+  // Métricas activas filtradas por scope (genérico: hoy solo cardio usa 'total').
+  function metricsForScope(entry, scope) {
+    return timeActiveMetrics(entry).filter(k => (TIME_FIELD[k].scope || 'set') === scope);
+  }
+  const timeSetMetrics = (entry) => metricsForScope(entry, 'set');     // van en cada serie
+  const timeTotalMetrics = (entry) => metricsForScope(entry, 'total'); // van como total del ejercicio
+  // ¿Esta entry de tiempo lleva totales? (cardio). Compat: sesiones viejas con distance/kcal por serie.
+  function entryHasTotals(entry) {
+    if (timeTotalMetrics(entry).length) return true;
+    if (entry.totals && Object.keys(entry.totals).some(k => entry.totals[k])) return true;
+    return (entry.sets || []).some(s => s.distance || s.kcal);
   }
   async function setExerciseMetrics(app, exId, keys) {
     if (!exId) return;
@@ -35,15 +50,23 @@ const VSessions = (() => {
     const ordered = TIME_FIELDS.filter(f => keys.includes(f.key)).map(f => f.key);
     const removed = timeActiveMetrics(entry).filter(k => !ordered.includes(k));
     (entry.sets || []).forEach(s => removed.forEach(k => { delete s[k]; }));
+    if (entry.totals) removed.forEach(k => { delete entry.totals[k]; }); // quita también los totales descartados
     entry.metrics = ordered;
     await setExerciseMetrics(app, entry.exerciseId, ordered);
   }
   function pickMetrics(app, entry, onDone) {
     const active = new Set(timeActiveMetrics(entry));
+    const opt = (f) => `<label class="metric-opt"><input type="checkbox" data-mk="${f.key}"${active.has(f.key) ? ' checked' : ''}><span>${f.label}${f.unit ? ` <em>(${f.unit})</em>` : ''}</span></label>`;
+    const totals = TIME_FIELDS.filter(f => f.scope === 'total');
+    const perSet = TIME_FIELDS.filter(f => (f.scope || 'set') === 'set');
     UI.modal({
       title: 'Datos a registrar',
-      bodyHTML: `<div class="metric-opts">${TIME_FIELDS.map(f => `<label class="metric-opt"><input type="checkbox" data-mk="${f.key}"${active.has(f.key) ? ' checked' : ''}><span>${f.label}${f.unit ? ` <em>(${f.unit})</em>` : ''}</span></label>`).join('')}</div>
-        <p class="field-hint">Se recuerdan para este ejercicio; podrás cambiarlos cuando quieras.</p>`,
+      bodyHTML: `
+        <div class="metric-group-label">Totales del ejercicio <span class="dim">(una vez)</span></div>
+        <div class="metric-opts">${totals.map(opt).join('')}</div>
+        <div class="metric-group-label">Por serie</div>
+        <div class="metric-opts">${perSet.map(opt).join('')}</div>
+        <p class="field-hint">Los totales se anotan una vez al final; lo de "por serie" en cada intervalo. Se recuerdan para este ejercicio.</p>`,
       actions: [
         { label: 'Cancelar', kind: 'ghost' },
         { label: 'Listo', kind: 'primary', onClick: async (root) => {
@@ -78,6 +101,69 @@ const VSessions = (() => {
         <p class="field-hint">Cómo de duro fue esta serie. Toca para elegir.</p>`,
       actions: [{ label: 'Cerrar', kind: 'ghost' }],
       onMount: (root) => root.querySelectorAll('.effort-opt').forEach(b => b.addEventListener('click', () => { UI.closeModal(root); onPick(b.dataset.eff); })),
+    });
+  }
+
+  // Etiqueta corta de una serie de cardio (andar/correr…). Ofrece como atajo las
+  // etiquetas ya usadas en este ejercicio + escribir una nueva. onPick(label) ('' = quitar).
+  function pickLabel(entry, current, onPick) {
+    const used = [...new Set((entry.sets || []).map(s => (s.label || '').trim()).filter(Boolean))];
+    UI.modal({
+      title: 'Etiqueta de la serie',
+      bodyHTML: `
+        ${used.length ? `<div class="effort-pick" id="lblChips">${used.map(l => `<button type="button" class="effort-opt${l === current ? ' sel' : ''}" data-lbl="${UI.esc(l)}">${UI.esc(l)}</button>`).join('')}</div>` : ''}
+        ${UI.field('Escribir', `<input class="inp" name="label" type="text" maxlength="18" value="${UI.esc(current || '')}" placeholder="andar, correr, sprint…">`)}
+        <p class="field-hint">Toca una ya usada o escribe una nueva. Vacía para quitarla.</p>`,
+      actions: [
+        { label: 'Quitar', kind: 'ghost', onClick: () => onPick('') },
+        { label: 'Guardar', kind: 'primary', onClick: (root) => onPick((root.querySelector('input[name="label"]').value || '').trim()) },
+      ],
+      onMount: (root) => root.querySelectorAll('[data-lbl]').forEach(b => b.addEventListener('click', () => { UI.closeModal(root); onPick(b.dataset.lbl); })),
+    });
+  }
+
+  // Tiempo TOTAL del ejercicio (cardio): editable; vacío = suma de las series.
+  // onPick(totalSec|null) — null = volver a usar la suma.
+  function pickTotalTime(entry, onPick) {
+    const sumSec = (entry.sets || []).reduce((a, s) => a + (parseInt(s.time) || 0), 0);
+    const cur = (entry.totals && entry.totals.time) ? parseInt(entry.totals.time) : '';
+    const mm = cur !== '' ? Math.floor(cur / 60) : '';
+    const ss = cur !== '' ? cur % 60 : '';
+    UI.modal({
+      title: 'Tiempo total',
+      bodyHTML: `<div class="set-row" style="grid-template-columns:1fr auto 1fr;max-width:200px">
+          <input class="inp set-f" id="ttMin" type="number" min="0" value="${mm}" placeholder="min"><span class="set-x">:</span><input class="inp set-f" id="ttSec" type="number" min="0" max="59" value="${ss}" placeholder="seg">
+        </div>
+        <p class="field-hint">Déjalo vacío para usar la suma de las series (${fmtClock(sumSec)}). Útil si solo registras los intervalos importantes.</p>`,
+      actions: [
+        { label: 'Usar la suma', kind: 'ghost', onClick: () => onPick(null) },
+        { label: 'Guardar', kind: 'primary', onClick: (root) => {
+          const m = parseInt(root.querySelector('#ttMin').value) || 0, s = parseInt(root.querySelector('#ttSec').value) || 0;
+          const total = m * 60 + s; onPick(total > 0 ? total : null);
+        } },
+      ],
+    });
+  }
+
+  // Repetir el bloque de series del ejercicio ×N. Muestra cuántas quedarán y pide confirmar.
+  function pickRepeat(count, onPick) {
+    UI.modal({
+      title: 'Repetir bloque',
+      bodyHTML: `<p class="modal-text">Tienes <strong>${count}</strong> serie${count === 1 ? '' : 's'}. Elige cuántas veces quieres el bloque en total.</p>
+        <div class="rep-row">${UI.field('Veces (total)', `<input class="inp" id="repN" type="number" min="2" max="50" value="3" style="text-align:center">`)}</div>
+        <div class="effort-pick" id="repQuick">${[2, 3, 4, 5, 6, 8, 10].map(n => `<button type="button" class="effort-opt" data-n="${n}">×${n}</button>`).join('')}</div>
+        <p class="field-hint" id="repHint"></p>`,
+      actions: [
+        { label: 'Cancelar', kind: 'ghost' },
+        { label: 'Aplicar', kind: 'primary', onClick: (root) => { const n = Math.min(50, Math.max(2, parseInt(root.querySelector('#repN').value) || 2)); onPick(n); } },
+      ],
+      onMount: (root) => {
+        const inp = root.querySelector('#repN'), hint = root.querySelector('#repHint');
+        const upd = () => { const n = Math.min(50, Math.max(2, parseInt(inp.value) || 2)); hint.textContent = `Quedarán ${count * n} series en total.`; };
+        inp.addEventListener('input', upd);
+        root.querySelectorAll('[data-n]').forEach(b => b.addEventListener('click', () => { inp.value = b.dataset.n; upd(); }));
+        upd();
+      },
     });
   }
 
@@ -117,13 +203,20 @@ const VSessions = (() => {
   }
 
   function emptySet(type) {
-    if (type === 'time') return { time: '', distance: '', kcal: '', weight: '', speed: '', incline: '', level: '', done: false };
+    if (type === 'time') return { time: '', label: '', weight: '', speed: '', incline: '', level: '', done: false };
     if (type === 'reps') return { reps: '', load: '', loadMode: '', done: false };
     return { reps: '', weight: '', done: false };
   }
   function emptyDrop(type) {
     if (type === 'reps') return { reps: '', load: '' };
     return { reps: '', weight: '' };
+  }
+  // Copia una serie con sus valores (para "+ Serie copia anterior" y duplicar/repetir).
+  // No copia los dropsets ni el estado "hecha".
+  function cloneSet(set) {
+    const c = { ...set, done: false };
+    delete c.drops;
+    return c;
   }
 
   function dropHasData(d) { return d && (d.reps || d.weight || d.load); }
@@ -145,11 +238,12 @@ const VSessions = (() => {
     if (type === 'time') {
       const parts = [];
       const t = fmtTime(set.time); if (t) parts.push(t);
-      if (set.distance) parts.push(`${set.distance} km`);
-      if (set.kcal) parts.push(`${set.kcal} kcal`);
+      if (set.distance) parts.push(`${set.distance} km`); // compat: sesiones viejas con distancia por serie
+      if (set.kcal) parts.push(`${set.kcal} kcal`);       // compat
       if (set.weight) parts.push(`${set.weight} kg`);
       const ex = cardioExtra(set); if (ex) parts.push(ex);
       v = parts.join(' · ') || '0s';
+      if (set.label) v = `${set.label} · ${v}`;
     } else if (type === 'reps') {
       v = `${set.reps || 0} reps${loadSuffix(set)}`;
       (set.drops || []).filter(dropHasData).forEach(d => { v += ` → ${d.reps || 0}${d.load ? ` (${d.load}kg)` : ''}`; });
@@ -217,16 +311,46 @@ const VSessions = (() => {
         const k = keyForEntry(e);
         if (!k || map[k]) return; // ya tenemos una más reciente para este ejercicio
         const done = (e.sets || []).filter(setHasData);
-        if (done.length) map[k] = { date: sess.date, type: e.type || 'weight', sets: done, note: e.note };
+        if (done.length) map[k] = { date: sess.date, type: e.type || 'weight', sets: done, note: e.note, metrics: e.metrics, totals: e.totals };
       }));
     return map;
+  }
+  // Resumen compacto de un cardio de intervalos: agrupa series iguales (etiqueta+
+  // tiempo+velocidad) → "Andar 2:00 @5.5 ×7 · Correr 3:00 @8.5 ×7 — 35:00 · 4.5 km".
+  function summarizeCardioSets(sets) {
+    const groups = [], idx = {};
+    sets.forEach(st => {
+      const t = parseInt(st.time) || 0;
+      const key = `${(st.label || '').trim().toLowerCase()}|${t}|${st.speed || ''}`;
+      if (idx[key] == null) { idx[key] = groups.length; groups.push({ label: (st.label || '').trim(), time: t, speed: st.speed, n: 0 }); }
+      groups[idx[key]].n++;
+    });
+    return groups.map(g => {
+      const lab = g.label ? `${g.label} ` : '';
+      const dur = g.time ? fmtClock(g.time) : '';
+      const sp = g.speed ? ` @${g.speed}` : '';
+      const mult = g.n > 1 ? ` ×${g.n}` : '';
+      return `${lab}${dur}${sp}${mult}`.trim();
+    }).join(' · ');
+  }
+  function cardioTotalsText(prev) {
+    const t = prev.totals || {};
+    const totalSec = (t.time != null && t.time !== '') ? parseInt(t.time) : prev.sets.reduce((a, s) => a + (parseInt(s.time) || 0), 0);
+    const dist = t.distance ? parseFloat(t.distance) : prev.sets.reduce((a, s) => a + (parseFloat(s.distance) || 0), 0);
+    const kc = t.kcal ? parseFloat(t.kcal) : prev.sets.reduce((a, s) => a + (parseFloat(s.kcal) || 0), 0);
+    const parts = [fmtClock(totalSec)];
+    if (dist) parts.push(`${Math.round(dist * 100) / 100} km`);
+    if (kc) parts.push(`${Math.round(kc)} kcal`);
+    if (t.hr) parts.push(`${t.hr} ppm`);
+    return parts.join(' · ');
   }
   function lastTimeHTML(entry) {
     const prev = _lastTimeMap && _lastTimeMap[keyForEntry(entry)];
     if (!prev) return '';
-    const sets = prev.sets.map(st => setDisplay(prev.type, st)).join(' · ');
+    const isCardio = prev.type === 'time' && entryHasTotals({ type: 'time', metrics: prev.metrics, totals: prev.totals, sets: prev.sets });
+    const body = isCardio ? `${summarizeCardioSets(prev.sets)} — ${cardioTotalsText(prev)}` : prev.sets.map(st => setDisplay(prev.type, st)).join(' · ');
     const note = prev.note ? `<div class="last-note"><span>${UI.icon('edit', 12)} ${UI.esc(prev.note)}</span></div>` : '';
-    return `<div class="last-time">${UI.icon('clock', 12)} Última vez · ${UI.esc(UI.fmtDateShort(prev.date))}: <span>${UI.esc(sets)}</span></div>${note}`;
+    return `<div class="last-time">${UI.icon('clock', 12)} Última vez · ${UI.esc(UI.fmtDateShort(prev.date))}: <span>${UI.esc(body)}</span></div>${note}`;
   }
 
   // ----- Récords personales (PR): mejor marca histórica por ejercicio -----
@@ -236,7 +360,20 @@ const VSessions = (() => {
     if (type === 'reps') return parseFloat(set.reps) || 0;
     return parseFloat(set.weight) || 0;
   }
+  // Mejor marca de UNA entry para récords. Cardio (tiempo con totales) → distancia
+  // TOTAL de la sesión. Isométricos → tiempo máx de aguante. Resto → peso/reps máx.
+  function entryBest(entry) {
+    const type = entry.type || 'weight';
+    if (type === 'time' && entryHasTotals(entry)) {
+      const dist = (entry.totals && entry.totals.distance) ? parseFloat(entry.totals.distance)
+        : (entry.sets || []).reduce((a, s) => a + (parseFloat(s.distance) || 0), 0);
+      return { metric: 'distance', value: Math.round((dist || 0) * 100) / 100 };
+    }
+    let best = 0; (entry.sets || []).forEach(st => { const m = metricOf(type, st); if (m > best) best = m; });
+    return { metric: type, value: best };
+  }
   function prValueText(type, value) {
+    if (type === 'distance') return value + ' km';
     if (type === 'time') return fmtTime(value) || (value + 's');
     if (type === 'reps') return value + ' reps';
     return value + ' kg';
@@ -246,10 +383,8 @@ const VSessions = (() => {
     const map = {};
     sessions.filter(s => !s.draft && s.id !== excludeId).forEach(sess => (sess.entries || []).forEach(e => {
       const k = keyForEntry(e); if (!k) return;
-      const type = e.type || 'weight';
-      let best = 0;
-      (e.sets || []).forEach(st => { const m = metricOf(type, st); if (m > best) best = m; });
-      if (best > 0 && (!map[k] || best > map[k].best)) map[k] = { type, best, date: sess.date };
+      const { metric, value } = entryBest(e);
+      if (value > 0 && (!map[k] || value > map[k].best)) map[k] = { type: metric, best: value, date: sess.date };
     }));
     return map;
   }
@@ -258,12 +393,12 @@ const VSessions = (() => {
   function detectPRs(session) {
     const prs = [];
     (session.entries || []).forEach(e => {
-      const k = keyForEntry(e), type = e.type || 'weight';
-      let best = 0; (e.sets || []).forEach(st => { const m = metricOf(type, st); if (m > best) best = m; });
-      if (best <= 0) return;
+      const k = keyForEntry(e);
+      const { metric, value } = entryBest(e);
+      if (value <= 0) return;
       const prev = (_prMap && _prMap[k]) ? _prMap[k].best : 0;
-      if (prev === 0) prs.push({ name: e.name, type, value: best, prev: 0, first: true });
-      else if (best > prev) prs.push({ name: e.name, type, value: best, prev });
+      if (prev === 0) prs.push({ name: e.name, type: metric, value, prev: 0, first: true });
+      else if (value > prev) prs.push({ name: e.name, type: metric, value, prev });
     });
     return prs;
   }
@@ -272,20 +407,20 @@ const VSessions = (() => {
   function recomputePRs(session, others) {
     const prs = [];
     (session.entries || []).forEach(e => {
-      const k = keyForEntry(e), type = e.type || 'weight';
-      let best = 0; (e.sets || []).forEach(st => { const m = metricOf(type, st); if (m > best) best = m; });
-      if (best <= 0) return;
+      const k = keyForEntry(e);
+      const { metric, value } = entryBest(e);
+      if (value <= 0) return;
       let prev = 0;
       others.forEach(os => {
         const before = (os.date || '') < (session.date || '') || ((os.date || '') === (session.date || '') && (os.createdAt || 0) < (session.createdAt || 0));
         if (!before) return;
         (os.entries || []).forEach(oe => {
           if (keyForEntry(oe) !== k) return;
-          (oe.sets || []).forEach(st => { const m = metricOf(oe.type || 'weight', st); if (m > prev) prev = m; });
+          const v = entryBest(oe).value; if (v > prev) prev = v;
         });
       });
-      if (prev === 0) prs.push({ name: e.name, type, value: best, prev: 0, first: true });
-      else if (best > prev) prs.push({ name: e.name, type, value: best, prev });
+      if (prev === 0) prs.push({ name: e.name, type: metric, value, prev: 0, first: true });
+      else if (value > prev) prs.push({ name: e.name, type: metric, value, prev });
     });
     return prs;
   }
@@ -495,6 +630,8 @@ const VSessions = (() => {
       const effortBtn = (mode === 'live' || mode === 'edit')
         ? `<button type="button" class="set-rpe${s.effort ? ' on' : ''}" data-set-effort data-ei="${ei}" data-si="${si}" title="Esfuerzo de la serie">${s.effort ? UI.esc(s.effort) : '%'}</button>`
         : '';
+      // Pie de serie: duplicar (todos) + dropset (peso/reps). Oculto si está bloqueada (en vivo).
+      const footBtns = locked ? '' : `<div class="set-foot"><button type="button" class="set-drop-btn" data-dup-set data-ei="${ei}" data-si="${si}">↻ duplicar</button>${type !== 'time' ? ` <button type="button" class="set-drop-btn" data-add-drop data-ei="${ei}" data-si="${si}">↧ dropset</button>` : ''}</div>`;
 
       if (type === 'time') {
         const total = parseInt(s.time);
@@ -505,11 +642,12 @@ const VSessions = (() => {
           <div class="set-row">
             <span class="set-n">${si + 1}</span>
             <div class="set-vals">
-              <input class="inp set-f" data-f="timemin" data-ei="${ei}" data-si="${si}" type="number" min="0" value="${mm}" placeholder="min"${dis}><span class="set-x">:</span><input class="inp set-f" data-f="timesec" data-ei="${ei}" data-si="${si}" type="number" min="0" max="59" value="${ss}" placeholder="seg"${dis}>
+              <input class="inp set-f" data-f="timemin" data-ei="${ei}" data-si="${si}" type="number" min="0" value="${mm}" placeholder="min"${dis}><span class="set-x">:</span><input class="inp set-f" data-f="timesec" data-ei="${ei}" data-si="${si}" type="number" min="0" max="59" value="${ss}" placeholder="seg"${dis}><button type="button" class="set-label-chip${s.label ? ' on' : ''}" data-set-label data-ei="${ei}" data-si="${si}"${dis} title="${s.label ? UI.esc(s.label) : 'Etiqueta de la serie'}">${s.label ? `<span class="lc-txt">${UI.esc(s.label)}</span>` : UI.icon('tag', 14)}</button>
             </div>
             <div class="set-acts">${effortBtn}${done}${rm}</div>
           </div>
-          ${(() => { const ms = timeActiveMetrics(entry); return ms.length ? `<div class="set-extra">${ms.map(k => { const f = TIME_FIELD[k]; return `<input class="inp set-f" data-f="${k}" data-ei="${ei}" data-si="${si}" type="number" min="0" step="${f.step}" value="${UI.esc(s[k] || '')}" placeholder="${f.ph}"${dis}>`; }).join('')}</div>` : ''; })()}
+          ${(() => { const ms = timeSetMetrics(entry); return ms.length ? `<div class="set-extra">${ms.map(k => { const f = TIME_FIELD[k]; return `<input class="inp set-f" data-f="${k}" data-ei="${ei}" data-si="${si}" type="number" min="0" step="${f.step}" value="${UI.esc(s[k] || '')}" placeholder="${f.ph}"${dis}>`; }).join('')}</div>` : ''; })()}
+          ${footBtns}
         </div>`;
       }
 
@@ -540,9 +678,40 @@ const VSessions = (() => {
           <div class="set-acts">${effortBtn}${done}${rm}</div>
         </div>
         ${drops}
-        ${locked ? '' : `<div class="set-foot"><button type="button" class="set-drop-btn" data-add-drop data-ei="${ei}" data-si="${si}">↧ dropset</button></div>`}
+        ${footBtns}
       </div>`;
     }).join('');
+  }
+
+  // Fila de TOTALES del ejercicio (solo time/cardio): tiempo total auto-sumado +
+  // un input por cada métrica de scope 'total' activa (hoy distancia/kcal).
+  function timeTotalsHTML(entry, ei) {
+    if (entry.type !== 'time' || !entryHasTotals(entry)) return '';
+    const totals = entry.totals || {};
+    const sumSec = (entry.sets || []).reduce((a, s) => a + (parseInt(s.time) || 0), 0);
+    const overridden = totals.time != null && totals.time !== '';
+    const totalSec = overridden ? parseInt(totals.time) : sumSec;
+    const fields = timeTotalMetrics(entry);
+    const inputs = fields.map(k => {
+      const f = TIME_FIELD[k];
+      return `<input class="inp ex-total-f" data-tf="${k}" data-ei="${ei}" type="number" min="0" step="${f.step}" value="${UI.esc(totals[k] || '')}" placeholder="${(f.unit || f.label)} tot.">`;
+    }).join('');
+    // Tiempo total: tocable para editar; vacío = suma de las series.
+    return `<div class="ex-totals"><button type="button" class="ex-total-time${overridden ? ' on' : ''}" data-set-totaltime data-ei="${ei}"${overridden ? ' data-fixed="1"' : ''} title="Editar tiempo total">${UI.icon('clock', 13)} <span class="ett-val">${fmtClock(totalSec)}</span></button>${inputs}</div>`;
+  }
+  // Recalcula los chips de tiempo total (solo lectura del DOM) al teclear min/seg.
+  function updateTotalTimes(root) {
+    root.querySelectorAll('.ex-card').forEach(card => {
+      const btn = card.querySelector('.ex-total-time');
+      const ett = card.querySelector('.ett-val');
+      if (!ett || !btn || btn.dataset.fixed) return; // tiempo total manual: no recalcular
+      let sec = 0;
+      card.querySelectorAll('.set-row').forEach(r => {
+        const mm = r.querySelector('[data-f="timemin"]'), ss = r.querySelector('[data-f="timesec"]');
+        if (mm || ss) sec += (parseInt(mm && mm.value) || 0) * 60 + (parseInt(ss && ss.value) || 0);
+      });
+      ett.textContent = fmtClock(sec);
+    });
   }
 
   function entryCardHTML(entry, ei, mode) {
@@ -558,9 +727,11 @@ const VSessions = (() => {
         </div>
         ${mode === 'live' ? lastTimeHTML(entry) : ''}
         <div class="set-list">${setRowsHTML(entry, ei, mode)}</div>
+        ${timeTotalsHTML(entry, ei)}
         ${entry.note ? `<div class="ex-note" data-note data-ei="${ei}"><span class="ex-note-txt">${UI.icon('edit', 13)} ${UI.esc(entry.note)}</span></div>` : ''}
         <div class="ex-card-foot">
           <button class="btn ghost small" data-add-set data-ei="${ei}">+ Serie</button>
+          ${(entry.sets || []).length ? `<button type="button" class="metric-add" data-repeat-block data-ei="${ei}">↻ repetir</button>` : ''}
           ${entry.type === 'time' ? `<button type="button" class="metric-add" data-metrics data-ei="${ei}">${UI.icon('plus', 13)} datos</button>` : ''}
           ${entry.note ? '' : `<button type="button" class="metric-add" data-note data-ei="${ei}">${UI.icon('edit', 13)} nota</button>`}
         </div>
@@ -592,6 +763,13 @@ const VSessions = (() => {
         }
       });
     });
+    // totales del ejercicio (cardio): distancia/kcal una vez por entry
+    root.querySelectorAll('.ex-total-f').forEach(inp => {
+      const e = session.entries[+inp.dataset.ei];
+      if (!e) return;
+      e.totals = e.totals || {};
+      e.totals[inp.dataset.tf] = inp.value;
+    });
   }
 
   // =====================================================
@@ -608,7 +786,9 @@ const VSessions = (() => {
         day.blocks.forEach(b => b.exercises.forEach(ex => {
           const e = entryFromExercise(ex);
           if (e.type === 'time' && e.exerciseId && metricsById[e.exerciseId]) e.metrics = metricsById[e.exerciseId].slice();
-          e.sets.push(emptySet(e.type));
+          const first = emptySet(e.type);
+          if (ex.label && e.type === 'time') first.label = ex.label; // prerellena la variante prescrita en el plan
+          e.sets.push(first);
           entries.push(e);
         }));
       }
@@ -669,7 +849,19 @@ const VSessions = (() => {
     // Handlers de cada tarjeta. Se re-enganchan tras cada redibujado de la lista.
     function bindEntries() {
       root.querySelectorAll('[data-add-set]').forEach(b => b.addEventListener('click', () => {
-        sync(); const e = s.entries[+b.dataset.ei]; e.sets.push(emptySet(e.type)); redraw();
+        sync(); const e = s.entries[+b.dataset.ei]; const last = e.sets[e.sets.length - 1];
+        e.sets.push(last ? cloneSet(last) : emptySet(e.type)); redraw(); // copia la anterior
+      }));
+      root.querySelectorAll('[data-dup-set]').forEach(b => b.addEventListener('click', () => {
+        sync(); const e = s.entries[+b.dataset.ei], si = +b.dataset.si; e.sets.splice(si + 1, 0, cloneSet(e.sets[si])); redraw();
+      }));
+      root.querySelectorAll('[data-repeat-block]').forEach(b => b.addEventListener('click', () => {
+        sync(); const e = s.entries[+b.dataset.ei];
+        pickRepeat(e.sets.length, (n) => { const snap = e.sets.slice(); for (let k = 1; k < n; k++) snap.forEach(st => e.sets.push(cloneSet(st))); app.persistLive(); redraw(); });
+      }));
+      root.querySelectorAll('[data-set-totaltime]').forEach(b => b.addEventListener('click', () => {
+        sync(); const entry = s.entries[+b.dataset.ei];
+        pickTotalTime(entry, (sec) => { entry.totals = entry.totals || {}; if (sec == null) delete entry.totals.time; else entry.totals.time = sec; app.persistLive(); redraw(); });
       }));
       root.querySelectorAll('[data-rm-set]').forEach(b => b.addEventListener('click', () => {
         sync(); s.entries[+b.dataset.ei].sets.splice(+b.dataset.si, 1); redraw();
@@ -705,6 +897,10 @@ const VSessions = (() => {
         sync(); const set = s.entries[+b.dataset.ei].sets[+b.dataset.si];
         pickLoad(set, (mode, kg) => { set.loadMode = mode || undefined; set.load = mode ? kg : ''; app.persistLive(); redraw(); });
       }));
+      root.querySelectorAll('[data-set-label]').forEach(b => b.addEventListener('click', () => {
+        sync(); const entry = s.entries[+b.dataset.ei], set = entry.sets[+b.dataset.si];
+        pickLabel(entry, set.label, (lbl) => { set.label = lbl || undefined; app.persistLive(); redraw(); });
+      }));
     }
 
     // Re-render SOLO la lista de ejercicios (no reconstruye toda la vista → no se
@@ -718,7 +914,7 @@ const VSessions = (() => {
     };
 
     // Autoguardado inmediato en cada tecla (delegado en root: sobrevive al redibujado).
-    root.addEventListener('input', () => { syncLive(root, s); app.persistLive(); });
+    root.addEventListener('input', () => { syncLive(root, s); app.persistLive(); updateTotalTimes(root); });
 
     bindEntries();
     UI.makeSortable(root.querySelector('.live-entries'), {
@@ -1031,7 +1227,19 @@ const VSessions = (() => {
         return `<li><span class="set-n-sm">${i + 1}</span><span>${UI.esc(setDisplay(e.type || 'weight', set))}</span></li>`;
       }).join('');
       const note = e.note ? `<div class="ex-note"><span class="ex-note-txt">${UI.icon('edit', 13)} ${UI.esc(e.note)}</span></div>` : '';
-      return `<div class="block"><div class="block-label detail-ex-head"><span>${UI.esc(e.name)}</span><button class="icon-btn" data-ai-done data-ei="${ei}" title="Consultar a una IA sobre este ejercicio">${UI.icon('chat', 16)}</button></div><ul class="set-detail-list">${rows}</ul>${note}</div>`;
+      const totalsLine = (() => {
+        if ((e.type || 'weight') !== 'time' || !entryHasTotals(e)) return '';
+        const t = e.totals || {};
+        const totalSec = (t.time != null && t.time !== '') ? parseInt(t.time) : (e.sets || []).reduce((a, set) => a + (parseInt(set.time) || 0), 0);
+        const dist = t.distance ? parseFloat(t.distance) : (e.sets || []).reduce((a, set) => a + (parseFloat(set.distance) || 0), 0); // compat viejas
+        const kc = t.kcal ? parseFloat(t.kcal) : (e.sets || []).reduce((a, set) => a + (parseFloat(set.kcal) || 0), 0);
+        const parts = [`${fmtClock(totalSec)} total`];
+        if (dist) parts.push(`${Math.round(dist * 100) / 100} km`);
+        if (kc) parts.push(`${Math.round(kc)} kcal`);
+        if (t.hr) parts.push(`${t.hr} ppm`);
+        return `<div class="detail-totals">${UI.icon('clock', 13)} ${parts.join(' · ')}</div>`;
+      })();
+      return `<div class="block"><div class="block-label detail-ex-head"><span>${UI.esc(e.name)}</span><button class="icon-btn" data-ai-done data-ei="${ei}" title="Consultar a una IA sobre este ejercicio">${UI.icon('chat', 16)}</button></div><ul class="set-detail-list">${rows}</ul>${totalsLine}${note}</div>`;
     }).join('');
 
     return `<div class="section">
@@ -1109,7 +1317,10 @@ const VSessions = (() => {
     };
 
     const bindEditorBody = (root) => {
-      root.querySelectorAll('[data-add-set]').forEach(b => b.addEventListener('click', () => { syncMeta(root); draft.entries[+b.dataset.ei].sets.push(emptySet(draft.entries[+b.dataset.ei].type)); render(root); }));
+      root.querySelectorAll('[data-add-set]').forEach(b => b.addEventListener('click', () => { syncMeta(root); const e = draft.entries[+b.dataset.ei]; const last = e.sets[e.sets.length - 1]; e.sets.push(last ? cloneSet(last) : emptySet(e.type)); render(root); }));
+      root.querySelectorAll('[data-dup-set]').forEach(b => b.addEventListener('click', () => { syncMeta(root); const e = draft.entries[+b.dataset.ei], si = +b.dataset.si; e.sets.splice(si + 1, 0, cloneSet(e.sets[si])); render(root); }));
+      root.querySelectorAll('[data-repeat-block]').forEach(b => b.addEventListener('click', () => { syncMeta(root); const e = draft.entries[+b.dataset.ei]; pickRepeat(e.sets.length, (n) => { const snap = e.sets.slice(); for (let k = 1; k < n; k++) snap.forEach(st => e.sets.push(cloneSet(st))); render(root); }); }));
+      root.querySelectorAll('[data-set-totaltime]').forEach(b => b.addEventListener('click', () => { syncMeta(root); const entry = draft.entries[+b.dataset.ei]; pickTotalTime(entry, (sec) => { entry.totals = entry.totals || {}; if (sec == null) delete entry.totals.time; else entry.totals.time = sec; render(root); }); }));
       root.querySelectorAll('[data-rm-set]').forEach(b => b.addEventListener('click', () => { syncMeta(root); draft.entries[+b.dataset.ei].sets.splice(+b.dataset.si, 1); render(root); }));
       root.querySelectorAll('[data-add-drop]').forEach(b => b.addEventListener('click', () => { syncMeta(root); const set = draft.entries[+b.dataset.ei].sets[+b.dataset.si]; (set.drops = set.drops || []).push(emptyDrop(draft.entries[+b.dataset.ei].type)); render(root); }));
       root.querySelectorAll('[data-rm-drop]').forEach(b => b.addEventListener('click', () => { syncMeta(root); const set = draft.entries[+b.dataset.ei].sets[+b.dataset.si]; if (set.drops) set.drops.splice(+b.dataset.di, 1); render(root); }));
@@ -1134,7 +1345,12 @@ const VSessions = (() => {
         syncMeta(root); const set = draft.entries[+b.dataset.ei].sets[+b.dataset.si];
         pickLoad(set, (mode, kg) => { set.loadMode = mode || undefined; set.load = mode ? kg : ''; render(root); });
       }));
+      root.querySelectorAll('[data-set-label]').forEach(b => b.addEventListener('click', () => {
+        syncMeta(root); const entry = draft.entries[+b.dataset.ei], set = entry.sets[+b.dataset.si];
+        pickLabel(entry, set.label, (lbl) => { set.label = lbl || undefined; render(root); });
+      }));
       root.querySelector('#sesAddEx').addEventListener('click', () => { syncMeta(root); addExerciseToSession(app, draft, () => render(root)); });
+      if (!root._ttBound) { root.addEventListener('input', () => updateTotalTimes(root)); root._ttBound = true; } // total de tiempo en vivo al teclear
     };
 
     UI.modal({

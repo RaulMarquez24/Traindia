@@ -140,7 +140,7 @@ const VPlan = (() => {
         const nameCls = ex.priority ? 'ex-name priority' : 'ex-name';
         const optCls = ex.optional ? 'optional' : '';
         const sl = subsLine(ex);
-        return `<li class="${optCls}"><span class="ex-line-main"><span class="${nameCls}">${UI.esc(ex.name)}</span>${sl}</span><span class="ex-sets">${UI.esc(ex.sets || '')}</span></li>`;
+        return `<li class="${optCls}"><span class="ex-line-main"><span class="${nameCls}">${UI.esc(ex.name)}${ex.label ? ` <span class="ex-variant">${UI.esc(ex.label)}</span>` : ''}</span>${sl}</span><span class="ex-sets">${UI.esc(ex.sets || '')}</span></li>`;
       }).join('');
       const labelCls = b.optional ? 'block-label optional' : 'block-label';
       const labelText = b.optional ? `${UI.esc(b.label)} · si hay tiempo` : UI.esc(b.label);
@@ -276,6 +276,7 @@ const VPlan = (() => {
         </div>
         <div class="ed-ex-bottom">
           <span class="ex-type">${EX_TYPE_SHORT[ex.type || 'weight']}</span>
+          <input class="inp ed-ex-label" data-f="label" value="${UI.esc(ex.label || '')}" placeholder="etiqueta" maxlength="18">
           <label class="mini-check"><input type="checkbox" data-f="priority"${ex.priority ? ' checked' : ''}> Prior.</label>
           <label class="mini-check"><input type="checkbox" data-f="optional"${ex.optional ? ' checked' : ''}> Opc.</label>
           <span class="ed-ex-moves">
@@ -351,6 +352,7 @@ const VPlan = (() => {
         ex.type = el.querySelector('[data-f="type"]').value;
         ex.priority = el.querySelector('[data-f="priority"]').checked;
         ex.optional = el.querySelector('[data-f="optional"]').checked;
+        ex.label = el.querySelector('[data-f="label"]').value.trim() || undefined;
       });
       root.querySelectorAll('[data-block-opt]').forEach(c => { draft.blocks[+c.dataset.blockOpt].optional = c.checked; });
     };

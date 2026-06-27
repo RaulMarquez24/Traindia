@@ -75,7 +75,7 @@ const UI = (() => {
   // ---- Modal genérico (con pila para anidar) ----
   // open({ title, bodyHTML, actions:[{label,kind,onClick→puede devolver false p/ no cerrar}], onMount })
   const modalStack = [];
-  function modal({ title, bodyHTML = '', actions = [], onMount, size = '' }) {
+  function modal({ title, bodyHTML = '', actions = [], onMount, size = '', dismissable = true }) {
     const overlay = document.createElement('div');
     overlay.className = 'modal-overlay';
     overlay.style.zIndex = String(500 + modalStack.length * 10);
@@ -83,7 +83,7 @@ const UI = (() => {
       <div class="modal ${size}" role="dialog" aria-modal="true">
         <div class="modal-head">
           <h3>${esc(title)}</h3>
-          <button class="modal-x" aria-label="Cerrar">×</button>
+          ${dismissable ? '<button class="modal-x" aria-label="Cerrar">×</button>' : ''}
         </div>
         <div class="modal-body">${bodyHTML}</div>
         <div class="modal-actions"></div>
@@ -104,8 +104,11 @@ const UI = (() => {
       actionsEl.appendChild(btn);
     });
 
-    overlay.querySelector('.modal-x').addEventListener('click', () => closeModal(overlay));
-    overlay.addEventListener('click', (e) => { if (e.target === overlay) closeModal(overlay); });
+    // dismissable=false: no se puede cerrar con la X ni tocando fuera (cambio obligatorio).
+    if (dismissable) {
+      overlay.querySelector('.modal-x').addEventListener('click', () => closeModal(overlay));
+      overlay.addEventListener('click', (e) => { if (e.target === overlay) closeModal(overlay); });
+    }
 
     // Ajusta el overlay al viewport VISIBLE: cuando se abre el teclado, el modal
     // se encoge y se queda por encima de él (no queda nada tapado).

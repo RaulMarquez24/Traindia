@@ -735,5 +735,5 @@ const VData = (() => {
     return added;
   }
 
-  return { render, bind, openMenu, exportDay, importDay, exportSession, exportProgressEntry, routeImport, checkBackupReminder };
+  return { render, bind, openMenu, exportDay, importDay, exportSession, exportProgressEntry, routeImport, checkBackupReminder, backupProfile };
 })();
