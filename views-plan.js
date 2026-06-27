@@ -140,7 +140,7 @@ const VPlan = (() => {
         const nameCls = ex.priority ? 'ex-name priority' : 'ex-name';
         const optCls = ex.optional ? 'optional' : '';
         const sl = subsLine(ex);
-        return `<li class="${optCls}"><span class="ex-line-main"><span class="${nameCls}">${UI.esc(ex.name)}</span>${sl}</span><span class="ex-sets">${UI.esc(ex.sets || '')}</span></li>`;
+        return `<li class="${optCls}"><span class="ex-line-main"><span class="${nameCls}">${UI.esc(ex.name)}${ex.label ? ` <span class="ex-variant">${UI.esc(ex.label)}</span>` : ''}</span>${sl}</span><span class="ex-sets">${UI.esc(ex.sets || '')}</span></li>`;
       }).join('');
       const labelCls = b.optional ? 'block-label optional' : 'block-label';
       const labelText = b.optional ? `${UI.esc(b.label)} · si hay tiempo` : UI.esc(b.label);

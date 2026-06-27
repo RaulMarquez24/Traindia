@@ -466,9 +466,100 @@ const DB = (() => {
   }
 
   // Migración idempotente: corrige tipos mal puestos en predefinidos y rellena type en rutinas.
+  // ---- Unificación de cardio (v10): Cinta*/Bici*/Elíptic* → una máquina + etiqueta ----
+  const CARDIO_FAMILIES = [
+    { re: /^cinta\b\s*/i, machine: 'Cinta' },
+    { re: /^bici\w*\s*/i, machine: 'Bicicleta' },
+    { re: /^el[ií]ptic\w*\s*/i, machine: 'Elíptica' },
+  ];
+  function cardioCanon(name) {
+    const n = (name || '').trim();
+    for (const f of CARDIO_FAMILIES) {
+      if (f.re.test(n)) return { machine: f.machine, label: n.replace(f.re, '').trim() };
+    }
+    return null;
+  }
+  // Copia de seguridad de TODOS los datos en localStorage antes de migrar (best-effort).
+  async function backupAllToLocal(tag) {
+    try {
+      const dump = {};
+      for (const store of ['users', 'exercises', 'routines', 'sessions', 'progress', 'journal', 'settings']) {
+        try { dump[store] = await getAll(store); } catch (e) { dump[store] = []; }
+      }
+      localStorage.setItem('traindia-backup-' + tag, JSON.stringify({ at: Date.now(), data: dump }));
+    } catch (e) { /* sin espacio o no disponible: seguimos */ }
+  }
+  async function migrateCardioV10() {
+    const users = await getAll('users');
+    for (const u of users) {
+      const exs = (await exercisesOf(u.id)).filter(e => e.type === 'time');
+      const canonByMachine = {}; // machine -> ejercicio canónico
+      // los que ya son exactamente el nombre-máquina son canónicos (p.ej. Elíptica)
+      exs.forEach(e => { const c = cardioCanon(e.name); if (c && !c.label && e.name.trim() === c.machine) canonByMachine[c.machine] = e; });
+      const idMap = {}; // idVariante -> idCanónico
+      for (const e of exs) {
+        const c = cardioCanon(e.name); if (!c) continue;
+        let canon = canonByMachine[c.machine];
+        if (!canon) {
+          canon = { id: uid('ex'), userId: u.id, name: c.machine, type: 'time', muscleGroup: 'Cardio', metrics: Array.isArray(e.metrics) ? e.metrics.slice() : ['distance', 'kcal'], substitutes: [], isDefault: true, defaultKey: c.machine, createdAt: Date.now() };
+          canonByMachine[c.machine] = canon;
+        } else if (Array.isArray(e.metrics)) {
+          canon.metrics = [...new Set([...(canon.metrics || []), ...e.metrics])];
+        }
+        if (e.id !== canon.id) idMap[e.id] = canon.id;
+      }
+      for (const m in canonByMachine) await put('exercises', canonByMachine[m]);
+      const removed = new Set(Object.keys(idMap));
+      // mapa nombre viejo -> {machine,label}
+      const byName = {}; exs.forEach(e => { const c = cardioCanon(e.name); if (c) byName[e.name.trim().toLowerCase()] = c; });
+      // sesiones: renombrar entry, reapuntar id, métricas del canónico, etiqueta en series sin etiqueta
+      for (const s of await sessionsOf(u.id)) {
+        let ch = false;
+        (s.entries || []).forEach(en => {
+          const c = byName[(en.name || '').trim().toLowerCase()]; if (!c) return;
+          en.name = c.machine;
+          const canon = canonByMachine[c.machine];
+          en.exerciseId = (en.exerciseId && idMap[en.exerciseId]) || (canon && canon.id) || en.exerciseId;
+          if (canon) en.metrics = canon.metrics.slice();
+          if (c.label) (en.sets || []).forEach(st => { if (!st.label) st.label = c.label; });
+          ch = true;
+        });
+        if (ch) await put('sessions', s);
+      }
+      // rutinas (plan): repoint + etiqueta en el bloque
+      for (const rt of await routinesOf(u.id)) {
+        let ch = false;
+        (rt.days || []).forEach(d => (d.blocks || []).forEach(b => (b.exercises || []).forEach(ex => {
+          const c = byName[(ex.name || '').trim().toLowerCase()]; if (!c) return;
+          ex.name = c.machine;
+          const canon = canonByMachine[c.machine];
+          ex.exerciseId = (ex.exerciseId && idMap[ex.exerciseId]) || (canon && canon.id) || ex.exerciseId;
+          if (c.label && !ex.label) ex.label = c.label;
+          ch = true;
+        })));
+        if (ch) await put('routines', rt);
+      }
+      // reapuntar suplentes y borrar variantes
+      for (const e of await exercisesOf(u.id)) {
+        if (removed.has(e.id) || !(e.substitutes || []).length) continue;
+        const subs = [...new Set(e.substitutes.map(sid => idMap[sid] || sid).filter(sid => sid !== e.id && !removed.has(sid)))];
+        if (subs.join() !== e.substitutes.join()) { e.substitutes = subs; await put('exercises', e); }
+      }
+      for (const id of removed) await del('exercises', id);
+    }
+  }
+
   async function migrate() {
     const s = await getSettings();
-    if (!s || (s.dataVersion || 0) >= 9) return;
+    if (!s) return;
+    const v = s.dataVersion || 0;
+    if (v >= 10) return;
+    if (v >= 9) { // ya en v9: solo falta la unificación de cardio
+      await backupAllToLocal('v10');
+      await migrateCardioV10();
+      await saveSettings({ dataVersion: 10 });
+      return;
+    }
     const defaults = defaultTypeByName();
     const users = await getAll('users');
     for (const u of users) {
@@ -520,7 +611,9 @@ const DB = (() => {
       }
       await seedSubstitutes(u.id); // vincula suplentes a los ya sembrados (idempotente)
     }
-    await saveSettings({ dataVersion: 9 });
+    await backupAllToLocal('v10');
+    await migrateCardioV10();
+    await saveSettings({ dataVersion: 10 });
   }
 
   // ---- Consultas por usuario ----

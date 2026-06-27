@@ -51,16 +51,25 @@ const VProgress = (() => {
   // Serie del 1RM respetando "solo esfuerzo"; si no hay ninguna serie con
   // esfuerzo marcado, cae a usar todas (y avisa con fellBack). Para el resto de
   // métricas devuelve la serie normal.
-  async function metricSeries(userId, name, metric, effortOnly, formula) {
+  async function metricSeries(userId, name, metric, effortOnly, formula, label) {
     if (metric !== 'e1rm' || !effortOnly) {
-      return { points: await exerciseSeries(userId, name, metric, { effortOnly: false, formula }), noEffort: false };
+      return { points: await exerciseSeries(userId, name, metric, { effortOnly: false, formula, label }), noEffort: false };
     }
     // tick activo: solo series con esfuerzo. Si no hay ninguna pero sí hay datos,
     // se deja la gráfica vacía y se marca noEffort para avisar (no se usan todas).
-    const pts = await exerciseSeries(userId, name, metric, { effortOnly: true, formula });
+    const pts = await exerciseSeries(userId, name, metric, { effortOnly: true, formula, label });
     if (pts.length) return { points: pts, noEffort: false };
-    const all = await exerciseSeries(userId, name, metric, { effortOnly: false, formula });
+    const all = await exerciseSeries(userId, name, metric, { effortOnly: false, formula, label });
     return { points: [], noEffort: all.length > 0 };
+  }
+  // Etiquetas/variantes usadas por un ejercicio en las sesiones (para el filtro de cardio).
+  async function exerciseLabels(userId, exName) {
+    const lname = exName.toLowerCase();
+    const set = new Set();
+    (await DB.sessionsOf(userId)).filter(s => !s.draft).forEach(s => (s.entries || []).forEach(e => {
+      if ((e.name || '').toLowerCase() === lname) (e.sets || []).forEach(st => { if (st.label) set.add(st.label.trim()); });
+    }));
+    return [...set].sort((a, b) => a.localeCompare(b));
   }
 
   // Formatea segundos: <60s → "45s"; <60min → "m:ss"; ≥60min → "h:mm:ss".
@@ -94,6 +103,7 @@ const VProgress = (() => {
   async function exerciseSeries(userId, exName, metric, opts = {}) {
     const effortOnly = !!opts.effortOnly;
     const formula = opts.formula || 'epley';
+    const labelFilter = opts.label || ''; // filtra cardio por etiqueta/variante
     let sessions = (await DB.sessionsOf(userId)).filter(s => !s.draft);
     sessions.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
     const points = [];
@@ -104,6 +114,7 @@ const VProgress = (() => {
       let best1rm = 0, best1rmSet = null; // mejor 1RM estimado (Epley) y la serie que lo produce
       (s.entries || []).forEach(e => {
         if ((e.name || '').toLowerCase() !== lname) return;
+        if (labelFilter && !(e.sets || []).some(st => (st.label || '').trim() === labelFilter)) return; // solo la variante elegida
         found = true;
         // cardio nuevo: distancia/kcal como TOTAL del ejercicio (entry.totals).
         // Sin totals (sesiones viejas) → se suman por serie como antes.
@@ -389,10 +400,14 @@ const VProgress = (() => {
     const metrics = ex.type === 'time' ? timeMetricsFor(ex) : EX_METRICS;
     const metric = (host._metric && metrics.some(m => m.key === host._metric)) ? host._metric : metrics[0].key;
 
+    // Filtro por etiqueta/variante (solo cardio con etiquetas registradas)
+    const cardioLabels = isCardioEx(ex) ? await exerciseLabels(app.activeUser.id, ex.name) : [];
+    const labelF = (host._exLabel && cardioLabels.includes(host._exLabel)) ? host._exLabel : '';
+
     const isE1 = metric === 'e1rm';
     const effortOnly = isE1 ? (host._effortOnly !== false) : false; // por defecto activado
     const formula = app._e1Formula || 'epley';
-    const { points, noEffort } = await metricSeries(app.activeUser.id, ex.name, metric, effortOnly, formula);
+    const { points, noEffort } = await metricSeries(app.activeUser.id, ex.name, metric, effortOnly, formula, labelF);
 
     const isTime = metric === 'maxTime' || metric === 'totalTime';
     const prPoint = bestPoint(points);
@@ -425,6 +440,7 @@ const VProgress = (() => {
     host.innerHTML = `
       <div class="card">
         ${UI.field('Ejercicio', UI.selectButton('exSelBtn', ex.name))}
+        ${cardioLabels.length ? `<div class="chips-row small ex-label-row"><button class="chip${labelF === '' ? ' on' : ''}" data-exlabel="">Todas</button>${cardioLabels.map(l => `<button class="chip${labelF === l ? ' on' : ''}" data-exlabel="${UI.esc(l)}">${UI.esc(l)}</button>`).join('')}</div>` : ''}
         <div class="chips-row small">${metrics.map(m => `<button class="chip${m.key === metric ? ' on' : ''}" data-metric="${m.key}">${m.label}</button>`).join('')}</div>
         ${e1Panel}
         ${prPoint ? `<div class="pr-stat">${UI.icon('star', 16)}<div class="pr-stat-text"><span class="pr-stat-label">Récord · ${UI.esc(metricLabel)}</span><span class="pr-stat-date">${UI.fmtDateShort(prPoint.x)}</span></div><span class="pr-stat-val">${isTime ? fmtSecs(prPoint.y) : `${prPoint.y}${METRIC_UNIT[metric] || ''}`}${prPoint.detail ? `<span class="pr-stat-cond">${UI.esc(prPoint.detail)}</span>` : ''}</span></div>` : ''}
@@ -439,6 +455,7 @@ const VProgress = (() => {
       onPick: (val) => { host._exId = val; host._metric = null; renderExercise(app, host, params); },
     }));
     host.querySelectorAll('[data-metric]').forEach(c => c.addEventListener('click', () => { host._metric = c.dataset.metric; host._exId = ex.id; renderExercise(app, host, params); }));
+    host.querySelectorAll('[data-exlabel]').forEach(c => c.addEventListener('click', () => { host._exLabel = c.dataset.exlabel; host._exId = ex.id; renderExercise(app, host, params); }));
     const effChk = host.querySelector('#effOnly');
     if (effChk) effChk.addEventListener('change', () => { host._effortOnly = effChk.checked; host._exId = ex.id; renderExercise(app, host, params); });
     const helpBtn = host.querySelector('#e1Help');

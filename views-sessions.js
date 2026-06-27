@@ -786,7 +786,9 @@ const VSessions = (() => {
         day.blocks.forEach(b => b.exercises.forEach(ex => {
           const e = entryFromExercise(ex);
           if (e.type === 'time' && e.exerciseId && metricsById[e.exerciseId]) e.metrics = metricsById[e.exerciseId].slice();
-          e.sets.push(emptySet(e.type));
+          const first = emptySet(e.type);
+          if (ex.label && e.type === 'time') first.label = ex.label; // prerellena la variante prescrita en el plan
+          e.sets.push(first);
           entries.push(e);
         }));
       }

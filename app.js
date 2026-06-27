@@ -256,6 +256,7 @@ const app = {
       const user = await DB.createUser({ name: data.name, color: data.color, isMain: true });
       await DB.createPlan(user.id, planType, { activate: true });
       await DB.saveSettings({ mainUserId: user.id, activeUserId: user.id, seeded: true, version: 2, dataVersion: 8 });
+      await DB.migrate(); // deja el catálogo/plan ya unificado (cardio) desde el inicio
       host.remove();
       document.getElementById('appShell').style.display = '';
       this.settings = await DB.getSettings();
