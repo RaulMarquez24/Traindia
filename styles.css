@@ -406,6 +406,16 @@ textarea.inp { resize: vertical; line-height: 1.4; }
 .set-rpe { flex-shrink: 0; height: 34px; min-width: 34px; padding: 0 9px; border: 1px solid var(--line); border-radius: 10px; background: none; color: var(--ink-dim); font-size: 12px; font-weight: 700; cursor: pointer; font-variant-numeric: tabular-nums; display: inline-flex; align-items: center; justify-content: center; }
 .set-rpe.on { background: var(--strong-bg); border-color: var(--strong); color: var(--strong); }
 .set-extra .set-f { height: 32px; font-size: 13px; padding: 0 8px; }
+/* Cardio: etiqueta opcional por serie + fila de totales del ejercicio */
+.set-vals .set-label { flex: 2 1 60px; min-width: 0; text-align: left; }
+.ex-totals { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 8px 0 2px; padding: 8px 10px; background: var(--strong-bg); border-radius: 10px; }
+.ex-total-time { display: inline-flex; align-items: center; gap: 5px; font-weight: 700; font-size: 13px; color: var(--strong); white-space: nowrap; }
+.ex-total-time .ic { color: var(--strong); }
+.ex-total-f { flex: 1 1 80px; min-width: 0; height: 34px; padding: 0 10px; font-size: 14px; text-align: center; border-radius: 10px; }
+.detail-totals { display: flex; align-items: center; gap: 6px; margin-top: 6px; font-size: 12.5px; font-weight: 600; color: var(--strong); }
+.detail-totals .ic { color: var(--strong); flex-shrink: 0; }
+.metric-group-label { font-size: 11px; font-weight: 700; color: var(--ink-dim); text-transform: uppercase; letter-spacing: .03em; margin: 10px 0 4px; }
+.metric-group-label:first-child { margin-top: 0; }
 /* El número de serie va en el canalón izquierdo (alineado con el agarrador),
    fuera del flujo, para que los inputs arranquen en el borde del contenido. */
 .set-n { text-align: center; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: var(--ink-dim); }

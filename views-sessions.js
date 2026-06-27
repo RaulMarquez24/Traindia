@@ -7,13 +7,15 @@ const VSessions = (() => {
   // -------- helpers de modelo --------
   // Datos extra opcionales de los ejercicios de TIEMPO (cardio). Se eligen por
   // ejercicio (se recuerdan) y/o sobre la marcha; solo se muestran los activos.
+  // scope: 'set' = se registra en cada serie (intensidad); 'total' = se registra
+  // UNA vez por ejercicio (se lee de la máquina al terminar) y se guarda en entry.totals.
   const TIME_FIELDS = [
-    { key: 'distance', label: 'Distancia', unit: 'km', ph: 'km', step: '0.01' },
-    { key: 'kcal', label: 'Kcal', unit: 'kcal', ph: 'kcal', step: '1' },
-    { key: 'speed', label: 'Velocidad', unit: 'km/h', ph: 'km/h', step: '0.1' },
-    { key: 'incline', label: 'Inclinación', unit: '%', ph: 'incl %', step: '0.5' },
-    { key: 'level', label: 'Nivel', unit: '', ph: 'nivel', step: '1' },
-    { key: 'weight', label: 'Peso', unit: 'kg', ph: 'kg', step: '0.5' },
+    { key: 'distance', label: 'Distancia', unit: 'km', ph: 'km', step: '0.01', scope: 'total' },
+    { key: 'kcal', label: 'Kcal', unit: 'kcal', ph: 'kcal', step: '1', scope: 'total' },
+    { key: 'speed', label: 'Velocidad', unit: 'km/h', ph: 'km/h', step: '0.1', scope: 'set' },
+    { key: 'incline', label: 'Inclinación', unit: '%', ph: 'incl %', step: '0.5', scope: 'set' },
+    { key: 'level', label: 'Nivel', unit: '', ph: 'nivel', step: '1', scope: 'set' },
+    { key: 'weight', label: 'Peso', unit: 'kg', ph: 'kg', step: '0.5', scope: 'set' },
   ];
   const TIME_FIELD = Object.fromEntries(TIME_FIELDS.map(f => [f.key, f]));
   const DEFAULT_TIME_METRICS = ['distance', 'kcal'];
@@ -22,8 +24,20 @@ const VSessions = (() => {
   function timeActiveMetrics(entry) {
     const chosen = Array.isArray(entry.metrics) ? entry.metrics : DEFAULT_TIME_METRICS;
     const keys = new Set(chosen);
-    TIME_FIELDS.forEach(f => { if ((entry.sets || []).some(s => s[f.key])) keys.add(f.key); });
+    TIME_FIELDS.forEach(f => { if ((entry.sets || []).some(s => s[f.key]) || (entry.totals && entry.totals[f.key])) keys.add(f.key); });
     return TIME_FIELDS.filter(f => keys.has(f.key)).map(f => f.key);
+  }
+  // Métricas activas filtradas por scope (genérico: hoy solo cardio usa 'total').
+  function metricsForScope(entry, scope) {
+    return timeActiveMetrics(entry).filter(k => (TIME_FIELD[k].scope || 'set') === scope);
+  }
+  const timeSetMetrics = (entry) => metricsForScope(entry, 'set');     // van en cada serie
+  const timeTotalMetrics = (entry) => metricsForScope(entry, 'total'); // van como total del ejercicio
+  // ¿Esta entry de tiempo lleva totales? (cardio). Compat: sesiones viejas con distance/kcal por serie.
+  function entryHasTotals(entry) {
+    if (timeTotalMetrics(entry).length) return true;
+    if (entry.totals && Object.keys(entry.totals).some(k => entry.totals[k])) return true;
+    return (entry.sets || []).some(s => s.distance || s.kcal);
   }
   async function setExerciseMetrics(app, exId, keys) {
     if (!exId) return;
@@ -35,15 +49,23 @@ const VSessions = (() => {
     const ordered = TIME_FIELDS.filter(f => keys.includes(f.key)).map(f => f.key);
     const removed = timeActiveMetrics(entry).filter(k => !ordered.includes(k));
     (entry.sets || []).forEach(s => removed.forEach(k => { delete s[k]; }));
+    if (entry.totals) removed.forEach(k => { delete entry.totals[k]; }); // quita también los totales descartados
     entry.metrics = ordered;
     await setExerciseMetrics(app, entry.exerciseId, ordered);
   }
   function pickMetrics(app, entry, onDone) {
     const active = new Set(timeActiveMetrics(entry));
+    const opt = (f) => `<label class="metric-opt"><input type="checkbox" data-mk="${f.key}"${active.has(f.key) ? ' checked' : ''}><span>${f.label}${f.unit ? ` <em>(${f.unit})</em>` : ''}</span></label>`;
+    const totals = TIME_FIELDS.filter(f => f.scope === 'total');
+    const perSet = TIME_FIELDS.filter(f => (f.scope || 'set') === 'set');
     UI.modal({
       title: 'Datos a registrar',
-      bodyHTML: `<div class="metric-opts">${TIME_FIELDS.map(f => `<label class="metric-opt"><input type="checkbox" data-mk="${f.key}"${active.has(f.key) ? ' checked' : ''}><span>${f.label}${f.unit ? ` <em>(${f.unit})</em>` : ''}</span></label>`).join('')}</div>
-        <p class="field-hint">Se recuerdan para este ejercicio; podrás cambiarlos cuando quieras.</p>`,
+      bodyHTML: `
+        <div class="metric-group-label">Totales del ejercicio <span class="dim">(una vez)</span></div>
+        <div class="metric-opts">${totals.map(opt).join('')}</div>
+        <div class="metric-group-label">Por serie</div>
+        <div class="metric-opts">${perSet.map(opt).join('')}</div>
+        <p class="field-hint">Los totales se anotan una vez al final; lo de "por serie" en cada intervalo. Se recuerdan para este ejercicio.</p>`,
       actions: [
         { label: 'Cancelar', kind: 'ghost' },
         { label: 'Listo', kind: 'primary', onClick: async (root) => {
@@ -117,7 +139,7 @@ const VSessions = (() => {
   }
 
   function emptySet(type) {
-    if (type === 'time') return { time: '', distance: '', kcal: '', weight: '', speed: '', incline: '', level: '', done: false };
+    if (type === 'time') return { time: '', label: '', weight: '', speed: '', incline: '', level: '', done: false };
     if (type === 'reps') return { reps: '', load: '', loadMode: '', done: false };
     return { reps: '', weight: '', done: false };
   }
@@ -145,11 +167,12 @@ const VSessions = (() => {
     if (type === 'time') {
       const parts = [];
       const t = fmtTime(set.time); if (t) parts.push(t);
-      if (set.distance) parts.push(`${set.distance} km`);
-      if (set.kcal) parts.push(`${set.kcal} kcal`);
+      if (set.distance) parts.push(`${set.distance} km`); // compat: sesiones viejas con distancia por serie
+      if (set.kcal) parts.push(`${set.kcal} kcal`);       // compat
       if (set.weight) parts.push(`${set.weight} kg`);
       const ex = cardioExtra(set); if (ex) parts.push(ex);
       v = parts.join(' · ') || '0s';
+      if (set.label) v = `${set.label} · ${v}`;
     } else if (type === 'reps') {
       v = `${set.reps || 0} reps${loadSuffix(set)}`;
       (set.drops || []).filter(dropHasData).forEach(d => { v += ` → ${d.reps || 0}${d.load ? ` (${d.load}kg)` : ''}`; });
@@ -505,11 +528,11 @@ const VSessions = (() => {
           <div class="set-row">
             <span class="set-n">${si + 1}</span>
             <div class="set-vals">
-              <input class="inp set-f" data-f="timemin" data-ei="${ei}" data-si="${si}" type="number" min="0" value="${mm}" placeholder="min"${dis}><span class="set-x">:</span><input class="inp set-f" data-f="timesec" data-ei="${ei}" data-si="${si}" type="number" min="0" max="59" value="${ss}" placeholder="seg"${dis}>
+              <input class="inp set-f" data-f="timemin" data-ei="${ei}" data-si="${si}" type="number" min="0" value="${mm}" placeholder="min"${dis}><span class="set-x">:</span><input class="inp set-f" data-f="timesec" data-ei="${ei}" data-si="${si}" type="number" min="0" max="59" value="${ss}" placeholder="seg"${dis}><input class="inp set-f set-label" data-f="label" data-ei="${ei}" data-si="${si}" type="text" maxlength="14" value="${UI.esc(s.label || '')}" placeholder="etiqueta"${dis}>
             </div>
             <div class="set-acts">${effortBtn}${done}${rm}</div>
           </div>
-          ${(() => { const ms = timeActiveMetrics(entry); return ms.length ? `<div class="set-extra">${ms.map(k => { const f = TIME_FIELD[k]; return `<input class="inp set-f" data-f="${k}" data-ei="${ei}" data-si="${si}" type="number" min="0" step="${f.step}" value="${UI.esc(s[k] || '')}" placeholder="${f.ph}"${dis}>`; }).join('')}</div>` : ''; })()}
+          ${(() => { const ms = timeSetMetrics(entry); return ms.length ? `<div class="set-extra">${ms.map(k => { const f = TIME_FIELD[k]; return `<input class="inp set-f" data-f="${k}" data-ei="${ei}" data-si="${si}" type="number" min="0" step="${f.step}" value="${UI.esc(s[k] || '')}" placeholder="${f.ph}"${dis}>`; }).join('')}</div>` : ''; })()}
         </div>`;
       }
 
@@ -545,6 +568,33 @@ const VSessions = (() => {
     }).join('');
   }
 
+  // Fila de TOTALES del ejercicio (solo time/cardio): tiempo total auto-sumado +
+  // un input por cada métrica de scope 'total' activa (hoy distancia/kcal).
+  function timeTotalsHTML(entry, ei) {
+    if (entry.type !== 'time' || !entryHasTotals(entry)) return '';
+    const totalSec = (entry.sets || []).reduce((a, s) => a + (parseInt(s.time) || 0), 0);
+    const totals = entry.totals || {};
+    const fields = timeTotalMetrics(entry);
+    const inputs = fields.map(k => {
+      const f = TIME_FIELD[k];
+      return `<input class="inp ex-total-f" data-tf="${k}" data-ei="${ei}" type="number" min="0" step="${f.step}" value="${UI.esc(totals[k] || '')}" placeholder="${(f.unit || f.label)} tot.">`;
+    }).join('');
+    return `<div class="ex-totals"><span class="ex-total-time">${UI.icon('clock', 13)} <span class="ett-val">${fmtClock(totalSec)}</span></span>${inputs}</div>`;
+  }
+  // Recalcula los chips de tiempo total (solo lectura del DOM) al teclear min/seg.
+  function updateTotalTimes(root) {
+    root.querySelectorAll('.ex-card').forEach(card => {
+      const ett = card.querySelector('.ett-val');
+      if (!ett) return;
+      let sec = 0;
+      card.querySelectorAll('.set-row').forEach(r => {
+        const mm = r.querySelector('[data-f="timemin"]'), ss = r.querySelector('[data-f="timesec"]');
+        if (mm || ss) sec += (parseInt(mm && mm.value) || 0) * 60 + (parseInt(ss && ss.value) || 0);
+      });
+      ett.textContent = fmtClock(sec);
+    });
+  }
+
   function entryCardHTML(entry, ei, mode) {
     return `<div class="ex-card" data-ei="${ei}" data-sort-id="${ei}">
       <div class="ex-card-body">
@@ -558,6 +608,7 @@ const VSessions = (() => {
         </div>
         ${mode === 'live' ? lastTimeHTML(entry) : ''}
         <div class="set-list">${setRowsHTML(entry, ei, mode)}</div>
+        ${timeTotalsHTML(entry, ei)}
         ${entry.note ? `<div class="ex-note" data-note data-ei="${ei}"><span class="ex-note-txt">${UI.icon('edit', 13)} ${UI.esc(entry.note)}</span></div>` : ''}
         <div class="ex-card-foot">
           <button class="btn ghost small" data-add-set data-ei="${ei}">+ Serie</button>
@@ -591,6 +642,13 @@ const VSessions = (() => {
           delete s.timemin; delete s.timesec;
         }
       });
+    });
+    // totales del ejercicio (cardio): distancia/kcal una vez por entry
+    root.querySelectorAll('.ex-total-f').forEach(inp => {
+      const e = session.entries[+inp.dataset.ei];
+      if (!e) return;
+      e.totals = e.totals || {};
+      e.totals[inp.dataset.tf] = inp.value;
     });
   }
 
@@ -718,7 +776,7 @@ const VSessions = (() => {
     };
 
     // Autoguardado inmediato en cada tecla (delegado en root: sobrevive al redibujado).
-    root.addEventListener('input', () => { syncLive(root, s); app.persistLive(); });
+    root.addEventListener('input', () => { syncLive(root, s); app.persistLive(); updateTotalTimes(root); });
 
     bindEntries();
     UI.makeSortable(root.querySelector('.live-entries'), {
@@ -1031,7 +1089,18 @@ const VSessions = (() => {
         return `<li><span class="set-n-sm">${i + 1}</span><span>${UI.esc(setDisplay(e.type || 'weight', set))}</span></li>`;
       }).join('');
       const note = e.note ? `<div class="ex-note"><span class="ex-note-txt">${UI.icon('edit', 13)} ${UI.esc(e.note)}</span></div>` : '';
-      return `<div class="block"><div class="block-label detail-ex-head"><span>${UI.esc(e.name)}</span><button class="icon-btn" data-ai-done data-ei="${ei}" title="Consultar a una IA sobre este ejercicio">${UI.icon('chat', 16)}</button></div><ul class="set-detail-list">${rows}</ul>${note}</div>`;
+      const totalsLine = (() => {
+        if ((e.type || 'weight') !== 'time' || !entryHasTotals(e)) return '';
+        const totalSec = (e.sets || []).reduce((a, set) => a + (parseInt(set.time) || 0), 0);
+        const t = e.totals || {};
+        const dist = t.distance ? parseFloat(t.distance) : (e.sets || []).reduce((a, set) => a + (parseFloat(set.distance) || 0), 0); // compat viejas
+        const kc = t.kcal ? parseFloat(t.kcal) : (e.sets || []).reduce((a, set) => a + (parseFloat(set.kcal) || 0), 0);
+        const parts = [`${fmtClock(totalSec)} total`];
+        if (dist) parts.push(`${Math.round(dist * 100) / 100} km`);
+        if (kc) parts.push(`${Math.round(kc)} kcal`);
+        return `<div class="detail-totals">${UI.icon('clock', 13)} ${parts.join(' · ')}</div>`;
+      })();
+      return `<div class="block"><div class="block-label detail-ex-head"><span>${UI.esc(e.name)}</span><button class="icon-btn" data-ai-done data-ei="${ei}" title="Consultar a una IA sobre este ejercicio">${UI.icon('chat', 16)}</button></div><ul class="set-detail-list">${rows}</ul>${totalsLine}${note}</div>`;
     }).join('');
 
     return `<div class="section">
@@ -1135,6 +1204,7 @@ const VSessions = (() => {
         pickLoad(set, (mode, kg) => { set.loadMode = mode || undefined; set.load = mode ? kg : ''; render(root); });
       }));
       root.querySelector('#sesAddEx').addEventListener('click', () => { syncMeta(root); addExerciseToSession(app, draft, () => render(root)); });
+      if (!root._ttBound) { root.addEventListener('input', () => updateTotalTimes(root)); root._ttBound = true; } // total de tiempo en vivo al teclear
     };
 
     UI.modal({
