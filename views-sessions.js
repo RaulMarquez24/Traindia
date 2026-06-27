@@ -103,6 +103,24 @@ const VSessions = (() => {
     });
   }
 
+  // Etiqueta corta de una serie de cardio (andar/correr…). Ofrece como atajo las
+  // etiquetas ya usadas en este ejercicio + escribir una nueva. onPick(label) ('' = quitar).
+  function pickLabel(entry, current, onPick) {
+    const used = [...new Set((entry.sets || []).map(s => (s.label || '').trim()).filter(Boolean))];
+    UI.modal({
+      title: 'Etiqueta de la serie',
+      bodyHTML: `
+        ${used.length ? `<div class="effort-pick" id="lblChips">${used.map(l => `<button type="button" class="effort-opt${l === current ? ' sel' : ''}" data-lbl="${UI.esc(l)}">${UI.esc(l)}</button>`).join('')}</div>` : ''}
+        ${UI.field('Escribir', `<input class="inp" name="label" type="text" maxlength="14" value="${UI.esc(current || '')}" placeholder="andar, correr, sprint…">`)}
+        <p class="field-hint">Toca una ya usada o escribe una nueva. Vacía para quitarla.</p>`,
+      actions: [
+        { label: 'Quitar', kind: 'ghost', onClick: () => onPick('') },
+        { label: 'Guardar', kind: 'primary', onClick: (root) => onPick((root.querySelector('input[name="label"]').value || '').trim()) },
+      ],
+      onMount: (root) => root.querySelectorAll('[data-lbl]').forEach(b => b.addEventListener('click', () => { UI.closeModal(root); onPick(b.dataset.lbl); })),
+    });
+  }
+
   // Carga de una serie de peso corporal: peso corporal / + lastre / − asistencia + kg.
   // onPick(loadMode, kg) — loadMode '' = peso corporal.
   function pickLoad(current, onPick) {
@@ -528,7 +546,7 @@ const VSessions = (() => {
           <div class="set-row">
             <span class="set-n">${si + 1}</span>
             <div class="set-vals">
-              <input class="inp set-f" data-f="timemin" data-ei="${ei}" data-si="${si}" type="number" min="0" value="${mm}" placeholder="min"${dis}><span class="set-x">:</span><input class="inp set-f" data-f="timesec" data-ei="${ei}" data-si="${si}" type="number" min="0" max="59" value="${ss}" placeholder="seg"${dis}><input class="inp set-f set-label" data-f="label" data-ei="${ei}" data-si="${si}" type="text" maxlength="14" value="${UI.esc(s.label || '')}" placeholder="etiqueta"${dis}>
+              <input class="inp set-f" data-f="timemin" data-ei="${ei}" data-si="${si}" type="number" min="0" value="${mm}" placeholder="min"${dis}><span class="set-x">:</span><input class="inp set-f" data-f="timesec" data-ei="${ei}" data-si="${si}" type="number" min="0" max="59" value="${ss}" placeholder="seg"${dis}><button type="button" class="set-label-chip${s.label ? ' on' : ''}" data-set-label data-ei="${ei}" data-si="${si}"${dis} title="Etiqueta de la serie">${s.label ? UI.esc(s.label) : UI.icon('tag', 14)}</button>
             </div>
             <div class="set-acts">${effortBtn}${done}${rm}</div>
           </div>
@@ -762,6 +780,10 @@ const VSessions = (() => {
       root.querySelectorAll('[data-set-load]').forEach(b => b.addEventListener('click', () => {
         sync(); const set = s.entries[+b.dataset.ei].sets[+b.dataset.si];
         pickLoad(set, (mode, kg) => { set.loadMode = mode || undefined; set.load = mode ? kg : ''; app.persistLive(); redraw(); });
+      }));
+      root.querySelectorAll('[data-set-label]').forEach(b => b.addEventListener('click', () => {
+        sync(); const entry = s.entries[+b.dataset.ei], set = entry.sets[+b.dataset.si];
+        pickLabel(entry, set.label, (lbl) => { set.label = lbl || undefined; app.persistLive(); redraw(); });
       }));
     }
 
@@ -1202,6 +1224,10 @@ const VSessions = (() => {
       root.querySelectorAll('[data-set-load]').forEach(b => b.addEventListener('click', () => {
         syncMeta(root); const set = draft.entries[+b.dataset.ei].sets[+b.dataset.si];
         pickLoad(set, (mode, kg) => { set.loadMode = mode || undefined; set.load = mode ? kg : ''; render(root); });
+      }));
+      root.querySelectorAll('[data-set-label]').forEach(b => b.addEventListener('click', () => {
+        syncMeta(root); const entry = draft.entries[+b.dataset.ei], set = entry.sets[+b.dataset.si];
+        pickLabel(entry, set.label, (lbl) => { set.label = lbl || undefined; render(root); });
       }));
       root.querySelector('#sesAddEx').addEventListener('click', () => { syncMeta(root); addExerciseToSession(app, draft, () => render(root)); });
       if (!root._ttBound) { root.addEventListener('input', () => updateTotalTimes(root)); root._ttBound = true; } // total de tiempo en vivo al teclear
