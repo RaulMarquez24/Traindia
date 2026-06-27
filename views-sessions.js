@@ -121,6 +121,41 @@ const VSessions = (() => {
     });
   }
 
+  // Tiempo TOTAL del ejercicio (cardio): editable; vacío = suma de las series.
+  // onPick(totalSec|null) — null = volver a usar la suma.
+  function pickTotalTime(entry, onPick) {
+    const sumSec = (entry.sets || []).reduce((a, s) => a + (parseInt(s.time) || 0), 0);
+    const cur = (entry.totals && entry.totals.time) ? parseInt(entry.totals.time) : '';
+    const mm = cur !== '' ? Math.floor(cur / 60) : '';
+    const ss = cur !== '' ? cur % 60 : '';
+    UI.modal({
+      title: 'Tiempo total',
+      bodyHTML: `<div class="set-row" style="grid-template-columns:1fr auto 1fr;max-width:200px">
+          <input class="inp set-f" id="ttMin" type="number" min="0" value="${mm}" placeholder="min"><span class="set-x">:</span><input class="inp set-f" id="ttSec" type="number" min="0" max="59" value="${ss}" placeholder="seg">
+        </div>
+        <p class="field-hint">Déjalo vacío para usar la suma de las series (${fmtClock(sumSec)}). Útil si solo registras los intervalos importantes.</p>`,
+      actions: [
+        { label: 'Usar la suma', kind: 'ghost', onClick: () => onPick(null) },
+        { label: 'Guardar', kind: 'primary', onClick: (root) => {
+          const m = parseInt(root.querySelector('#ttMin').value) || 0, s = parseInt(root.querySelector('#ttSec').value) || 0;
+          const total = m * 60 + s; onPick(total > 0 ? total : null);
+        } },
+      ],
+    });
+  }
+
+  // Repetir el bloque de series del ejercicio ×N (intervalos repetitivos).
+  function pickRepeat(onPick) {
+    UI.modal({
+      title: 'Repetir bloque',
+      bodyHTML: `<p class="modal-text">Duplica todas las series de este ejercicio.</p>
+        <div class="effort-pick" id="repN">${[2, 3, 4, 5, 6].map(n => `<button type="button" class="effort-opt" data-n="${n}">×${n}</button>`).join('')}</div>
+        <p class="field-hint">×3 = el bloque queda 3 veces en total.</p>`,
+      actions: [{ label: 'Cancelar', kind: 'ghost' }],
+      onMount: (root) => root.querySelectorAll('[data-n]').forEach(b => b.addEventListener('click', () => { UI.closeModal(root); onPick(parseInt(b.dataset.n)); })),
+    });
+  }
+
   // Carga de una serie de peso corporal: peso corporal / + lastre / − asistencia + kg.
   // onPick(loadMode, kg) — loadMode '' = peso corporal.
   function pickLoad(current, onPick) {
@@ -164,6 +199,13 @@ const VSessions = (() => {
   function emptyDrop(type) {
     if (type === 'reps') return { reps: '', load: '' };
     return { reps: '', weight: '' };
+  }
+  // Copia una serie con sus valores (para "+ Serie copia anterior" y duplicar/repetir).
+  // No copia los dropsets ni el estado "hecha".
+  function cloneSet(set) {
+    const c = { ...set, done: false };
+    delete c.drops;
+    return c;
   }
 
   function dropHasData(d) { return d && (d.reps || d.weight || d.load); }
@@ -547,6 +589,8 @@ const VSessions = (() => {
       const effortBtn = (mode === 'live' || mode === 'edit')
         ? `<button type="button" class="set-rpe${s.effort ? ' on' : ''}" data-set-effort data-ei="${ei}" data-si="${si}" title="Esfuerzo de la serie">${s.effort ? UI.esc(s.effort) : '%'}</button>`
         : '';
+      // Pie de serie: duplicar (todos) + dropset (peso/reps). Oculto si está bloqueada (en vivo).
+      const footBtns = locked ? '' : `<div class="set-foot"><button type="button" class="set-drop-btn" data-dup-set data-ei="${ei}" data-si="${si}">↻ duplicar</button>${type !== 'time' ? ` <button type="button" class="set-drop-btn" data-add-drop data-ei="${ei}" data-si="${si}">↧ dropset</button>` : ''}</div>`;
 
       if (type === 'time') {
         const total = parseInt(s.time);
@@ -562,6 +606,7 @@ const VSessions = (() => {
             <div class="set-acts">${effortBtn}${done}${rm}</div>
           </div>
           ${(() => { const ms = timeSetMetrics(entry); return ms.length ? `<div class="set-extra">${ms.map(k => { const f = TIME_FIELD[k]; return `<input class="inp set-f" data-f="${k}" data-ei="${ei}" data-si="${si}" type="number" min="0" step="${f.step}" value="${UI.esc(s[k] || '')}" placeholder="${f.ph}"${dis}>`; }).join('')}</div>` : ''; })()}
+          ${footBtns}
         </div>`;
       }
 
@@ -592,7 +637,7 @@ const VSessions = (() => {
           <div class="set-acts">${effortBtn}${done}${rm}</div>
         </div>
         ${drops}
-        ${locked ? '' : `<div class="set-foot"><button type="button" class="set-drop-btn" data-add-drop data-ei="${ei}" data-si="${si}">↧ dropset</button></div>`}
+        ${footBtns}
       </div>`;
     }).join('');
   }
@@ -601,20 +646,24 @@ const VSessions = (() => {
   // un input por cada métrica de scope 'total' activa (hoy distancia/kcal).
   function timeTotalsHTML(entry, ei) {
     if (entry.type !== 'time' || !entryHasTotals(entry)) return '';
-    const totalSec = (entry.sets || []).reduce((a, s) => a + (parseInt(s.time) || 0), 0);
     const totals = entry.totals || {};
+    const sumSec = (entry.sets || []).reduce((a, s) => a + (parseInt(s.time) || 0), 0);
+    const overridden = totals.time != null && totals.time !== '';
+    const totalSec = overridden ? parseInt(totals.time) : sumSec;
     const fields = timeTotalMetrics(entry);
     const inputs = fields.map(k => {
       const f = TIME_FIELD[k];
       return `<input class="inp ex-total-f" data-tf="${k}" data-ei="${ei}" type="number" min="0" step="${f.step}" value="${UI.esc(totals[k] || '')}" placeholder="${(f.unit || f.label)} tot.">`;
     }).join('');
-    return `<div class="ex-totals"><span class="ex-total-time">${UI.icon('clock', 13)} <span class="ett-val">${fmtClock(totalSec)}</span></span>${inputs}</div>`;
+    // Tiempo total: tocable para editar; vacío = suma de las series.
+    return `<div class="ex-totals"><button type="button" class="ex-total-time${overridden ? ' on' : ''}" data-set-totaltime data-ei="${ei}"${overridden ? ' data-fixed="1"' : ''} title="Editar tiempo total">${UI.icon('clock', 13)} <span class="ett-val">${fmtClock(totalSec)}</span></button>${inputs}</div>`;
   }
   // Recalcula los chips de tiempo total (solo lectura del DOM) al teclear min/seg.
   function updateTotalTimes(root) {
     root.querySelectorAll('.ex-card').forEach(card => {
+      const btn = card.querySelector('.ex-total-time');
       const ett = card.querySelector('.ett-val');
-      if (!ett) return;
+      if (!ett || !btn || btn.dataset.fixed) return; // tiempo total manual: no recalcular
       let sec = 0;
       card.querySelectorAll('.set-row').forEach(r => {
         const mm = r.querySelector('[data-f="timemin"]'), ss = r.querySelector('[data-f="timesec"]');
@@ -641,6 +690,7 @@ const VSessions = (() => {
         ${entry.note ? `<div class="ex-note" data-note data-ei="${ei}"><span class="ex-note-txt">${UI.icon('edit', 13)} ${UI.esc(entry.note)}</span></div>` : ''}
         <div class="ex-card-foot">
           <button class="btn ghost small" data-add-set data-ei="${ei}">+ Serie</button>
+          ${(entry.sets || []).length ? `<button type="button" class="metric-add" data-repeat-block data-ei="${ei}">↻ repetir</button>` : ''}
           ${entry.type === 'time' ? `<button type="button" class="metric-add" data-metrics data-ei="${ei}">${UI.icon('plus', 13)} datos</button>` : ''}
           ${entry.note ? '' : `<button type="button" class="metric-add" data-note data-ei="${ei}">${UI.icon('edit', 13)} nota</button>`}
         </div>
@@ -756,7 +806,19 @@ const VSessions = (() => {
     // Handlers de cada tarjeta. Se re-enganchan tras cada redibujado de la lista.
     function bindEntries() {
       root.querySelectorAll('[data-add-set]').forEach(b => b.addEventListener('click', () => {
-        sync(); const e = s.entries[+b.dataset.ei]; e.sets.push(emptySet(e.type)); redraw();
+        sync(); const e = s.entries[+b.dataset.ei]; const last = e.sets[e.sets.length - 1];
+        e.sets.push(last ? cloneSet(last) : emptySet(e.type)); redraw(); // copia la anterior
+      }));
+      root.querySelectorAll('[data-dup-set]').forEach(b => b.addEventListener('click', () => {
+        sync(); const e = s.entries[+b.dataset.ei], si = +b.dataset.si; e.sets.splice(si + 1, 0, cloneSet(e.sets[si])); redraw();
+      }));
+      root.querySelectorAll('[data-repeat-block]').forEach(b => b.addEventListener('click', () => {
+        sync(); const e = s.entries[+b.dataset.ei];
+        pickRepeat((n) => { const snap = e.sets.slice(); for (let k = 1; k < n; k++) snap.forEach(st => e.sets.push(cloneSet(st))); app.persistLive(); redraw(); });
+      }));
+      root.querySelectorAll('[data-set-totaltime]').forEach(b => b.addEventListener('click', () => {
+        sync(); const entry = s.entries[+b.dataset.ei];
+        pickTotalTime(entry, (sec) => { entry.totals = entry.totals || {}; if (sec == null) delete entry.totals.time; else entry.totals.time = sec; app.persistLive(); redraw(); });
       }));
       root.querySelectorAll('[data-rm-set]').forEach(b => b.addEventListener('click', () => {
         sync(); s.entries[+b.dataset.ei].sets.splice(+b.dataset.si, 1); redraw();
@@ -1124,8 +1186,8 @@ const VSessions = (() => {
       const note = e.note ? `<div class="ex-note"><span class="ex-note-txt">${UI.icon('edit', 13)} ${UI.esc(e.note)}</span></div>` : '';
       const totalsLine = (() => {
         if ((e.type || 'weight') !== 'time' || !entryHasTotals(e)) return '';
-        const totalSec = (e.sets || []).reduce((a, set) => a + (parseInt(set.time) || 0), 0);
         const t = e.totals || {};
+        const totalSec = (t.time != null && t.time !== '') ? parseInt(t.time) : (e.sets || []).reduce((a, set) => a + (parseInt(set.time) || 0), 0);
         const dist = t.distance ? parseFloat(t.distance) : (e.sets || []).reduce((a, set) => a + (parseFloat(set.distance) || 0), 0); // compat viejas
         const kc = t.kcal ? parseFloat(t.kcal) : (e.sets || []).reduce((a, set) => a + (parseFloat(set.kcal) || 0), 0);
         const parts = [`${fmtClock(totalSec)} total`];
@@ -1211,7 +1273,10 @@ const VSessions = (() => {
     };
 
     const bindEditorBody = (root) => {
-      root.querySelectorAll('[data-add-set]').forEach(b => b.addEventListener('click', () => { syncMeta(root); draft.entries[+b.dataset.ei].sets.push(emptySet(draft.entries[+b.dataset.ei].type)); render(root); }));
+      root.querySelectorAll('[data-add-set]').forEach(b => b.addEventListener('click', () => { syncMeta(root); const e = draft.entries[+b.dataset.ei]; const last = e.sets[e.sets.length - 1]; e.sets.push(last ? cloneSet(last) : emptySet(e.type)); render(root); }));
+      root.querySelectorAll('[data-dup-set]').forEach(b => b.addEventListener('click', () => { syncMeta(root); const e = draft.entries[+b.dataset.ei], si = +b.dataset.si; e.sets.splice(si + 1, 0, cloneSet(e.sets[si])); render(root); }));
+      root.querySelectorAll('[data-repeat-block]').forEach(b => b.addEventListener('click', () => { syncMeta(root); const e = draft.entries[+b.dataset.ei]; pickRepeat((n) => { const snap = e.sets.slice(); for (let k = 1; k < n; k++) snap.forEach(st => e.sets.push(cloneSet(st))); render(root); }); }));
+      root.querySelectorAll('[data-set-totaltime]').forEach(b => b.addEventListener('click', () => { syncMeta(root); const entry = draft.entries[+b.dataset.ei]; pickTotalTime(entry, (sec) => { entry.totals = entry.totals || {}; if (sec == null) delete entry.totals.time; else entry.totals.time = sec; render(root); }); }));
       root.querySelectorAll('[data-rm-set]').forEach(b => b.addEventListener('click', () => { syncMeta(root); draft.entries[+b.dataset.ei].sets.splice(+b.dataset.si, 1); render(root); }));
       root.querySelectorAll('[data-add-drop]').forEach(b => b.addEventListener('click', () => { syncMeta(root); const set = draft.entries[+b.dataset.ei].sets[+b.dataset.si]; (set.drops = set.drops || []).push(emptyDrop(draft.entries[+b.dataset.ei].type)); render(root); }));
       root.querySelectorAll('[data-rm-drop]').forEach(b => b.addEventListener('click', () => { syncMeta(root); const set = draft.entries[+b.dataset.ei].sets[+b.dataset.si]; if (set.drops) set.drops.splice(+b.dataset.di, 1); render(root); }));

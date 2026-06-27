@@ -411,7 +411,8 @@ textarea.inp { resize: vertical; line-height: 1.4; }
 .set-label-chip.on { background: var(--strong-bg); border-color: var(--strong); color: var(--strong); }
 .set-label-chip:disabled { opacity: .55; }
 .ex-totals { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 8px 0 2px; padding: 8px 10px; background: var(--strong-bg); border-radius: 10px; }
-.ex-total-time { display: inline-flex; align-items: center; gap: 5px; font-weight: 700; font-size: 13px; color: var(--strong); white-space: nowrap; }
+.ex-total-time { display: inline-flex; align-items: center; gap: 5px; height: 34px; padding: 0 9px; font-weight: 700; font-size: 13px; color: var(--strong); white-space: nowrap; background: none; border: 1px solid transparent; border-radius: 10px; cursor: pointer; }
+.ex-total-time.on { border-color: var(--strong); background: var(--bg-card); } /* tiempo total manual */
 .ex-total-time .ic { color: var(--strong); }
 .ex-total-f { flex: 1 1 80px; min-width: 0; height: 34px; padding: 0 10px; font-size: 14px; text-align: center; border-radius: 10px; }
 .detail-totals { display: flex; align-items: center; gap: 6px; margin-top: 6px; font-size: 12.5px; font-weight: 600; color: var(--strong); }

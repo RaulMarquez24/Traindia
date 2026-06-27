@@ -108,13 +108,15 @@ const VProgress = (() => {
         // Sin totals (sesiones viejas) → se suman por serie como antes.
         const hasTotals = e.totals && (e.totals.distance || e.totals.kcal);
         if (hasTotals) { distance += parseFloat(e.totals.distance) || 0; kcal += parseFloat(e.totals.kcal) || 0; }
+        const hasTotalTime = e.totals && e.totals.time != null && e.totals.time !== '';
+        if (hasTotalTime) totalTime += parseInt(e.totals.time) || 0; // tiempo total manual (cardio)
         (e.sets || []).forEach(set => {
           const r = parseFloat(set.reps) || 0, w = parseFloat(set.weight) || 0, t = parseFloat(set.time) || 0;
           if (w > maxWeight) maxWeight = w;
           if (r > maxReps) maxReps = r;
           if (t > maxTime) maxTime = t;
           volume += r * w;
-          totalTime += t;
+          if (!hasTotalTime) totalTime += t;
           if (!hasTotals) { distance += parseFloat(set.distance) || 0; kcal += parseFloat(set.kcal) || 0; }
           if (w > 0 && (!bestW || w > bestW.w || (w === bestW.w && r > bestW.r))) bestW = { w, r };
           if (r > 0 && (!bestR || r > bestR.r || (r === bestR.r && w > bestR.w))) bestR = { w, r };
