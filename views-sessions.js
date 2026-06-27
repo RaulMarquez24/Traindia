@@ -112,7 +112,7 @@ const VSessions = (() => {
       title: 'Etiqueta de la serie',
       bodyHTML: `
         ${used.length ? `<div class="effort-pick" id="lblChips">${used.map(l => `<button type="button" class="effort-opt${l === current ? ' sel' : ''}" data-lbl="${UI.esc(l)}">${UI.esc(l)}</button>`).join('')}</div>` : ''}
-        ${UI.field('Escribir', `<input class="inp" name="label" type="text" maxlength="14" value="${UI.esc(current || '')}" placeholder="andar, correr, sprint…">`)}
+        ${UI.field('Escribir', `<input class="inp" name="label" type="text" maxlength="18" value="${UI.esc(current || '')}" placeholder="andar, correr, sprint…">`)}
         <p class="field-hint">Toca una ya usada o escribe una nueva. Vacía para quitarla.</p>`,
       actions: [
         { label: 'Quitar', kind: 'ghost', onClick: () => onPick('') },
@@ -642,7 +642,7 @@ const VSessions = (() => {
           <div class="set-row">
             <span class="set-n">${si + 1}</span>
             <div class="set-vals">
-              <input class="inp set-f" data-f="timemin" data-ei="${ei}" data-si="${si}" type="number" min="0" value="${mm}" placeholder="min"${dis}><span class="set-x">:</span><input class="inp set-f" data-f="timesec" data-ei="${ei}" data-si="${si}" type="number" min="0" max="59" value="${ss}" placeholder="seg"${dis}><button type="button" class="set-label-chip${s.label ? ' on' : ''}" data-set-label data-ei="${ei}" data-si="${si}"${dis} title="Etiqueta de la serie">${s.label ? UI.esc(s.label) : UI.icon('tag', 14)}</button>
+              <input class="inp set-f" data-f="timemin" data-ei="${ei}" data-si="${si}" type="number" min="0" value="${mm}" placeholder="min"${dis}><span class="set-x">:</span><input class="inp set-f" data-f="timesec" data-ei="${ei}" data-si="${si}" type="number" min="0" max="59" value="${ss}" placeholder="seg"${dis}><button type="button" class="set-label-chip${s.label ? ' on' : ''}" data-set-label data-ei="${ei}" data-si="${si}"${dis} title="${s.label ? UI.esc(s.label) : 'Etiqueta de la serie'}">${s.label ? `<span class="lc-txt">${UI.esc(s.label)}</span>` : UI.icon('tag', 14)}</button>
             </div>
             <div class="set-acts">${effortBtn}${done}${rm}</div>
           </div>

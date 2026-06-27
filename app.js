@@ -413,7 +413,8 @@ const app = {
         </div>
       </div>`).join('');
     return `<div class="section">
-      <p class="section-intro">Puntos de restauración guardados en este dispositivo antes de cambios importantes. Se conservan como mucho <strong>2</strong> para no ocupar espacio: al crear una nueva se borra la más antigua. Para mudarte de móvil usa mejor <strong>Exportar</strong> en Datos.</p>
+      <p class="section-intro">Puntos de restauración guardados <strong>en este dispositivo</strong> antes de cambios importantes. Se conservan como mucho <strong>2</strong> (al crear una nueva se borra la más antigua).</p>
+      <p class="section-intro" style="color:var(--priority)">⚠️ Viven aquí dentro: si borras los datos de la app, la desinstalas o limpias el navegador, <strong>se pierden igual que el resto</strong>. Para una copia de verdad segura, usa <strong>Exportar</strong> en Datos y guarda el archivo fuera del móvil.</p>
       ${list.length ? rows : '<div class="empty-state"><p class="dim">Aún no hay copias internas.</p></div>'}
     </div>`;
   },

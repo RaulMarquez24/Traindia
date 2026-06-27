@@ -407,7 +407,8 @@ textarea.inp { resize: vertical; line-height: 1.4; }
 .set-rpe.on { background: var(--strong-bg); border-color: var(--strong); color: var(--strong); }
 .set-extra .set-f { height: 32px; font-size: 13px; padding: 0 8px; }
 /* Cardio: etiqueta opcional por serie + fila de totales del ejercicio */
-.set-label-chip { flex: 0 0 auto; height: 34px; min-width: 34px; max-width: 120px; padding: 0 9px; border: 1px solid var(--line); border-radius: 10px; background: none; color: var(--ink-dim); font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: inline-flex; align-items: center; justify-content: center; gap: 4px; }
+.set-label-chip { flex: 0 1 auto; height: 34px; min-width: 34px; max-width: 110px; padding: 0 9px; border: 1px solid var(--line); border-radius: 10px; background: none; color: var(--ink-dim); font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; overflow: hidden; display: inline-flex; align-items: center; justify-content: center; gap: 4px; }
+.set-label-chip .lc-txt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .set-label-chip.on { background: var(--strong-bg); border-color: var(--strong); color: var(--strong); }
 .set-label-chip:disabled { opacity: .55; }
 .ex-totals { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 8px 0 2px; padding: 8px 10px; background: var(--strong-bg); border-radius: 10px; }
@@ -417,7 +418,7 @@ textarea.inp { resize: vertical; line-height: 1.4; }
 .ex-total-f { flex: 1 1 80px; min-width: 0; height: 34px; padding: 0 10px; font-size: 14px; text-align: center; border-radius: 10px; }
 .detail-totals { display: flex; align-items: center; gap: 6px; margin-top: 6px; font-size: 12.5px; font-weight: 600; color: var(--strong); }
 .detail-totals .ic { color: var(--strong); flex-shrink: 0; }
-.ex-variant { font-size: 11px; font-weight: 600; color: var(--strong); background: var(--strong-bg); padding: 1px 7px; border-radius: 999px; white-space: nowrap; }
+.ex-variant { display: inline-block; max-width: 160px; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; font-size: 11px; font-weight: 600; color: var(--strong); background: var(--strong-bg); padding: 1px 7px; border-radius: 999px; white-space: nowrap; }
 .ex-label-row { margin-bottom: 6px; }
 .ed-ex-label { width: 96px; flex: 0 0 auto; font-size: 12px; padding: 4px 8px; height: 30px; }
 .rep-row { max-width: 160px; margin-bottom: 8px; }
