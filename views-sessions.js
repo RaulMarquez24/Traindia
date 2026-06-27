@@ -277,7 +277,20 @@ const VSessions = (() => {
     if (type === 'reps') return parseFloat(set.reps) || 0;
     return parseFloat(set.weight) || 0;
   }
+  // Mejor marca de UNA entry para récords. Cardio (tiempo con totales) → distancia
+  // TOTAL de la sesión. Isométricos → tiempo máx de aguante. Resto → peso/reps máx.
+  function entryBest(entry) {
+    const type = entry.type || 'weight';
+    if (type === 'time' && entryHasTotals(entry)) {
+      const dist = (entry.totals && entry.totals.distance) ? parseFloat(entry.totals.distance)
+        : (entry.sets || []).reduce((a, s) => a + (parseFloat(s.distance) || 0), 0);
+      return { metric: 'distance', value: Math.round((dist || 0) * 100) / 100 };
+    }
+    let best = 0; (entry.sets || []).forEach(st => { const m = metricOf(type, st); if (m > best) best = m; });
+    return { metric: type, value: best };
+  }
   function prValueText(type, value) {
+    if (type === 'distance') return value + ' km';
     if (type === 'time') return fmtTime(value) || (value + 's');
     if (type === 'reps') return value + ' reps';
     return value + ' kg';
@@ -287,10 +300,8 @@ const VSessions = (() => {
     const map = {};
     sessions.filter(s => !s.draft && s.id !== excludeId).forEach(sess => (sess.entries || []).forEach(e => {
       const k = keyForEntry(e); if (!k) return;
-      const type = e.type || 'weight';
-      let best = 0;
-      (e.sets || []).forEach(st => { const m = metricOf(type, st); if (m > best) best = m; });
-      if (best > 0 && (!map[k] || best > map[k].best)) map[k] = { type, best, date: sess.date };
+      const { metric, value } = entryBest(e);
+      if (value > 0 && (!map[k] || value > map[k].best)) map[k] = { type: metric, best: value, date: sess.date };
     }));
     return map;
   }
@@ -299,12 +310,12 @@ const VSessions = (() => {
   function detectPRs(session) {
     const prs = [];
     (session.entries || []).forEach(e => {
-      const k = keyForEntry(e), type = e.type || 'weight';
-      let best = 0; (e.sets || []).forEach(st => { const m = metricOf(type, st); if (m > best) best = m; });
-      if (best <= 0) return;
+      const k = keyForEntry(e);
+      const { metric, value } = entryBest(e);
+      if (value <= 0) return;
       const prev = (_prMap && _prMap[k]) ? _prMap[k].best : 0;
-      if (prev === 0) prs.push({ name: e.name, type, value: best, prev: 0, first: true });
-      else if (best > prev) prs.push({ name: e.name, type, value: best, prev });
+      if (prev === 0) prs.push({ name: e.name, type: metric, value, prev: 0, first: true });
+      else if (value > prev) prs.push({ name: e.name, type: metric, value, prev });
     });
     return prs;
   }
@@ -313,20 +324,20 @@ const VSessions = (() => {
   function recomputePRs(session, others) {
     const prs = [];
     (session.entries || []).forEach(e => {
-      const k = keyForEntry(e), type = e.type || 'weight';
-      let best = 0; (e.sets || []).forEach(st => { const m = metricOf(type, st); if (m > best) best = m; });
-      if (best <= 0) return;
+      const k = keyForEntry(e);
+      const { metric, value } = entryBest(e);
+      if (value <= 0) return;
       let prev = 0;
       others.forEach(os => {
         const before = (os.date || '') < (session.date || '') || ((os.date || '') === (session.date || '') && (os.createdAt || 0) < (session.createdAt || 0));
         if (!before) return;
         (os.entries || []).forEach(oe => {
           if (keyForEntry(oe) !== k) return;
-          (oe.sets || []).forEach(st => { const m = metricOf(oe.type || 'weight', st); if (m > prev) prev = m; });
+          const v = entryBest(oe).value; if (v > prev) prev = v;
         });
       });
-      if (prev === 0) prs.push({ name: e.name, type, value: best, prev: 0, first: true });
-      else if (best > prev) prs.push({ name: e.name, type, value: best, prev });
+      if (prev === 0) prs.push({ name: e.name, type: metric, value, prev: 0, first: true });
+      else if (value > prev) prs.push({ name: e.name, type: metric, value, prev });
     });
     return prs;
   }

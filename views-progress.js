@@ -18,11 +18,22 @@ const VProgress = (() => {
     { key: 'volume', label: 'Volumen (kg)' },
     { key: 'maxReps', label: 'Reps máx' },
   ];
-  const TIME_METRICS = [
-    { key: 'maxTime', label: 'Tiempo máx' },
+  // Cardio (distancia/kcal totales): la métrica de tiempo es el TOTAL de la sesión.
+  const TIME_METRICS_CARDIO = [
     { key: 'distance', label: 'Distancia (km)' },
+    { key: 'totalTime', label: 'Tiempo total' },
     { key: 'kcal', label: 'Kcal' },
   ];
+  // Isométricos (plancha, dead hang…): el récord es el aguante máximo de una serie.
+  const TIME_METRICS_HOLD = [
+    { key: 'maxTime', label: 'Tiempo máx' },
+  ];
+  const TIME_METRICS = TIME_METRICS_CARDIO.concat(TIME_METRICS_HOLD); // para mapear etiquetas
+  // ¿Ejercicio de cardio (tiempo con totales)? Si entre sus metrics hay distancia/kcal.
+  function isCardioEx(ex) {
+    return ex && ex.type === 'time' && Array.isArray(ex.metrics) && (ex.metrics.includes('distance') || ex.metrics.includes('kcal'));
+  }
+  const timeMetricsFor = (ex) => (isCardioEx(ex) ? TIME_METRICS_CARDIO : TIME_METRICS_HOLD);
   const METRIC_UNIT = { maxWeight: ' kg', e1rm: ' kg', volume: ' kg', maxReps: ' reps', distance: ' km', kcal: ' kcal' };
   const METRIC_LABEL = {};
   EX_METRICS.concat(TIME_METRICS).forEach(m => { METRIC_LABEL[m.key] = m.label; });
@@ -32,7 +43,7 @@ const VProgress = (() => {
   const bestPoint = (points) => (points.length ? points.reduce((b, p) => (better(p, b) ? p : b), points[0]) : null);
   // valor formateado de un punto con su unidad + condiciones (ej. "90 kg × 3")
   function fmtMetricPoint(metric, p) {
-    const base = metric === 'maxTime' ? fmtSecs(p.y) : `${p.y}${METRIC_UNIT[metric] || ''}`;
+    const base = (metric === 'maxTime' || metric === 'totalTime') ? fmtSecs(p.y) : `${p.y}${METRIC_UNIT[metric] || ''}`;
     return p.detail ? `${base} ${p.detail}` : base;
   }
 
@@ -118,7 +129,7 @@ const VProgress = (() => {
       });
       if (!found) return;
       const distR = Math.round(distance * 100) / 100;
-      const map = { maxWeight, volume, maxReps, maxTime, distance: distR, kcal: Math.round(kcal), e1rm: Math.round(best1rm) };
+      const map = { maxWeight, volume, maxReps, maxTime, totalTime, distance: distR, kcal: Math.round(kcal), e1rm: Math.round(best1rm) };
       const y = map[metric] || 0;
       if (metric === 'e1rm' && best1rm <= 0) return; // sin series válidas (p.ej. effortOnly y sin esfuerzo)
       // condiciones de la marca + desempate. La "tie" mayor = mejor marca a igual valor.
@@ -129,6 +140,7 @@ const VProgress = (() => {
       else if (metric === 'distance' && distance > 0) { detail = totalTime ? `en ${fmtSecs(totalTime)}` : ''; tie = -totalTime; } // − tiempo a igual distancia
       else if (metric === 'kcal' && kcal > 0) { detail = totalTime ? `en ${fmtSecs(totalTime)}` : ''; }
       else if (metric === 'maxTime' && distR > 0) { detail = `· ${distR} km`; tie = distR; }                      // + distancia a igual tiempo
+      else if (metric === 'totalTime' && distR > 0) { detail = `· ${distR} km`; tie = distR; }                    // tiempo total (cardio) + distancia
       points.push({ x: s.date, y, detail, tie });
     });
     return points;
@@ -136,7 +148,7 @@ const VProgress = (() => {
 
   // Métrica representativa de cada ejercicio para "récords" (la primera con datos).
   function recordMetrics(ex) {
-    if (ex.type === 'time') return ['distance', 'maxTime', 'kcal'];
+    if (ex.type === 'time') return isCardioEx(ex) ? ['distance', 'totalTime', 'kcal'] : ['maxTime'];
     if (ex.type === 'reps') return ['maxReps'];
     return ['maxWeight'];
   }
@@ -369,7 +381,7 @@ const VProgress = (() => {
     if (catalog.length === 0) { host.innerHTML = `<div class="empty-state"><p>No hay ejercicios en el catálogo.</p></div>`; return; }
     const exId = host._exId || params.exId || catalog[0].id;
     const ex = catalog.find(e => e.id === exId) || catalog[0];
-    const metrics = ex.type === 'time' ? TIME_METRICS : EX_METRICS;
+    const metrics = ex.type === 'time' ? timeMetricsFor(ex) : EX_METRICS;
     const metric = (host._metric && metrics.some(m => m.key === host._metric)) ? host._metric : metrics[0].key;
 
     const isE1 = metric === 'e1rm';
@@ -377,7 +389,7 @@ const VProgress = (() => {
     const formula = app._e1Formula || 'epley';
     const { points, noEffort } = await metricSeries(app.activeUser.id, ex.name, metric, effortOnly, formula);
 
-    const isTime = metric === 'maxTime';
+    const isTime = metric === 'maxTime' || metric === 'totalTime';
     const prPoint = bestPoint(points);
     const fmtPoint = (p) => fmtMetricPoint(metric, p);
     const metricLabel = (metrics.find(m => m.key === metric) || {}).label || '';
@@ -457,7 +469,7 @@ const VProgress = (() => {
     } else {
       const exName = subjectKey.slice(3);
       const subjEx = catalog.find(c => c.name === exName);
-      exMetrics = (subjEx && subjEx.type === 'time') ? TIME_METRICS : EX_METRICS; // métricas según el tipo
+      exMetrics = (subjEx && subjEx.type === 'time') ? timeMetricsFor(subjEx) : EX_METRICS; // métricas según el tipo
       exMetric = (host._exMetric && exMetrics.some(m => m.key === host._exMetric)) ? host._exMetric : exMetrics[0].key;
       // el 1RM se compara solo con series de esfuerzo marcado (cae a todas si no hay)
       const e1f = app._e1Formula || 'epley';
@@ -480,7 +492,7 @@ const VProgress = (() => {
         ${UI.field('Métrica', UI.selectButton('subjectSelBtn', (subjectOptions.find(o => o.value === subjectKey) || subjectOptions[0]).label))}
         ${showExMetric ? `<div class="chips-row small">${exMetrics.map(m => `<button class="chip${exMetric === m.key ? ' on' : ''}" data-exmetric="${m.key}">${m.label}</button>`).join('')}</div>` : ''}
         <div class="chart-title">${UI.esc(unit)}</div>
-        ${UI.lineChart(series, { width: 320, height: 160, fmtY: exMetric === 'maxTime' ? fmtSecs : undefined, fmtPoint: subjectKey === 'body:weight' ? (p => `${p.y} kg`) : (p => fmtMetricPoint(exMetric, p)) })}
+        ${UI.lineChart(series, { width: 320, height: 160, fmtY: (exMetric === 'maxTime' || exMetric === 'totalTime') ? fmtSecs : undefined, fmtPoint: subjectKey === 'body:weight' ? (p => `${p.y} kg`) : (p => fmtMetricPoint(exMetric, p)) })}
       </div>`;
 
     host.querySelector('select[name="guestSel"]').addEventListener('change', e => { host._guestId = e.target.value; renderCompare(app, host, params); });
