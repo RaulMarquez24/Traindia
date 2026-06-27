@@ -44,10 +44,10 @@ const app = {
   showCardioMigration() {
     UI.modal({
       title: 'Ordenar tus ejercicios de cardio',
-      bodyHTML: `<p class="modal-text">Tus variantes de cardio (Cinta Z2, Bici Z2, Elíptica…) se van a <strong>unir por máquina</strong> — <strong>Cinta</strong>, <strong>Bicicleta</strong>, <strong>Elíptica</strong> — guardando la variante (Z2, conversacional, suave…) como <strong>etiqueta</strong>.</p>
-        <p class="modal-text dim">Se actualizan tu catálogo, tus sesiones y tu plan; el progreso se conserva (podrás filtrar por etiqueta). Se hace una copia de seguridad automática antes; aun así puedes descargar la tuya.</p>`,
+      dismissable: false, // cambio obligatorio: no se puede cerrar sin continuar
+      bodyHTML: `<p class="modal-text">Una pequeña reorganización de una sola vez: tus variantes de cardio (Cinta Z2, Bici Z2, Elíptica…) se <strong>unen por máquina</strong> — <strong>Cinta</strong>, <strong>Bicicleta</strong>, <strong>Elíptica</strong> — guardando la variante (Z2, conversacional, suave…) como <strong>etiqueta</strong>.</p>
+        <p class="modal-text dim">Se actualizan tu catálogo, sesiones y plan; el progreso se conserva (podrás filtrar por etiqueta). Antes se guarda una <strong>copia interna</strong> (en "Más → Copias internas"); si quieres, descárgate también la tuya.</p>`,
       actions: [
-        { label: 'Ahora no', kind: 'ghost' },
         { label: 'Descargar copia', kind: 'ghost', onClick: async () => { await VData.backupProfile(this); return false; } },
         { label: 'Continuar', kind: 'primary', onClick: async () => {
           await DB.runCardioUnify();
@@ -56,6 +56,7 @@ const app = {
           this.settings = await DB.getSettings();
           this.render();
           UI.toast('Cardio reorganizado');
+          await VSessions.checkResume(this);
         } },
       ],
     });
@@ -104,6 +105,7 @@ const app = {
       profiles: { render: (a, p) => this.renderProfiles(),  bind: (a, r) => this.bindProfiles(r) },
       data:     { render: (a, p) => VData.render(a, p),     bind: (a, r, p) => VData.bind(a, r, p) },
       settings: { render: (a, p) => this.renderSettings(),  bind: (a, r) => this.bindSettings(r) },
+      backups:  { render: (a, p) => this.renderBackups(),   bind: (a, r) => this.bindBackups(r) },
     };
   },
 
@@ -196,7 +198,7 @@ const app = {
       week: 'Traindía', exercises: 'Ejercicios', places: 'Lugares', guides: 'Guías', info: 'El plan',
       sessions: 'Sesiones', live: 'Entreno', session: 'Sesión',
       progress: 'Progreso', journal: 'Diario',
-      more: 'Más', profiles: 'Perfiles', data: 'Datos', settings: 'Ajustes',
+      more: 'Más', profiles: 'Perfiles', data: 'Datos', settings: 'Ajustes', backups: 'Copias internas',
     };
     let label = titles[this.currentView] || 'Traindía';
     if (this.currentView === 'day' && this.routine) {
@@ -214,7 +216,7 @@ const app = {
       week: 'week', day: 'week', exercises: 'week',
       sessions: 'sessions', session: 'sessions', live: 'sessions',
       progress: 'progress', journal: 'journal',
-      more: 'more', profiles: 'more', data: 'more', settings: 'more', guides: 'more', guide: 'more', info: 'more', places: 'more',
+      more: 'more', profiles: 'more', data: 'more', settings: 'more', guides: 'more', guide: 'more', info: 'more', places: 'more', backups: 'more',
     };
     const active = map[this.currentView] || 'week';
     document.querySelectorAll('.nav-btn').forEach(btn => {
@@ -379,6 +381,7 @@ const app = {
       { v: 'info', icon: 'info', color: 'var(--moderate)', label: 'El plan', sub: 'Tus planes de entrenamiento' },
       { v: 'profiles', icon: 'users', color: 'var(--sub-accent)', label: 'Perfiles', sub: 'Principal e invitados' },
       { v: 'data', icon: 'swap', color: 'var(--light)', label: 'Importar / Exportar', sub: 'Copias y traspasos JSON' },
+      { v: 'backups', icon: 'clock', color: 'var(--moderate)', label: 'Copias internas', sub: 'Puntos de restauración' },
       { v: 'settings', icon: 'settings', color: 'var(--rest)', label: 'Ajustes', sub: 'Perfil principal y app' },
     ].filter(r => !r.cnp || this.isCnp());
     return `<div class="section">
@@ -390,6 +393,51 @@ const app = {
   bindMore(root) {
     const fb = root && root.querySelector('[data-feedback]');
     if (fb) fb.addEventListener('click', () => this.openFeedback());
+  },
+
+  // ---- Vista COPIAS INTERNAS ----
+  renderBackups() {
+    const list = DB.listInternalBackups();
+    const fmt = (at) => { try { return new Date(at).toLocaleString('es-ES', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }); } catch (e) { return ''; } };
+    const rows = list.map(b => `
+      <div class="profile-card">
+        <span class="big-row-icon tile" style="background:var(--moderate)">${UI.icon('clock', 18)}</span>
+        <div class="profile-meta">
+          <strong>${UI.esc(b.reason || 'Copia')}</strong>
+          <span class="dim">${fmt(b.at)} · ${b.sizeKB} KB</span>
+        </div>
+        <div class="profile-actions">
+          <button class="icon-btn" data-dl="${UI.esc(b.key)}" title="Descargar">${UI.icon('upload', 17)}</button>
+          <button class="icon-btn" data-restore="${UI.esc(b.key)}" title="Restaurar">${UI.icon('swap', 17)}</button>
+          <button class="icon-btn danger" data-del="${UI.esc(b.key)}" title="Borrar">${UI.icon('trash', 17)}</button>
+        </div>
+      </div>`).join('');
+    return `<div class="section">
+      <p class="section-intro">Puntos de restauración guardados en este dispositivo antes de cambios importantes. Se conservan como mucho <strong>2</strong> para no ocupar espacio: al crear una nueva se borra la más antigua. Para mudarte de móvil usa mejor <strong>Exportar</strong> en Datos.</p>
+      ${list.length ? rows : '<div class="empty-state"><p class="dim">Aún no hay copias internas.</p></div>'}
+    </div>`;
+  },
+  bindBackups(root) {
+    root.querySelectorAll('[data-dl]').forEach(b => b.addEventListener('click', () => {
+      const raw = localStorage.getItem(b.dataset.dl); if (!raw) return;
+      const blob = new Blob([raw], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = 'traindia-copia-interna.json';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      UI.toast('Copia descargada');
+    }));
+    root.querySelectorAll('[data-restore]').forEach(b => b.addEventListener('click', async () => {
+      const ok = await UI.confirm({ title: 'Restaurar copia', message: 'Se REEMPLAZARÁN todos tus datos actuales (ejercicios, sesiones, plan, progreso, diario) por los de esta copia. No se puede deshacer.', confirmLabel: 'Restaurar', danger: true });
+      if (!ok) return;
+      await DB.restoreInternalBackup(b.dataset.restore);
+      UI.toast('Copia restaurada'); location.reload();
+    }));
+    root.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', async () => {
+      const ok = await UI.confirm({ title: 'Borrar copia', message: '¿Eliminar esta copia interna?', confirmLabel: 'Borrar', danger: true });
+      if (!ok) return;
+      DB.deleteInternalBackup(b.dataset.del); this.go('backups', {}, true);
+    }));
   },
 
   // ---- Vista PERFILES ----

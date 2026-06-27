@@ -4,7 +4,7 @@
 // (build-6, build-7, …) para que los cambios lleguen a las apps ya instaladas.
 // Los fetch usan {cache:'reload'} para saltarse la caché HTTP del navegador/Pages
 // y traer SIEMPRE la última versión con red (offline tira de CACHE_NAME).
-const CACHE_NAME = 'traindia-build-78';
+const CACHE_NAME = 'traindia-build-79';
 const ASSETS = [
   './',
   './index.html',

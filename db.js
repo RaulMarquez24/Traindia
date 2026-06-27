@@ -479,15 +479,50 @@ const DB = (() => {
     }
     return null;
   }
-  // Copia de seguridad de TODOS los datos en localStorage antes de migrar (best-effort).
-  async function backupAllToLocal(tag) {
+  // ---- Copias internas (localStorage; máx 2 para no ocupar espacio) ----
+  const IBACKUP_PREFIX = 'traindia-ibackup-';
+  const IBACKUP_STORES = ['users', 'exercises', 'routines', 'sessions', 'progress', 'journal', 'settings'];
+  const MAX_IBACKUPS = 2;
+  async function dumpAll() {
+    const d = {};
+    for (const store of IBACKUP_STORES) { try { d[store] = await getAll(store); } catch (e) { d[store] = []; } }
+    return d;
+  }
+  function internalBackupKeys() {
+    return Object.keys(localStorage).filter(k => k.startsWith(IBACKUP_PREFIX)).sort();
+  }
+  function listInternalBackups() {
+    return internalBackupKeys().map(k => {
+      let at = 0, reason = ''; const raw = localStorage.getItem(k) || '';
+      try { const o = JSON.parse(raw); at = o.at || 0; reason = o.reason || ''; } catch (e) {}
+      return { key: k, at, reason, sizeKB: Math.round(raw.length / 1024) };
+    }).sort((a, b) => b.at - a.at);
+  }
+  // Crea una copia interna; mantiene como mucho MAX_IBACKUPS (borra las más viejas).
+  async function saveInternalBackup(reason) {
+    const dump = await dumpAll();
+    const payload = JSON.stringify({ at: Date.now(), reason: reason || '', data: dump });
+    const write = () => { localStorage.setItem(IBACKUP_PREFIX + Date.now(), payload); };
     try {
-      const dump = {};
-      for (const store of ['users', 'exercises', 'routines', 'sessions', 'progress', 'journal', 'settings']) {
-        try { dump[store] = await getAll(store); } catch (e) { dump[store] = []; }
-      }
-      localStorage.setItem('traindia-backup-' + tag, JSON.stringify({ at: Date.now(), data: dump }));
-    } catch (e) { /* sin espacio o no disponible: seguimos */ }
+      let keys = internalBackupKeys();
+      while (keys.length >= MAX_IBACKUPS) localStorage.removeItem(keys.shift());
+      write();
+      return true;
+    } catch (e) {
+      try { internalBackupKeys().forEach(k => localStorage.removeItem(k)); write(); return true; } // sin espacio: deja solo esta
+      catch (e2) { return false; }
+    }
+  }
+  function deleteInternalBackup(key) { localStorage.removeItem(key); }
+  // Restaura por completo desde una copia interna (reemplaza todos los stores).
+  async function restoreInternalBackup(key) {
+    let o; try { o = JSON.parse(localStorage.getItem(key)); } catch (e) { return false; }
+    if (!o || !o.data) return false;
+    for (const store of IBACKUP_STORES) {
+      await clearStore(store);
+      for (const item of (o.data[store] || [])) await put(store, item);
+    }
+    return true;
   }
   async function migrateCardioV10() {
     const users = await getAll('users');
@@ -551,7 +586,7 @@ const DB = (() => {
 
   // Unificación de cardio: la dispara la app TRAS avisar al usuario (copia + confirmar).
   async function runCardioUnify() {
-    await backupAllToLocal('v10');
+    await saveInternalBackup('Antes de unificar cardio');
     await migrateCardioV10();
     await saveSettings({ dataVersion: 10 });
   }
@@ -645,6 +680,7 @@ const DB = (() => {
     getPlaces, savePlaces, ensurePlaces,
     getUsers, getMainUser, createUser,
     seedForUser, createPlan, setActivePlan, deletePlan, restoreDefaultExercises, restoreDefaultRoutine, restoreDefaultDay, updateExercise, migrate, runCardioUnify, cardioUnifyPending, classifyType,
+    saveInternalBackup, listInternalBackups, deleteInternalBackup, restoreInternalBackup,
     exercisesOf, routinesOf, sessionsOf, progressOf, journalOf, primaryRoutineOf,
     STORES,
   };
