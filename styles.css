@@ -417,6 +417,8 @@ textarea.inp { resize: vertical; line-height: 1.4; }
 .ex-total-f { flex: 1 1 80px; min-width: 0; height: 34px; padding: 0 10px; font-size: 14px; text-align: center; border-radius: 10px; }
 .detail-totals { display: flex; align-items: center; gap: 6px; margin-top: 6px; font-size: 12.5px; font-weight: 600; color: var(--strong); }
 .detail-totals .ic { color: var(--strong); flex-shrink: 0; }
+.rep-row { max-width: 160px; margin-bottom: 8px; }
+.rep-row .inp { width: 90px; }
 .metric-group-label { font-size: 11px; font-weight: 700; color: var(--ink-dim); text-transform: uppercase; letter-spacing: .03em; margin: 10px 0 4px; }
 .metric-group-label:first-child { margin-top: 0; }
 /* El número de serie va en el canalón izquierdo (alineado con el agarrador),
@@ -435,7 +437,7 @@ textarea.inp { resize: vertical; line-height: 1.4; }
 /* dropsets */
 .drop-row { display: flex; align-items: center; gap: 8px; padding-left: 28px; }
 .drop-tag { font-family: 'IBM Plex Mono', monospace; font-size: 9px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--sub-accent); background: var(--sub-bg); padding: 2px 6px; border-radius: 4px; flex-shrink: 0; }
-.set-foot { padding-left: 28px; }
+.set-foot { display: flex; align-items: center; gap: 18px; padding-left: 28px; }
 .set-drop-btn { background: none; border: none; color: var(--sub-accent); font-size: 12px; font-weight: 600; cursor: pointer; padding: 2px 0; }
 .set-drop-btn:active { opacity: .6; }
 

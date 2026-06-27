@@ -22,6 +22,7 @@ const VProgress = (() => {
   const TIME_METRICS_CARDIO = [
     { key: 'distance', label: 'Distancia (km)' },
     { key: 'totalTime', label: 'Tiempo total' },
+    { key: 'avgSpeed', label: 'Vel. media (km/h)' },
     { key: 'kcal', label: 'Kcal' },
   ];
   // Isométricos (plancha, dead hang…): el récord es el aguante máximo de una serie.
@@ -34,7 +35,7 @@ const VProgress = (() => {
     return ex && ex.type === 'time' && Array.isArray(ex.metrics) && (ex.metrics.includes('distance') || ex.metrics.includes('kcal'));
   }
   const timeMetricsFor = (ex) => (isCardioEx(ex) ? TIME_METRICS_CARDIO : TIME_METRICS_HOLD);
-  const METRIC_UNIT = { maxWeight: ' kg', e1rm: ' kg', volume: ' kg', maxReps: ' reps', distance: ' km', kcal: ' kcal' };
+  const METRIC_UNIT = { maxWeight: ' kg', e1rm: ' kg', volume: ' kg', maxReps: ' reps', distance: ' km', kcal: ' kcal', avgSpeed: ' km/h' };
   const METRIC_LABEL = {};
   EX_METRICS.concat(TIME_METRICS).forEach(m => { METRIC_LABEL[m.key] = m.label; });
 
@@ -131,7 +132,8 @@ const VProgress = (() => {
       });
       if (!found) return;
       const distR = Math.round(distance * 100) / 100;
-      const map = { maxWeight, volume, maxReps, maxTime, totalTime, distance: distR, kcal: Math.round(kcal), e1rm: Math.round(best1rm) };
+      const avgSpeed = totalTime > 0 ? Math.round((distR / (totalTime / 3600)) * 10) / 10 : 0; // km/h media
+      const map = { maxWeight, volume, maxReps, maxTime, totalTime, distance: distR, kcal: Math.round(kcal), avgSpeed, e1rm: Math.round(best1rm) };
       const y = map[metric] || 0;
       if (metric === 'e1rm' && best1rm <= 0) return; // sin series válidas (p.ej. effortOnly y sin esfuerzo)
       // condiciones de la marca + desempate. La "tie" mayor = mejor marca a igual valor.
@@ -143,6 +145,7 @@ const VProgress = (() => {
       else if (metric === 'kcal' && kcal > 0) { detail = totalTime ? `en ${fmtSecs(totalTime)}` : ''; }
       else if (metric === 'maxTime' && distR > 0) { detail = `· ${distR} km`; tie = distR; }                      // + distancia a igual tiempo
       else if (metric === 'totalTime' && distR > 0) { detail = `· ${distR} km`; tie = distR; }                    // tiempo total (cardio) + distancia
+      else if (metric === 'avgSpeed' && distR > 0) { detail = `· ${distR} km`; }                                  // velocidad media + distancia
       points.push({ x: s.date, y, detail, tie });
     });
     return points;

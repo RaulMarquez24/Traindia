@@ -12,6 +12,7 @@ const VSessions = (() => {
   const TIME_FIELDS = [
     { key: 'distance', label: 'Distancia', unit: 'km', ph: 'km', step: '0.01', scope: 'total' },
     { key: 'kcal', label: 'Kcal', unit: 'kcal', ph: 'kcal', step: '1', scope: 'total' },
+    { key: 'hr', label: 'Pulsaciones', unit: 'ppm', ph: 'ppm', step: '1', scope: 'total' },
     { key: 'speed', label: 'Velocidad', unit: 'km/h', ph: 'km/h', step: '0.1', scope: 'set' },
     { key: 'incline', label: 'Inclinación', unit: '%', ph: 'incl %', step: '0.5', scope: 'set' },
     { key: 'level', label: 'Nivel', unit: '', ph: 'nivel', step: '1', scope: 'set' },
@@ -144,15 +145,25 @@ const VSessions = (() => {
     });
   }
 
-  // Repetir el bloque de series del ejercicio ×N (intervalos repetitivos).
-  function pickRepeat(onPick) {
+  // Repetir el bloque de series del ejercicio ×N. Muestra cuántas quedarán y pide confirmar.
+  function pickRepeat(count, onPick) {
     UI.modal({
       title: 'Repetir bloque',
-      bodyHTML: `<p class="modal-text">Duplica todas las series de este ejercicio.</p>
-        <div class="effort-pick" id="repN">${[2, 3, 4, 5, 6].map(n => `<button type="button" class="effort-opt" data-n="${n}">×${n}</button>`).join('')}</div>
-        <p class="field-hint">×3 = el bloque queda 3 veces en total.</p>`,
-      actions: [{ label: 'Cancelar', kind: 'ghost' }],
-      onMount: (root) => root.querySelectorAll('[data-n]').forEach(b => b.addEventListener('click', () => { UI.closeModal(root); onPick(parseInt(b.dataset.n)); })),
+      bodyHTML: `<p class="modal-text">Tienes <strong>${count}</strong> serie${count === 1 ? '' : 's'}. Elige cuántas veces quieres el bloque en total.</p>
+        <div class="rep-row">${UI.field('Veces (total)', `<input class="inp" id="repN" type="number" min="2" max="50" value="3" style="text-align:center">`)}</div>
+        <div class="effort-pick" id="repQuick">${[2, 3, 4, 5, 6, 8, 10].map(n => `<button type="button" class="effort-opt" data-n="${n}">×${n}</button>`).join('')}</div>
+        <p class="field-hint" id="repHint"></p>`,
+      actions: [
+        { label: 'Cancelar', kind: 'ghost' },
+        { label: 'Aplicar', kind: 'primary', onClick: (root) => { const n = Math.min(50, Math.max(2, parseInt(root.querySelector('#repN').value) || 2)); onPick(n); } },
+      ],
+      onMount: (root) => {
+        const inp = root.querySelector('#repN'), hint = root.querySelector('#repHint');
+        const upd = () => { const n = Math.min(50, Math.max(2, parseInt(inp.value) || 2)); hint.textContent = `Quedarán ${count * n} series en total.`; };
+        inp.addEventListener('input', upd);
+        root.querySelectorAll('[data-n]').forEach(b => b.addEventListener('click', () => { inp.value = b.dataset.n; upd(); }));
+        upd();
+      },
     });
   }
 
@@ -300,16 +311,46 @@ const VSessions = (() => {
         const k = keyForEntry(e);
         if (!k || map[k]) return; // ya tenemos una más reciente para este ejercicio
         const done = (e.sets || []).filter(setHasData);
-        if (done.length) map[k] = { date: sess.date, type: e.type || 'weight', sets: done, note: e.note };
+        if (done.length) map[k] = { date: sess.date, type: e.type || 'weight', sets: done, note: e.note, metrics: e.metrics, totals: e.totals };
       }));
     return map;
+  }
+  // Resumen compacto de un cardio de intervalos: agrupa series iguales (etiqueta+
+  // tiempo+velocidad) → "Andar 2:00 @5.5 ×7 · Correr 3:00 @8.5 ×7 — 35:00 · 4.5 km".
+  function summarizeCardioSets(sets) {
+    const groups = [], idx = {};
+    sets.forEach(st => {
+      const t = parseInt(st.time) || 0;
+      const key = `${(st.label || '').trim().toLowerCase()}|${t}|${st.speed || ''}`;
+      if (idx[key] == null) { idx[key] = groups.length; groups.push({ label: (st.label || '').trim(), time: t, speed: st.speed, n: 0 }); }
+      groups[idx[key]].n++;
+    });
+    return groups.map(g => {
+      const lab = g.label ? `${g.label} ` : '';
+      const dur = g.time ? fmtClock(g.time) : '';
+      const sp = g.speed ? ` @${g.speed}` : '';
+      const mult = g.n > 1 ? ` ×${g.n}` : '';
+      return `${lab}${dur}${sp}${mult}`.trim();
+    }).join(' · ');
+  }
+  function cardioTotalsText(prev) {
+    const t = prev.totals || {};
+    const totalSec = (t.time != null && t.time !== '') ? parseInt(t.time) : prev.sets.reduce((a, s) => a + (parseInt(s.time) || 0), 0);
+    const dist = t.distance ? parseFloat(t.distance) : prev.sets.reduce((a, s) => a + (parseFloat(s.distance) || 0), 0);
+    const kc = t.kcal ? parseFloat(t.kcal) : prev.sets.reduce((a, s) => a + (parseFloat(s.kcal) || 0), 0);
+    const parts = [fmtClock(totalSec)];
+    if (dist) parts.push(`${Math.round(dist * 100) / 100} km`);
+    if (kc) parts.push(`${Math.round(kc)} kcal`);
+    if (t.hr) parts.push(`${t.hr} ppm`);
+    return parts.join(' · ');
   }
   function lastTimeHTML(entry) {
     const prev = _lastTimeMap && _lastTimeMap[keyForEntry(entry)];
     if (!prev) return '';
-    const sets = prev.sets.map(st => setDisplay(prev.type, st)).join(' · ');
+    const isCardio = prev.type === 'time' && entryHasTotals({ type: 'time', metrics: prev.metrics, totals: prev.totals, sets: prev.sets });
+    const body = isCardio ? `${summarizeCardioSets(prev.sets)} — ${cardioTotalsText(prev)}` : prev.sets.map(st => setDisplay(prev.type, st)).join(' · ');
     const note = prev.note ? `<div class="last-note"><span>${UI.icon('edit', 12)} ${UI.esc(prev.note)}</span></div>` : '';
-    return `<div class="last-time">${UI.icon('clock', 12)} Última vez · ${UI.esc(UI.fmtDateShort(prev.date))}: <span>${UI.esc(sets)}</span></div>${note}`;
+    return `<div class="last-time">${UI.icon('clock', 12)} Última vez · ${UI.esc(UI.fmtDateShort(prev.date))}: <span>${UI.esc(body)}</span></div>${note}`;
   }
 
   // ----- Récords personales (PR): mejor marca histórica por ejercicio -----
@@ -814,7 +855,7 @@ const VSessions = (() => {
       }));
       root.querySelectorAll('[data-repeat-block]').forEach(b => b.addEventListener('click', () => {
         sync(); const e = s.entries[+b.dataset.ei];
-        pickRepeat((n) => { const snap = e.sets.slice(); for (let k = 1; k < n; k++) snap.forEach(st => e.sets.push(cloneSet(st))); app.persistLive(); redraw(); });
+        pickRepeat(e.sets.length, (n) => { const snap = e.sets.slice(); for (let k = 1; k < n; k++) snap.forEach(st => e.sets.push(cloneSet(st))); app.persistLive(); redraw(); });
       }));
       root.querySelectorAll('[data-set-totaltime]').forEach(b => b.addEventListener('click', () => {
         sync(); const entry = s.entries[+b.dataset.ei];
@@ -1193,6 +1234,7 @@ const VSessions = (() => {
         const parts = [`${fmtClock(totalSec)} total`];
         if (dist) parts.push(`${Math.round(dist * 100) / 100} km`);
         if (kc) parts.push(`${Math.round(kc)} kcal`);
+        if (t.hr) parts.push(`${t.hr} ppm`);
         return `<div class="detail-totals">${UI.icon('clock', 13)} ${parts.join(' · ')}</div>`;
       })();
       return `<div class="block"><div class="block-label detail-ex-head"><span>${UI.esc(e.name)}</span><button class="icon-btn" data-ai-done data-ei="${ei}" title="Consultar a una IA sobre este ejercicio">${UI.icon('chat', 16)}</button></div><ul class="set-detail-list">${rows}</ul>${totalsLine}${note}</div>`;
@@ -1275,7 +1317,7 @@ const VSessions = (() => {
     const bindEditorBody = (root) => {
       root.querySelectorAll('[data-add-set]').forEach(b => b.addEventListener('click', () => { syncMeta(root); const e = draft.entries[+b.dataset.ei]; const last = e.sets[e.sets.length - 1]; e.sets.push(last ? cloneSet(last) : emptySet(e.type)); render(root); }));
       root.querySelectorAll('[data-dup-set]').forEach(b => b.addEventListener('click', () => { syncMeta(root); const e = draft.entries[+b.dataset.ei], si = +b.dataset.si; e.sets.splice(si + 1, 0, cloneSet(e.sets[si])); render(root); }));
-      root.querySelectorAll('[data-repeat-block]').forEach(b => b.addEventListener('click', () => { syncMeta(root); const e = draft.entries[+b.dataset.ei]; pickRepeat((n) => { const snap = e.sets.slice(); for (let k = 1; k < n; k++) snap.forEach(st => e.sets.push(cloneSet(st))); render(root); }); }));
+      root.querySelectorAll('[data-repeat-block]').forEach(b => b.addEventListener('click', () => { syncMeta(root); const e = draft.entries[+b.dataset.ei]; pickRepeat(e.sets.length, (n) => { const snap = e.sets.slice(); for (let k = 1; k < n; k++) snap.forEach(st => e.sets.push(cloneSet(st))); render(root); }); }));
       root.querySelectorAll('[data-set-totaltime]').forEach(b => b.addEventListener('click', () => { syncMeta(root); const entry = draft.entries[+b.dataset.ei]; pickTotalTime(entry, (sec) => { entry.totals = entry.totals || {}; if (sec == null) delete entry.totals.time; else entry.totals.time = sec; render(root); }); }));
       root.querySelectorAll('[data-rm-set]').forEach(b => b.addEventListener('click', () => { syncMeta(root); draft.entries[+b.dataset.ei].sets.splice(+b.dataset.si, 1); render(root); }));
       root.querySelectorAll('[data-add-drop]').forEach(b => b.addEventListener('click', () => { syncMeta(root); const set = draft.entries[+b.dataset.ei].sets[+b.dataset.si]; (set.drops = set.drops || []).push(emptyDrop(draft.entries[+b.dataset.ei].type)); render(root); }));
