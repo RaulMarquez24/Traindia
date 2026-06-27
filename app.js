@@ -400,16 +400,15 @@ const app = {
     const list = DB.listInternalBackups();
     const fmt = (at) => { try { return new Date(at).toLocaleString('es-ES', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }); } catch (e) { return ''; } };
     const rows = list.map(b => `
-      <div class="profile-card">
-        <span class="big-row-icon tile" style="background:var(--moderate)">${UI.icon('clock', 18)}</span>
-        <div class="profile-meta">
-          <strong>${UI.esc(b.reason || 'Copia')}</strong>
-          <span class="dim">${fmt(b.at)} · ${b.sizeKB} KB</span>
+      <div class="bk-card">
+        <div class="bk-head">
+          <span class="big-row-icon tile" style="background:var(--moderate)">${UI.icon('clock', 18)}</span>
+          <div class="bk-meta"><strong>${UI.esc(b.reason || 'Copia')}</strong><span class="dim">${fmt(b.at)} · ${b.sizeKB} KB</span></div>
         </div>
-        <div class="profile-actions">
-          <button class="icon-btn" data-dl="${UI.esc(b.key)}" title="Descargar">${UI.icon('upload', 17)}</button>
-          <button class="icon-btn" data-restore="${UI.esc(b.key)}" title="Restaurar">${UI.icon('swap', 17)}</button>
-          <button class="icon-btn danger" data-del="${UI.esc(b.key)}" title="Borrar">${UI.icon('trash', 17)}</button>
+        <div class="bk-actions">
+          <button class="btn ghost small" data-dl="${UI.esc(b.key)}">${UI.icon('upload', 14)} Descargar</button>
+          <button class="btn ghost small" data-restore="${UI.esc(b.key)}">${UI.icon('swap', 14)} Restaurar</button>
+          <button class="btn ghost small danger" data-del="${UI.esc(b.key)}">${UI.icon('trash', 14)} Borrar</button>
         </div>
       </div>`).join('');
     return `<div class="section">
