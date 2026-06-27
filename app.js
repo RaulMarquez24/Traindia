@@ -32,9 +32,33 @@ const app = {
     await this.refreshRoutine();
     await DB.ensurePlaces(this.routine);
     this.go('week', {}, true);
+    // Unificación de cardio (v10): si hay variantes, avisa y deja hacer copia antes.
+    if (await DB.cardioUnifyPending()) { this.showCardioMigration(); return; }
+    if (((this.settings && this.settings.dataVersion) || 0) < 10) await DB.runCardioUnify(); // nada que cambiar: solo marca hecho
     await VSessions.checkResume(this);
     VData.checkBackupReminder(this); // recordatorio semanal de copia (si procede)
     VPlan.checkDuplicates(this);     // avisa si hay ejercicios duplicados sin usar
+  },
+
+  // Aviso de la reorganización de cardio (unificar máquinas + etiqueta), con copia.
+  showCardioMigration() {
+    UI.modal({
+      title: 'Ordenar tus ejercicios de cardio',
+      bodyHTML: `<p class="modal-text">Tus variantes de cardio (Cinta Z2, Bici Z2, Elíptica…) se van a <strong>unir por máquina</strong> — <strong>Cinta</strong>, <strong>Bicicleta</strong>, <strong>Elíptica</strong> — guardando la variante (Z2, conversacional, suave…) como <strong>etiqueta</strong>.</p>
+        <p class="modal-text dim">Se actualizan tu catálogo, tus sesiones y tu plan; el progreso se conserva (podrás filtrar por etiqueta). Se hace una copia de seguridad automática antes; aun así puedes descargar la tuya.</p>`,
+      actions: [
+        { label: 'Ahora no', kind: 'ghost' },
+        { label: 'Descargar copia', kind: 'ghost', onClick: async () => { await VData.backupProfile(this); return false; } },
+        { label: 'Continuar', kind: 'primary', onClick: async () => {
+          await DB.runCardioUnify();
+          await this.loadUsers();
+          await this.refreshRoutine();
+          this.settings = await DB.getSettings();
+          this.render();
+          UI.toast('Cardio reorganizado');
+        } },
+      ],
+    });
   },
 
   // ---- Sesión en curso (autoguardado + indicador) ----
@@ -256,7 +280,8 @@ const app = {
       const user = await DB.createUser({ name: data.name, color: data.color, isMain: true });
       await DB.createPlan(user.id, planType, { activate: true });
       await DB.saveSettings({ mainUserId: user.id, activeUserId: user.id, seeded: true, version: 2, dataVersion: 8 });
-      await DB.migrate(); // deja el catálogo/plan ya unificado (cardio) desde el inicio
+      await DB.migrate();
+      await DB.runCardioUnify(); // usuario nuevo: cardio ya unificado de inicio, sin aviso
       host.remove();
       document.getElementById('appShell').style.display = '';
       this.settings = await DB.getSettings();

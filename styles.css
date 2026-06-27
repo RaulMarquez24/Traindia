@@ -419,6 +419,7 @@ textarea.inp { resize: vertical; line-height: 1.4; }
 .detail-totals .ic { color: var(--strong); flex-shrink: 0; }
 .ex-variant { font-size: 11px; font-weight: 600; color: var(--strong); background: var(--strong-bg); padding: 1px 7px; border-radius: 999px; white-space: nowrap; }
 .ex-label-row { margin-bottom: 6px; }
+.ed-ex-label { width: 96px; flex: 0 0 auto; font-size: 12px; padding: 4px 8px; height: 30px; }
 .rep-row { max-width: 160px; margin-bottom: 8px; }
 .rep-row .inp { width: 90px; }
 .metric-group-label { font-size: 11px; font-weight: 700; color: var(--ink-dim); text-transform: uppercase; letter-spacing: .03em; margin: 10px 0 4px; }

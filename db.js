@@ -549,17 +549,28 @@ const DB = (() => {
     }
   }
 
+  // Unificación de cardio: la dispara la app TRAS avisar al usuario (copia + confirmar).
+  async function runCardioUnify() {
+    await backupAllToLocal('v10');
+    await migrateCardioV10();
+    await saveSettings({ dataVersion: 10 });
+  }
+  // ¿Hay variantes de cardio que cambiarían? (para decidir si avisar).
+  async function cardioUnifyPending() {
+    const s = await getSettings();
+    if (!s || (s.dataVersion || 0) >= 10) return false;
+    for (const u of await getAll('users')) {
+      const exs = (await exercisesOf(u.id)).filter(e => e.type === 'time');
+      if (exs.some(e => { const c = cardioCanon(e.name); return c && (c.label || e.name.trim() !== c.machine); })) return true;
+    }
+    return false;
+  }
+
   async function migrate() {
     const s = await getSettings();
     if (!s) return;
     const v = s.dataVersion || 0;
-    if (v >= 10) return;
-    if (v >= 9) { // ya en v9: solo falta la unificación de cardio
-      await backupAllToLocal('v10');
-      await migrateCardioV10();
-      await saveSettings({ dataVersion: 10 });
-      return;
-    }
+    if (v >= 9) return; // la unificación de cardio (v10) la lanza la app aparte (con aviso)
     const defaults = defaultTypeByName();
     const users = await getAll('users');
     for (const u of users) {
@@ -611,9 +622,7 @@ const DB = (() => {
       }
       await seedSubstitutes(u.id); // vincula suplentes a los ya sembrados (idempotente)
     }
-    await backupAllToLocal('v10');
-    await migrateCardioV10();
-    await saveSettings({ dataVersion: 10 });
+    await saveSettings({ dataVersion: 9 });
   }
 
   // ---- Consultas por usuario ----
@@ -635,7 +644,7 @@ const DB = (() => {
     getSettings, saveSettings,
     getPlaces, savePlaces, ensurePlaces,
     getUsers, getMainUser, createUser,
-    seedForUser, createPlan, setActivePlan, deletePlan, restoreDefaultExercises, restoreDefaultRoutine, restoreDefaultDay, updateExercise, migrate, classifyType,
+    seedForUser, createPlan, setActivePlan, deletePlan, restoreDefaultExercises, restoreDefaultRoutine, restoreDefaultDay, updateExercise, migrate, runCardioUnify, cardioUnifyPending, classifyType,
     exercisesOf, routinesOf, sessionsOf, progressOf, journalOf, primaryRoutineOf,
     STORES,
   };
