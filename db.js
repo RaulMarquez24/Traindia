@@ -163,7 +163,7 @@ const DB = (() => {
     if (type !== 'time') return undefined;
     const n = (name || '').toLowerCase();
     const cardio = ['cinta', 'bici', 'elíptic', 'eliptic', 'carrera', 'trote', 'paseo', 'z2', '400m', '800m', 'km', 'metros'];
-    return cardio.some(w => n.includes(w)) ? ['distance', 'kcal'] : [];
+    return cardio.some(w => n.includes(w)) ? ['distance', 'kcal', 'time'] : [];
   }
 
   // Grupo muscular INDIVIDUAL de cada ejercicio predefinido (uno solo, nunca combinado).
@@ -601,9 +601,29 @@ const DB = (() => {
     return false;
   }
 
+  // Aditivo e inofensivo: marca 'time' (tiempo total opcional) en el cardio que ya
+  // existía, para que siga mostrando el total como antes. Idempotente. No toca los
+  // ejercicios de tiempo "pelados" (plancha/hang), que no llevan totales.
+  async function addTimeTotalToCardio() {
+    const hasDK = (m) => Array.isArray(m) && (m.includes('distance') || m.includes('kcal')) && !m.includes('time');
+    const users = await getAll('users');
+    for (const u of users) {
+      for (const e of await exercisesOf(u.id)) {
+        if (e.type === 'time' && hasDK(e.metrics)) { e.metrics = [...e.metrics, 'time']; await put('exercises', e); }
+      }
+      for (const sess of await sessionsOf(u.id)) {
+        let ch = false;
+        (sess.entries || []).forEach(en => { if (en.type === 'time' && hasDK(en.metrics)) { en.metrics = [...en.metrics, 'time']; ch = true; } });
+        if (ch) await put('sessions', sess);
+      }
+    }
+  }
+
   async function migrate() {
     const s = await getSettings();
     if (!s) return;
+    // Aditivo, independiente del aviso de unificación (v10): añade 'time' al cardio existente.
+    if (!s.cardioTimeMetric) { await addTimeTotalToCardio(); await saveSettings({ cardioTimeMetric: true }); }
     const v = s.dataVersion || 0;
     if (v >= 9) return; // la unificación de cardio (v10) la lanza la app aparte (con aviso)
     const defaults = defaultTypeByName();
