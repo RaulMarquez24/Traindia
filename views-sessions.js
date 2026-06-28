@@ -849,8 +849,7 @@ const VSessions = (() => {
     // Handlers de cada tarjeta. Se re-enganchan tras cada redibujado de la lista.
     function bindEntries() {
       root.querySelectorAll('[data-add-set]').forEach(b => b.addEventListener('click', () => {
-        sync(); const e = s.entries[+b.dataset.ei]; const last = e.sets[e.sets.length - 1];
-        e.sets.push(last ? cloneSet(last) : emptySet(e.type)); redraw(); // copia la anterior
+        sync(); const e = s.entries[+b.dataset.ei]; e.sets.push(emptySet(e.type)); redraw(); // serie vacía (para copiar está "duplicar")
       }));
       root.querySelectorAll('[data-dup-set]').forEach(b => b.addEventListener('click', () => {
         sync(); const e = s.entries[+b.dataset.ei], si = +b.dataset.si; e.sets.splice(si + 1, 0, cloneSet(e.sets[si])); redraw();
@@ -1317,7 +1316,7 @@ const VSessions = (() => {
     };
 
     const bindEditorBody = (root) => {
-      root.querySelectorAll('[data-add-set]').forEach(b => b.addEventListener('click', () => { syncMeta(root); const e = draft.entries[+b.dataset.ei]; const last = e.sets[e.sets.length - 1]; e.sets.push(last ? cloneSet(last) : emptySet(e.type)); render(root); }));
+      root.querySelectorAll('[data-add-set]').forEach(b => b.addEventListener('click', () => { syncMeta(root); const e = draft.entries[+b.dataset.ei]; e.sets.push(emptySet(e.type)); render(root); }));
       root.querySelectorAll('[data-dup-set]').forEach(b => b.addEventListener('click', () => { syncMeta(root); const e = draft.entries[+b.dataset.ei], si = +b.dataset.si; e.sets.splice(si + 1, 0, cloneSet(e.sets[si])); render(root); }));
       root.querySelectorAll('[data-repeat-block]').forEach(b => b.addEventListener('click', () => { syncMeta(root); const e = draft.entries[+b.dataset.ei]; pickRepeat(e.sets.length, (n) => { const snap = e.sets.slice(); for (let k = 1; k < n; k++) snap.forEach(st => e.sets.push(cloneSet(st))); render(root); }); }));
       root.querySelectorAll('[data-set-totaltime]').forEach(b => b.addEventListener('click', () => { syncMeta(root); const entry = draft.entries[+b.dataset.ei]; pickTotalTime(entry, (sec) => { entry.totals = entry.totals || {}; if (sec == null) delete entry.totals.time; else entry.totals.time = sec; render(root); }); }));
