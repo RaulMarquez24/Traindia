@@ -10,6 +10,7 @@ const VSessions = (() => {
   // scope: 'set' = se registra en cada serie (intensidad); 'total' = se registra
   // UNA vez por ejercicio (se lee de la máquina al terminar) y se guarda en entry.totals.
   const TIME_FIELDS = [
+    { key: 'time', label: 'Tiempo total', unit: '', ph: '', step: '1', scope: 'total' }, // suma de las series (opcional, editable)
     { key: 'distance', label: 'Distancia', unit: 'km', ph: 'km', step: '0.01', scope: 'total' },
     { key: 'kcal', label: 'Kcal', unit: 'kcal', ph: 'kcal', step: '1', scope: 'total' },
     { key: 'hr', label: 'Pulsaciones', unit: 'ppm', ph: 'ppm', step: '1', scope: 'total' },
@@ -19,13 +20,18 @@ const VSessions = (() => {
     { key: 'weight', label: 'Peso', unit: 'kg', ph: 'kg', step: '0.5', scope: 'set' },
   ];
   const TIME_FIELD = Object.fromEntries(TIME_FIELDS.map(f => [f.key, f]));
-  const DEFAULT_TIME_METRICS = ['distance', 'kcal'];
   // Métricas activas de una entry de tiempo: las elegidas (entry.metrics) + las
   // que ya tengan datos (para no ocultar nada introducido), ordenadas.
+  // OJO: sin métricas elegidas NO se asume cardio (un ejercicio de tiempo "pelado"
+  // —plancha, hang— no lleva totales). 'time' nunca se activa por tener set.time
+  // (lo tienen todas las series); solo si está elegido o hay un total manual.
   function timeActiveMetrics(entry) {
-    const chosen = Array.isArray(entry.metrics) ? entry.metrics : DEFAULT_TIME_METRICS;
+    const chosen = Array.isArray(entry.metrics) ? entry.metrics : [];
     const keys = new Set(chosen);
-    TIME_FIELDS.forEach(f => { if ((entry.sets || []).some(s => s[f.key]) || (entry.totals && entry.totals[f.key])) keys.add(f.key); });
+    TIME_FIELDS.forEach(f => {
+      if (f.key === 'time') { if (entry.totals && entry.totals.time) keys.add('time'); return; }
+      if ((entry.sets || []).some(s => s[f.key]) || (entry.totals && entry.totals[f.key])) keys.add(f.key);
+    });
     return TIME_FIELDS.filter(f => keys.has(f.key)).map(f => f.key);
   }
   // Métricas activas filtradas por scope (genérico: hoy solo cardio usa 'total').
@@ -49,8 +55,8 @@ const VSessions = (() => {
   async function applyMetrics(app, entry, keys) {
     const ordered = TIME_FIELDS.filter(f => keys.includes(f.key)).map(f => f.key);
     const removed = timeActiveMetrics(entry).filter(k => !ordered.includes(k));
-    (entry.sets || []).forEach(s => removed.forEach(k => { delete s[k]; }));
-    if (entry.totals) removed.forEach(k => { delete entry.totals[k]; }); // quita también los totales descartados
+    (entry.sets || []).forEach(s => removed.forEach(k => { if (k !== 'time') delete s[k]; })); // 'time' por serie es la duración: NO borrar
+    if (entry.totals) removed.forEach(k => { delete entry.totals[k]; }); // quita también los totales descartados (incl. tiempo total)
     entry.metrics = ordered;
     await setExerciseMetrics(app, entry.exerciseId, ordered);
   }
@@ -333,12 +339,17 @@ const VSessions = (() => {
       return `${lab}${dur}${sp}${mult}`.trim();
     }).join(' · ');
   }
-  function cardioTotalsText(prev) {
+  function cardioTotalsText(prev, opts) {
+    const includeTime = !opts || opts.includeTime !== false; // con 1 sola serie el tiempo total es redundante
     const t = prev.totals || {};
-    const totalSec = (t.time != null && t.time !== '') ? parseInt(t.time) : prev.sets.reduce((a, s) => a + (parseInt(s.time) || 0), 0);
+    const active = new Set(timeActiveMetrics({ type: 'time', metrics: prev.metrics, totals: t, sets: prev.sets }));
+    const parts = [];
+    if (includeTime && active.has('time')) { // tiempo total solo si está elegido (es opcional)
+      const totalSec = (t.time != null && t.time !== '') ? parseInt(t.time) : prev.sets.reduce((a, s) => a + (parseInt(s.time) || 0), 0);
+      if (totalSec) parts.push(fmtClock(totalSec));
+    }
     const dist = t.distance ? parseFloat(t.distance) : prev.sets.reduce((a, s) => a + (parseFloat(s.distance) || 0), 0);
     const kc = t.kcal ? parseFloat(t.kcal) : prev.sets.reduce((a, s) => a + (parseFloat(s.kcal) || 0), 0);
-    const parts = [fmtClock(totalSec)];
     if (dist) parts.push(`${Math.round(dist * 100) / 100} km`);
     if (kc) parts.push(`${Math.round(kc)} kcal`);
     if (t.hr) parts.push(`${t.hr} ppm`);
@@ -348,7 +359,13 @@ const VSessions = (() => {
     const prev = _lastTimeMap && _lastTimeMap[keyForEntry(entry)];
     if (!prev) return '';
     const isCardio = prev.type === 'time' && entryHasTotals({ type: 'time', metrics: prev.metrics, totals: prev.totals, sets: prev.sets });
-    const body = isCardio ? `${summarizeCardioSets(prev.sets)} — ${cardioTotalsText(prev)}` : prev.sets.map(st => setDisplay(prev.type, st)).join(' · ');
+    let body;
+    if (isCardio) {
+      const multi = (prev.sets || []).length > 1;          // 1 serie = la serie ya es el total
+      const summary = summarizeCardioSets(prev.sets);
+      const tot = cardioTotalsText(prev, { includeTime: multi }); // sin tiempo total si es una sola
+      body = tot ? `${summary}${multi ? ' — ' : ' · '}${tot}` : summary;
+    } else body = prev.sets.map(st => setDisplay(prev.type, st)).join(' · ');
     const note = prev.note ? `<div class="last-note"><span>${UI.icon('edit', 12)} ${UI.esc(prev.note)}</span></div>` : '';
     return `<div class="last-time">${UI.icon('clock', 12)} Última vez · ${UI.esc(UI.fmtDateShort(prev.date))}: <span>${UI.esc(body)}</span></div>${note}`;
   }
@@ -688,16 +705,23 @@ const VSessions = (() => {
   function timeTotalsHTML(entry, ei) {
     if (entry.type !== 'time' || !entryHasTotals(entry)) return '';
     const totals = entry.totals || {};
-    const sumSec = (entry.sets || []).reduce((a, s) => a + (parseInt(s.time) || 0), 0);
-    const overridden = totals.time != null && totals.time !== '';
-    const totalSec = overridden ? parseInt(totals.time) : sumSec;
     const fields = timeTotalMetrics(entry);
-    const inputs = fields.map(k => {
+    const showTime = fields.includes('time'); // el tiempo total es opcional (se elige en "datos")
+    // Inputs de los demás totales (distancia/kcal/ppm). 'time' va como chip, no input.
+    const inputs = fields.filter(k => k !== 'time').map(k => {
       const f = TIME_FIELD[k];
       return `<input class="inp ex-total-f" data-tf="${k}" data-ei="${ei}" type="number" min="0" step="${f.step}" value="${UI.esc(totals[k] || '')}" placeholder="${(f.unit || f.label)} tot.">`;
     }).join('');
-    // Tiempo total: tocable para editar; vacío = suma de las series.
-    return `<div class="ex-totals"><button type="button" class="ex-total-time${overridden ? ' on' : ''}" data-set-totaltime data-ei="${ei}"${overridden ? ' data-fixed="1"' : ''} title="Editar tiempo total">${UI.icon('clock', 13)} <span class="ett-val">${fmtClock(totalSec)}</span></button>${inputs}</div>`;
+    let timeChip = '';
+    if (showTime) {
+      const sumSec = (entry.sets || []).reduce((a, s) => a + (parseInt(s.time) || 0), 0);
+      const overridden = totals.time != null && totals.time !== '';
+      const totalSec = overridden ? parseInt(totals.time) : sumSec;
+      // Tiempo total: tocable para editar; vacío = suma de las series.
+      timeChip = `<button type="button" class="ex-total-time${overridden ? ' on' : ''}" data-set-totaltime data-ei="${ei}"${overridden ? ' data-fixed="1"' : ''} title="Editar tiempo total">${UI.icon('clock', 13)} <span class="ett-val">${fmtClock(totalSec)}</span></button>`;
+    }
+    if (!timeChip && !inputs) return '';
+    return `<div class="ex-totals">${timeChip}${inputs}</div>`;
   }
   // Recalcula los chips de tiempo total (solo lectura del DOM) al teclear min/seg.
   function updateTotalTimes(root) {
@@ -1229,13 +1253,18 @@ const VSessions = (() => {
       const totalsLine = (() => {
         if ((e.type || 'weight') !== 'time' || !entryHasTotals(e)) return '';
         const t = e.totals || {};
-        const totalSec = (t.time != null && t.time !== '') ? parseInt(t.time) : (e.sets || []).reduce((a, set) => a + (parseInt(set.time) || 0), 0);
+        const active = new Set(timeActiveMetrics(e));
+        const parts = [];
+        if (active.has('time') && (e.sets || []).length > 1) { // tiempo total solo con varios intervalos (con 1 serie es redundante)
+          const totalSec = (t.time != null && t.time !== '') ? parseInt(t.time) : (e.sets || []).reduce((a, set) => a + (parseInt(set.time) || 0), 0);
+          if (totalSec) parts.push(`${fmtClock(totalSec)} total`);
+        }
         const dist = t.distance ? parseFloat(t.distance) : (e.sets || []).reduce((a, set) => a + (parseFloat(set.distance) || 0), 0); // compat viejas
         const kc = t.kcal ? parseFloat(t.kcal) : (e.sets || []).reduce((a, set) => a + (parseFloat(set.kcal) || 0), 0);
-        const parts = [`${fmtClock(totalSec)} total`];
         if (dist) parts.push(`${Math.round(dist * 100) / 100} km`);
         if (kc) parts.push(`${Math.round(kc)} kcal`);
         if (t.hr) parts.push(`${t.hr} ppm`);
+        if (!parts.length) return '';
         return `<div class="detail-totals">${UI.icon('clock', 13)} ${parts.join(' · ')}</div>`;
       })();
       return `<div class="block"><div class="block-label detail-ex-head"><span>${UI.esc(e.name)}</span><button class="icon-btn" data-ai-done data-ei="${ei}" title="Consultar a una IA sobre este ejercicio">${UI.icon('chat', 16)}</button></div><ul class="set-detail-list">${rows}</ul>${totalsLine}${note}</div>`;
@@ -1375,5 +1404,5 @@ const VSessions = (() => {
     });
   }
 
-  return { live, liveBind, list, listBind, detail, detailBind, sessionVolume, checkResume, liveHasData, restEnsure, TIME_FIELDS, DEFAULT_TIME_METRICS };
+  return { live, liveBind, list, listBind, detail, detailBind, sessionVolume, checkResume, liveHasData, restEnsure, TIME_FIELDS };
 })();

@@ -853,7 +853,7 @@ const VPlan = (() => {
           { value: 'time', label: 'Tiempo / duración' }], ex ? ex.type : 'weight'),
           'Determina qué campos verás al registrar la sesión.')}
         ${(() => {
-          const chosen = (ex && Array.isArray(ex.metrics)) ? ex.metrics : VSessions.DEFAULT_TIME_METRICS;
+          const chosen = (ex && Array.isArray(ex.metrics)) ? ex.metrics : [];
           return `<div id="exMetrics" style="${(ex ? ex.type : 'weight') === 'time' ? '' : 'display:none'}">
             <span class="field-label">Datos a registrar (además del tiempo)</span>
             <div class="metric-opts">${VSessions.TIME_FIELDS.map(f => `<label class="metric-opt"><input type="checkbox" data-mk="${f.key}"${chosen.includes(f.key) ? ' checked' : ''}><span>${f.label}${f.unit ? ` <em>(${f.unit})</em>` : ''}</span></label>`).join('')}</div>

@@ -1,10 +1,10 @@
 // Service Worker - Traindía
-// La versión visible de la app es v2.6.0 (ver pie en la app).
+// La versión visible de la app es v2.6.1 (ver pie en la app).
 // CACHE_NAME es solo la clave de caché: súbele el número de build en cada deploy
 // (build-6, build-7, …) para que los cambios lleguen a las apps ya instaladas.
 // Los fetch usan {cache:'reload'} para saltarse la caché HTTP del navegador/Pages
 // y traer SIEMPRE la última versión con red (offline tira de CACHE_NAME).
-const CACHE_NAME = 'traindia-build-83';
+const CACHE_NAME = 'traindia-build-85';
 const ASSETS = [
   './',
   './index.html',
