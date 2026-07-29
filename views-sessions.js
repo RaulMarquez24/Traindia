@@ -308,6 +308,18 @@ const VSessions = (() => {
     return entry.exerciseId || (entry.name || '').trim().toLowerCase();
   }
   let _lastTimeMap = null; // key -> { date, type, sets } de la sesión más reciente
+  let _prevDaySession = null; // sesión completa anterior del MISMO día (vistazo rápido en vivo)
+  // La última sesión (no borrador) del mismo día del plan que la actual. Empareja por
+  // dayId (preciso); si la actual no tiene dayId (entreno libre), cae al nombre.
+  function findPrevDaySession(current, sessions) {
+    if (!current) return null;
+    const sameDay = current.dayId
+      ? (x => x.dayId === current.dayId)
+      : (x => (x.name || '').trim().toLowerCase() === (current.name || '').trim().toLowerCase());
+    return sessions
+      .filter(x => !x.draft && x.id !== current.id && sameDay(x))
+      .sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt || 0) - (a.createdAt || 0))[0] || null;
+  }
   function buildLastTimeMap(sessions, excludeId) {
     const map = {};
     sessions
@@ -834,12 +846,16 @@ const VSessions = (() => {
     const hist = await DB.sessionsOf(app.activeUser.id);
     _lastTimeMap = buildLastTimeMap(hist, s.id);
     _prMap = buildPRMap(hist, s.id);
+    _prevDaySession = findPrevDaySession(s, hist);
     const elapsed = Math.floor((Date.now() - s.startTs) / 1000);
 
     return `
       <div class="live-head">
         <div class="live-title">${UI.esc(s.name)}</div>
-        <div class="live-timer" id="liveTimer">${fmtClock(elapsed)}</div>
+        <div class="live-head-right">
+          ${_prevDaySession ? `<button class="icon-btn" id="livePrev" title="Ver la última vez que hiciste este día">${UI.icon('calendar', 18)}</button>` : ''}
+          <div class="live-timer" id="liveTimer">${fmtClock(elapsed)}</div>
+        </div>
       </div>
       <div class="live-entries">
         ${s.entries.map((e, i) => entryCardHTML(e, i, 'live')).join('') || '<div class="empty-state"><p>Añade ejercicios para empezar.</p></div>'}
@@ -867,6 +883,9 @@ const VSessions = (() => {
       timerEl.textContent = fmtClock(Math.floor((Date.now() - s.startTs) / 1000));
     }, 1000);
     bindRestTimer(app, root);
+
+    const prevBtn = root.querySelector('#livePrev');
+    if (prevBtn) prevBtn.addEventListener('click', () => showPrevDaySession(app));
 
     const sync = () => { syncLive(root, s); app.persistLive(); };
 
@@ -1236,19 +1255,13 @@ const VSessions = (() => {
     });
   }
 
-  // =====================================================
-  // DETALLE DE SESIÓN
-  // =====================================================
-  async function detail(app, params) {
-    const s = await DB.get('sessions', params.sessionId);
-    if (!s) return `<div class="empty-state"><p>Sesión no encontrada.</p></div>`;
-    const author = app.userById(s.userId);
-    const vol = sessionVolume(s);
-
-    const entries = (s.entries || []).map((e, ei) => {
-      const rows = (e.sets || []).map((set, i) => {
-        return `<li><span class="set-n-sm">${i + 1}</span><span>${UI.esc(setDisplay(e.type || 'weight', set))}</span></li>`;
-      }).join('');
+  // Bloques por ejercicio de una sesión (series + totales + nota). Reutilizado por el
+  // detalle y por el vistazo rápido a la sesión anterior. opts.ai añade el botón de IA.
+  function sessionEntriesHTML(s, opts) {
+    const withAI = !!(opts && opts.ai);
+    return (s.entries || []).map((e, ei) => {
+      const rows = (e.sets || []).map((set, i) =>
+        `<li><span class="set-n-sm">${i + 1}</span><span>${UI.esc(setDisplay(e.type || 'weight', set))}</span></li>`).join('');
       const note = e.note ? `<div class="ex-note"><span class="ex-note-txt">${UI.icon('edit', 13)} ${UI.esc(e.note)}</span></div>` : '';
       const totalsLine = (() => {
         if ((e.type || 'weight') !== 'time' || !entryHasTotals(e)) return '';
@@ -1267,8 +1280,47 @@ const VSessions = (() => {
         if (!parts.length) return '';
         return `<div class="detail-totals">${UI.icon('clock', 13)} ${parts.join(' · ')}</div>`;
       })();
-      return `<div class="block"><div class="block-label detail-ex-head"><span>${UI.esc(e.name)}</span><button class="icon-btn" data-ai-done data-ei="${ei}" title="Consultar a una IA sobre este ejercicio">${UI.icon('chat', 16)}</button></div><ul class="set-detail-list">${rows}</ul>${totalsLine}${note}</div>`;
+      const head = withAI
+        ? `<div class="block-label detail-ex-head"><span>${UI.esc(e.name)}</span><button class="icon-btn" data-ai-done data-ei="${ei}" title="Consultar a una IA sobre este ejercicio">${UI.icon('chat', 16)}</button></div>`
+        : `<div class="block-label">${UI.esc(e.name)}</div>`;
+      return `<div class="block">${head}<ul class="set-detail-list">${rows}</ul>${totalsLine}${note}</div>`;
     }).join('');
+  }
+
+  // Vistazo rápido (modal) a la última sesión del mismo día — para consultar qué hiciste
+  // la vez anterior sin salir del entreno en curso.
+  function showPrevDaySession(app) {
+    const prev = _prevDaySession;
+    if (!prev) { UI.toast('No hay una sesión anterior de este día'); return; }
+    const vol = sessionVolume(prev);
+    UI.modal({
+      title: 'La última vez',
+      bodyHTML: `<div class="prev-sess">
+        <div class="meta prev-sess-meta">
+          <span>${UI.icon('calendar', 13)} ${UI.esc(UI.fmtDate(prev.date))}</span>
+          ${prev.durationSec ? `<span>${UI.icon('clock', 13)} ${fmtClock(prev.durationSec)}</span>` : ''}
+          ${vol ? `<span>${UI.icon('dumbbell', 13)} ${vol} kg vol.</span>` : ''}
+        </div>
+        ${sessionEntriesHTML(prev, { ai: false }) || '<p class="dim">Sin ejercicios.</p>'}
+        ${prev.notes ? `<div class="note-box"><div class="block-label">Notas</div><p>${UI.esc(prev.notes)}</p></div>` : ''}
+      </div>`,
+      actions: [
+        { label: 'Cerrar', kind: 'ghost' },
+        { label: 'Ver completa', kind: 'primary', onClick: () => app.go('session', { sessionId: prev.id }) },
+      ],
+    });
+  }
+
+  // =====================================================
+  // DETALLE DE SESIÓN
+  // =====================================================
+  async function detail(app, params) {
+    const s = await DB.get('sessions', params.sessionId);
+    if (!s) return `<div class="empty-state"><p>Sesión no encontrada.</p></div>`;
+    const author = app.userById(s.userId);
+    const vol = sessionVolume(s);
+
+    const entries = sessionEntriesHTML(s, { ai: true });
 
     return `<div class="section">
       <div class="detail-hero">
