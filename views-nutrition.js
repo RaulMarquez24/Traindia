@@ -191,7 +191,14 @@ const VNutrition = (() => {
     const sup = (_plan.suplementos || []).length
       ? `<div class="nut-reglas"><div class="card-label">Suplementación</div><ul>${_plan.suplementos.map(x => `<li><strong>${UI.esc(x.nombre)}</strong>${x.cantidad ? ` · ${UI.esc(x.cantidad)}` : ''}${x.nota ? ` <span class="dim">${UI.esc(x.nota)}</span>` : ''}</li>`).join('')}</ul></div>` : '';
     const dudas = (_plan.dudas || []).length
-      ? `<div class="nut-dudas"><div class="card-label">Dudas al importar</div><ul>${_plan.dudas.map(d => `<li>${UI.esc(d)}</li>`).join('')}</ul></div>` : '';
+      ? `<div class="nut-dudas">
+          <div class="card-label">Dudas al importar · ${_plan.dudas.length}</div>
+          ${_plan.dudas.map((d, i) => `<div class="duda-row">
+            <span class="duda-txt">${UI.esc(d)}</span>
+            <button class="btn ghost small" data-duda="${i}">${UI.icon('check', 13)} Aclarada</button>
+          </div>`).join('')}
+          <p class="field-hint">Coteja cada una con tu nutricionista, corrígela en la comida que toque y márcala como aclarada para quitarla de aquí.</p>
+        </div>` : '';
 
     return `<div class="section">
       <div class="nut-head">
@@ -995,6 +1002,13 @@ const VNutrition = (() => {
       await borrarToma(app, t);
       app.go('nutrition', { planId: _planId }, true);
     }));
+    root.querySelectorAll('[data-duda]').forEach(b => b.addEventListener('click', async () => {
+      const i = parseInt(b.dataset.duda, 10);
+      _plan.dudas.splice(i, 1);
+      await guardar(app);
+      UI.toast(_plan.dudas.length ? `Aclarada · quedan ${_plan.dudas.length}` : 'Sin dudas pendientes');
+    }));
+
     const addT = root.querySelector('#nutAddToma');
     if (addT) addT.addEventListener('click', () => addToma(app));
 
