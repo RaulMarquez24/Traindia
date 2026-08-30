@@ -95,13 +95,14 @@ const VNutrition = (() => {
   let _planId = null;   // plan elegido cuando hay más de uno
   // La cabecera de la app dice dónde estás: Nutrición → nombre de la pauta → comida.
   function headerTitle(params) {
-    if (params && params.lista) return 'Mis planes';
-    if (!_plan) return 'Nutrición';
-    if (params && params.tomaId) {
-      const t = (_plan.tomas || []).find(x => x.id === params.tomaId);
-      if (t) return t.nombre;
+    if (params && params.planId && _plan) {
+      if (params.tomaId) {
+        const t = (_plan.tomas || []).find(x => x.id === params.tomaId);
+        if (t) return t.nombre;
+      }
+      return _plan.nombre || 'Nutrición';
     }
-    return _plan.nombre || 'Nutrición';
+    return 'Mis planes';
   }
   let _abierta = {};    // idToma -> idOpcion (para "usar hoy" de un plato)
 
@@ -119,20 +120,37 @@ const VNutrition = (() => {
     return { vs, vId, v: vs.find(x => x.id === vId) || vs[0] };
   }
 
-  // NAVEGACIÓN: plan (si hay varios) → día + tomas → una toma concreta.
-  // Todo cuelga de params para que el botón de atrás funcione como se espera.
+  // NAVEGACIÓN: la raíz de la sección es MIS PLANES; un plan se abre encima, así
+  // que el botón de atrás siempre devuelve a la lista. Con un solo plan se entra
+  // directo, pero dejando la lista en el historial para poder volver.
+  let _saltarA = null;
+
   async function render(app, params) {
     if (!(await DB.hasStore('nutrition'))) return prepararHTML();
     const planes = await DB.nutritionOf(app.activeUser.id);
     if (!planes.length) { _plan = null; return vacioHTML(); }
-    if ((params && params.lista) || (planes.length > 1 && !_planId)) return listaPlanesHTML(planes);
-    _plan = planes.find(x => x.id === _planId) || planes.find(x => x.isPrimary) || planes[0];
-    _planId = _plan.id;
-    if (params && params.tomaId) {
-      const t = (_plan.tomas || []).find(x => x.id === params.tomaId);
-      if (t) return tomaScreenHTML(app, t);
+
+    const planId = params && params.planId;
+    if (planId) {
+      _plan = planes.find(x => x.id === planId) || planes[0];
+      _planId = _plan.id;
+      if (params.tomaId) {
+        const t = (_plan.tomas || []).find(x => x.id === params.tomaId);
+        if (t) return tomaScreenHTML(app, t);
+      }
+      return planScreenHTML(app);
     }
-    return planScreenHTML(app);
+
+    // Un solo plan: se abre solo. Marcamos estos params como "lista" para que la
+    // entrada que quede en el historial sea la lista y el atrás no rebote aquí.
+    if (planes.length === 1 && !(params && params.lista)) {
+      if (app.params) app.params.lista = 1;
+      _saltarA = planes[0].id;
+      _plan = planes[0]; _planId = _plan.id;
+      return `<div class="loading">Abriendo…</div>`;
+    }
+    _plan = null;
+    return listaPlanesHTML(planes);
   }
 
   function listaPlanesHTML(planes) {
@@ -186,11 +204,10 @@ const VNutrition = (() => {
       <button class="btn ghost block" id="nutAddToma">${UI.icon('plus', 15)} Añadir comida (desayuno, cena…)</button>
       ${reglas}${sup}${dudas}
       <div class="detail-toolbar">
-        <button class="btn ghost" id="nutPlanes">${UI.icon('swap', 15)} Mis planes</button>
         <button class="btn ghost" id="nutShare">${UI.icon('upload', 15)} Compartir</button>
         <button class="btn ghost danger" id="nutDel">${UI.icon('trash', 15)} Borrar plan</button>
       </div>
-      <p class="field-hint">Para crear otro plan, entra en <strong>Mis planes</strong>.</p>
+      <p class="field-hint">Para crear otro plan, vuelve atrás a <strong>Mis planes</strong>.</p>
     </div>`;
   }
 
@@ -520,7 +537,9 @@ const VNutrition = (() => {
           _plan = { id: DB.uid('nut'), userId: app.activeUser.id, isPrimary: true, createdAt: Date.now(),
                     schemaVersion: SCHEMA_VERSION, nombre, tipoDetectado: 'intercambios',
                     variantes, tomas: [], reglas: [], suplementos: [], dudas: [] };
+          _planId = _plan.id;
           await DB.saveNutrition(_plan);
+          app.go('nutrition', { planId: _plan.id }, true);
           setTimeout(() => wizardToma(app), 250);
         } },
       ],
@@ -577,7 +596,7 @@ const VNutrition = (() => {
     app.render();
   }
   // Volver a la pantalla de una comida concreta (tras crearla en el asistente).
-  const irAToma = (app, tomaId) => app.go('nutrition', { tomaId });
+  const irAToma = (app, tomaId) => app.go('nutrition', { planId: _planId, tomaId });
 
   function editAlimento(app, { tomaId, opId, grupoId, altNombre, primero }) {
     const { toma, opcion, grupo, alt } = ref(tomaId, opId, grupoId, altNombre);
@@ -699,6 +718,8 @@ const VNutrition = (() => {
 
   // ---------- enganches ----------
   function bind(app, root, params) {
+    if (_saltarA) { const id = _saltarA; _saltarA = null; app.go('nutrition', { planId: id }); return; }
+
     const prep = root.querySelector('#nutPrep');
     if (prep) prep.addEventListener('click', async () => {
       prep.disabled = true; prep.textContent = 'Preparando…';
@@ -720,7 +741,7 @@ const VNutrition = (() => {
 
     // elegir plan cuando hay varios
     root.querySelectorAll('[data-plan]').forEach(b => b.addEventListener('click', () => {
-      _planId = b.dataset.plan; app.go('nutrition', {}, true);
+      app.go('nutrition', { planId: b.dataset.plan });
     }));
     // día (descanso / entrenamiento)
     root.querySelectorAll('[data-variante]').forEach(b => b.addEventListener('click', () => {
@@ -728,7 +749,7 @@ const VNutrition = (() => {
     }));
     // entrar en una comida
     root.querySelectorAll('[data-toma]').forEach(b => b.addEventListener('click', () => {
-      app.go('nutrition', { tomaId: b.dataset.toma });
+      app.go('nutrition', { planId: _planId, tomaId: b.dataset.toma });
     }));
 
     const tomaPorId = (id) => (_plan.tomas || []).find(t => t.id === id);
@@ -751,13 +772,10 @@ const VNutrition = (() => {
       const t = tomaPorId(b.dataset.rmToma);
       if (!t) return;
       await borrarToma(app, t);
-      app.go('nutrition', {}, true);
+      app.go('nutrition', { planId: _planId }, true);
     }));
     const addT = root.querySelector('#nutAddToma');
     if (addT) addT.addEventListener('click', () => addToma(app));
-
-    const planes = root.querySelector('#nutPlanes');
-    if (planes) planes.addEventListener('click', () => app.go('nutrition', { lista: 1 }));
 
     const share = root.querySelector('#nutShare');
     if (share) share.addEventListener('click', () => VData.exportNutrition(app, _plan));
@@ -767,7 +785,7 @@ const VNutrition = (() => {
       if (!ok) return;
       await DB.del('nutrition', _plan.id);
       _plan = null; _planId = null;
-      app.go('nutrition', {}, true);
+      app.go('nutrition', { lista: 1 }, true);
       UI.toast('Plan borrado');
     });
   }
@@ -926,8 +944,8 @@ const VNutrition = (() => {
           const previas = await DB.nutritionOf(app.activeUser.id);
           for (const x of previas) { x.isPrimary = false; await DB.saveNutrition(x); }
           await DB.saveNutrition(rec);
-          _plan = rec; _abierta = {}; _elegido = {}; _varianteId = null;
-          app.go('nutrition', {}, true);
+          _plan = rec; _planId = rec.id; _abierta = {}; _elegido = {}; _varianteId = null;
+          app.go('nutrition', { planId: rec.id }, true);
           UI.toast('Plan guardado');
         } },
       ],
