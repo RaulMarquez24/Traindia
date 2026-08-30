@@ -736,3 +736,6 @@ body.modal-open { overflow: hidden; }
   background: var(--strong-bg); color: var(--strong); border: 1px solid transparent; display: inline-flex; align-items: center; gap: 5px; }
 .dish:active { opacity: .7; }
 .dish.ghost { background: transparent; color: var(--ink-dim); border: 1px dashed var(--line); font-weight: 500; }
+
+.nut-choose { font-family: 'IBM Plex Mono', monospace; font-size: 10px; font-weight: 600; letter-spacing: .12em;
+  text-transform: uppercase; color: var(--ink-dim); margin-bottom: 8px; }
