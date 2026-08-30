@@ -392,10 +392,25 @@ const VProgress = (() => {
     });
   }
 
+  // Ejercicios que REALMENTE tienen algo registrado. El catálogo tiene más de cien y
+  // la mayoría nunca se han hecho: no tiene sentido ofrecer su "progreso".
+  async function exercisesWithData(userId, catalog) {
+    const ses = (await DB.sessionsOf(userId)).filter(s => !s.draft);
+    const ids = new Set(), names = new Set();
+    ses.forEach(s => (s.entries || []).forEach(e => {
+      if (!(e.sets || []).length) return;
+      if (e.exerciseId) ids.add(e.exerciseId);
+      if (e.name) names.add(e.name.trim().toLowerCase());
+    }));
+    const conDatos = catalog.filter(c => ids.has(c.id) || names.has((c.name || '').trim().toLowerCase()));
+    return conDatos.length ? conDatos : catalog; // si aún no hay nada, no dejamos la vista vacía
+  }
+
   // ---------- POR EJERCICIO ----------
   async function renderExercise(app, host, params) {
-    const catalog = (await DB.exercisesOf(app.activeUser.id)).sort((a, b) => a.name.localeCompare(b.name));
-    if (catalog.length === 0) { host.innerHTML = `<div class="empty-state"><p>No hay ejercicios en el catálogo.</p></div>`; return; }
+    const todos = (await DB.exercisesOf(app.activeUser.id)).sort((a, b) => a.name.localeCompare(b.name));
+    if (todos.length === 0) { host.innerHTML = `<div class="empty-state"><p>No hay ejercicios en el catálogo.</p></div>`; return; }
+    const catalog = await exercisesWithData(app.activeUser.id, todos);
     const exId = host._exId || params.exId || catalog[0].id;
     const ex = catalog.find(e => e.id === exId) || catalog[0];
     const metrics = ex.type === 'time' ? timeMetricsFor(ex) : EX_METRICS;
@@ -477,7 +492,8 @@ const VProgress = (() => {
     const guest = users.find(u => u.id === guestId);
 
     // métricas: peso corporal + cada ejercicio del principal
-    const catalog = (await DB.exercisesOf(app.mainUser.id)).sort((a, b) => a.name.localeCompare(b.name));
+    const catalog = await exercisesWithData(app.mainUser.id,
+      (await DB.exercisesOf(app.mainUser.id)).sort((a, b) => a.name.localeCompare(b.name)));
     const subjectKey = host._subject || 'body:weight';
 
     let series = [], unit = '', exMetrics = EX_METRICS, exMetric = 'maxWeight';

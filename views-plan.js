@@ -222,6 +222,26 @@ const VPlan = (() => {
   }
 
   // Intercambia el CONTENIDO de dos días (mantiene id, nombre y posición/semana).
+  // Los tipos de día canónicos son strong/moderate/light/rest (así los espera el CSS
+  // para el color). Un plan importado puede traerlos en español: se normalizan aquí
+  // para que la tarjeta se coloree igual, en vez de quedarse sin color.
+  const DAY_TYPE_ALIAS = {
+    fuerte: 'strong', fuertes: 'strong', duro: 'strong',
+    moderado: 'moderate', medio: 'moderate',
+    ligero: 'light', suave: 'light',
+    descanso: 'rest', reposo: 'rest', libre: 'rest',
+  };
+  function normalizeDayTypes(routine) {
+    let changed = false;
+    (routine && routine.days || []).forEach(d => {
+      const canon = DAY_TYPE_ALIAS[String(d.type || '').toLowerCase()];
+      if (canon && canon !== d.type) { d.type = canon; changed = true; }
+      if (!d.type) { d.type = d.isRest ? 'rest' : 'moderate'; changed = true; }
+      if (d.isRest && d.type !== 'rest') { d.type = 'rest'; changed = true; }
+    });
+    return changed;
+  }
+
   const SWAP_FIELDS = ['type', 'typeLabel', 'focus', 'place', 'placeAccent', 'duration', 'isRest', 'blocks', 'substitutes', 'substitutesTitle', 'planB', 'relatedGuides'];
   function swapDayContent(a, b) {
     SWAP_FIELDS.forEach(f => { const tmp = a[f]; a[f] = b[f]; b[f] = tmp; });
@@ -1002,5 +1022,5 @@ const VPlan = (() => {
     return `<div class="empty-state"><p>No hay rutina configurada.</p></div>`;
   }
 
-  return { week, weekBind, day, dayBind, guides, guide, info, infoBind, exercises, exercisesBind, places, placesBind, checkDuplicates };
+  return { week, weekBind, day, dayBind, normalizeDayTypes, guides, guide, info, infoBind, exercises, exercisesBind, places, placesBind, checkDuplicates };
 })();
