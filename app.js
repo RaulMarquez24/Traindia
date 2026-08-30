@@ -263,6 +263,7 @@ const app = {
       html = `<div class="empty-state"><p>Error al cargar la vista.</p><p class="dim">${UI.esc(e.message || e)}</p></div>`;
     }
     main.innerHTML = `<div class="view active">${html}</div>`;
+    this.updateHeader();   // otra vez: algunas vistas solo saben su título tras cargar sus datos
     this.bindLinks(main);
     if (def.bind) { try { def.bind(this, main, this.params); } catch (e) { console.error(e); } }
     this.updateActiveBar();
@@ -291,7 +292,9 @@ const app = {
       more: 'Más', profiles: 'Perfiles', data: 'Datos', settings: 'Ajustes', backups: 'Copias internas', docs: 'Documentos',
     };
     let label = titles[this.currentView] || 'Traindía';
-    if (this.currentView === 'day' && this.routine) {
+    if (this.currentView === 'nutrition' && typeof VNutrition !== 'undefined') {
+      label = VNutrition.headerTitle(this.params) || label;   // Nutrición → pauta → comida
+    } else if (this.currentView === 'day' && this.routine) {
       const d = this.routine.days.find(x => x.id === this.params.dayId);
       if (d) label = d.name;
     } else if (this.currentView === 'guide' && typeof PLAN_DATA !== 'undefined') {
@@ -445,7 +448,7 @@ const app = {
                 tipo: d.tipo,
                 mensaje: d.mensaje.trim(),
                 contacto: (d.contacto || '').trim() || '(no indicado)',
-                version: 'v2.10.0',
+                version: 'v2.10.1',
                 perfil: (this.mainUser && this.mainUser.name) || '',
                 navegador: navigator.userAgent,
               }),
@@ -480,7 +483,7 @@ const app = {
     return `<div class="section">
       ${rows.map(r => `<button class="big-row" data-link="${r.v}"><span class="big-row-icon tile" style="background:${r.color}">${UI.icon(r.icon, 20)}</span><span class="big-row-text"><strong>${r.label}</strong><span class="dim">${r.sub}</span></span><span class="chev">›</span></button>`).join('')}
       <button class="big-row" data-feedback><span class="big-row-icon tile" style="background:var(--strong)">${UI.icon('chat', 20)}</span><span class="big-row-text"><strong>Sugerencias y reportes</strong><span class="dim">Envíame ideas o fallos</span></span><span class="chev">›</span></button>
-      <p class="version-foot">Traindía · v2.10.0 · ${Object.keys(this.usersById).length} perfil(es)<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
+      <p class="version-foot">Traindía · v2.10.1 · ${Object.keys(this.usersById).length} perfil(es)<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
     </div>`;
   },
   bindMore(root) {
@@ -749,7 +752,7 @@ const app = {
         <button class="btn danger block" id="resetApp">Borrar todos los datos</button>
         <p class="field-hint">Restablece la app al estado inicial (se borran todos los perfiles, sesiones y progreso).</p>
       </div>
-      <p class="version-foot">Traindía · v2.10.0</p>
+      <p class="version-foot">Traindía · v2.10.1</p>
     </div>`;
   },
 

@@ -40,15 +40,20 @@ const VNutrition = (() => {
     const cs = alt.cantidades || {};
     return cs[varianteId] || cs[Object.keys(cs)[0]] || null;
   }
+  // Solo el número y la unidad. La nota ("en crudo", "al gusto") va aparte para
+  // que no se pegue al gramaje y se pueda dar menos peso visual.
   function cantidadTexto(alt, varianteId) {
     const c = cantidadDe(alt, varianteId);
     if (!c) return '';
     const val = (c.valor === null || c.valor === undefined || c.valor === '') ? '' : c.valor;
-    let t = [val, c.unidad].filter(x => x !== '' && x != null).join(' ').trim();
-    if (!t) t = c.texto || '';
-    if (c.nota) t += ` ${c.nota}`;
-    return t.trim();
+    const t = [val, c.unidad].filter(x => x !== '' && x != null).join(' ').trim();
+    return t || c.nota || c.texto || '';
   }
+  const notaDe = (alt, vId) => {
+    const c = cantidadDe(alt, vId);
+    if (!c || !c.nota) return '';
+    return cantidadTexto(alt, vId) === c.nota ? '' : c.nota;   // si la nota ES la cantidad, no repetir
+  };
   function varianteDeHoy(plan, app) {
     const vs = plan.variantes || [];
     if (!vs.length) return null;
@@ -88,6 +93,15 @@ const VNutrition = (() => {
   const marcarPrompt = () => { try { localStorage.setItem(PROMPT_KEY, '1'); } catch (e) {} };
 
   let _planId = null;   // plan elegido cuando hay más de uno
+  // La cabecera de la app dice dónde estás: Nutrición → nombre de la pauta → comida.
+  function headerTitle(params) {
+    if (!_plan) return 'Nutrición';
+    if (params && params.tomaId) {
+      const t = (_plan.tomas || []).find(x => x.id === params.tomaId);
+      if (t) return t.nombre;
+    }
+    return _plan.nombre || 'Nutrición';
+  }
   let _abierta = {};    // idToma -> idOpcion (para "usar hoy" de un plato)
 
   // ¿Esta opción se puede hacer hoy? Solo si CADA línea no opcional tiene al menos
@@ -122,12 +136,16 @@ const VNutrition = (() => {
 
   function listaPlanesHTML(planes) {
     return `<div class="section">
-      <p class="section-intro">Tienes varias pautas guardadas. Elige con cuál quieres trabajar.</p>
+      <div class="sec-label">Mis pautas</div>
       ${planes.map(p => `<button class="big-row" data-plan="${UI.esc(p.id)}">
           <span class="big-row-icon tile" style="background:var(--strong)">${UI.icon('book', 20)}</span>
           <span class="big-row-text"><strong>${UI.esc(p.nombre || 'Pauta')}</strong><span class="dim">${(p.tomas || []).length} comidas${p.isPrimary ? ' · en uso' : ''}</span></span>
           <span class="chev">›</span>
         </button>`).join('')}
+      <div class="sec-label" style="margin-top:22px">Añadir otra</div>
+      <button class="btn ghost block" id="nutWizard">${UI.icon('plus', 15)} Crear a mano</button>
+      <button class="btn ghost block" id="nutImport">${UI.icon('chat', 15)} Desde un documento <span class="beta-tag">beta</span></button>
+      <button class="btn ${pidioPrompt() ? 'primary' : 'ghost'} block" id="nutPaste">${UI.icon('upload', 15)} Pegar el resultado de la IA</button>
     </div>`;
   }
 
@@ -162,16 +180,16 @@ const VNutrition = (() => {
         <div class="nut-head-txt"><strong>${UI.esc(_plan.nombre || 'Mi pauta')}</strong><span class="dim">${UI.esc(UI.fmtDate(DB.todayISO()))}</span></div>
       </div>
       ${dias}
-      ${pidioPrompt() ? `<button class="btn primary block" id="nutPaste">${UI.icon('upload', 15)} Pegar el resultado de la IA</button>` : ''}
-      <div class="card-label" style="margin-top:18px">Comidas del día</div>
+      <div class="sec-label">Comidas del día</div>
       ${filas || '<div class="empty-state"><p class="dim">Tu pauta no tiene comidas todavía.</p></div>'}
       <button class="btn ghost block" id="nutAddToma">${UI.icon('plus', 15)} Añadir comida (desayuno, cena…)</button>
       ${reglas}${sup}${dudas}
       <div class="detail-toolbar">
-        <button class="btn ghost" id="nutImport">${UI.icon('chat', 15)} Reimportar <span class="beta-tag">beta</span></button>
+        <button class="btn ghost" id="nutPlanes">${UI.icon('swap', 15)} Mis pautas</button>
         <button class="btn ghost" id="nutShare">${UI.icon('upload', 15)} Compartir</button>
         <button class="btn ghost danger" id="nutDel">${UI.icon('trash', 15)} Borrar pauta</button>
       </div>
+      <p class="field-hint">Para crear otra pauta, sal a <strong>Mis pautas</strong>.</p>
     </div>`;
   }
 
@@ -201,7 +219,7 @@ const VNutrition = (() => {
             <span class="nut-dots"></span>
             <span class="nut-qty">${UI.esc(((el.cantidades || {})[vId] ? cantidadTexto(el, vId) : '') || '—')}</span>
           </div>
-          ${c.equivale ? `<div class="nut-eq">≡ ${UI.esc(c.equivale)}</div>` : ''}
+          ${(notaDe(el, vId) || c.equivale) ? `<div class="nut-eq">${UI.esc([notaDe(el, vId), c.equivale ? `≡ ${c.equivale}` : ''].filter(Boolean).join(' · '))}</div>` : ''}
           ${otras.length ? `<div class="nut-swap"><span class="nut-swap-lbl">o</span>${otras.map(a => `<span class="nut-alt static">${UI.esc(a.alimento)}${(a.cantidades || {})[vId] ? ` <em>${UI.esc(cantidadTexto(a, vId))}</em>` : ''}</span>`).join('')}</div>` : ''}
         </div>`;
       }).join('');
@@ -227,20 +245,21 @@ const VNutrition = (() => {
         <div class="nut-head-txt"><strong>${UI.esc(t.nombre)}</strong><span class="dim">${UI.esc(v ? v.nombre : '')}</span></div>
       </div>
       ${dias}
-      <div class="card-label" style="margin-top:16px">Lo que te toca</div>
+      ${platos.length ? `
+        <div class="sec-label" id="nutPlatos">Tus platos</div>
+        <div class="meal-list">${platos.map(({ op, r }) => `
+          <button class="meal-card" data-receta="${UI.esc(t.id)}|${UI.esc(op.id)}|${UI.esc(r.id)}">
+            <span class="meal-name">${UI.esc(r.nombre)}</span>
+            <span class="meal-sub">${UI.esc(Object.values(r.elige || {}).join(' · ') || op.nombre || '')}</span>
+            ${r.preparacion ? `<span class="meal-flag">${UI.icon('book', 11)} con preparación</span>` : ''}
+            <span class="meal-go">›</span>
+          </button>`).join('')}</div>` : ''}
+
+      <div class="sec-label"${platos.length ? '' : ' id="nutPlatos"'}>Lo que te toca</div>
       ${bloques || '<div class="empty-state"><p class="dim">Sin opciones todavía.</p></div>'}
       <button class="btn ghost block" data-add-op="${UI.esc(t.id)}">${UI.icon('plus', 15)} Añadir opción</button>
-
-      <div class="card-label" style="margin-top:22px">Tus platos</div>
-      ${platos.length ? `<div class="meal-list">${platos.map(({ op, r }) => `
-        <button class="meal-card" data-receta="${UI.esc(t.id)}|${UI.esc(op.id)}|${UI.esc(r.id)}">
-          <span class="meal-name">${UI.esc(r.nombre)}</span>
-          <span class="meal-sub">${UI.esc(Object.values(r.elige || {}).join(' · ') || op.nombre || '')}</span>
-          ${r.preparacion ? `<span class="meal-flag">${UI.icon('book', 11)} con preparación</span>` : ''}
-          <span class="meal-go">›</span>
-        </button>`).join('')}</div>`
-        : `<p class="field-hint">Todavía no has guardado ninguno. Cuando cocines algo con estas cantidades, dale a <strong>«Plato con esto»</strong> en la opción que hayas usado y la próxima vez no tendrás que pensarlo.</p>`}
-      <button class="btn ghost block danger" data-rm-toma="${UI.esc(t.id)}" style="margin-top:22px">${UI.icon('trash', 15)} Borrar ${UI.esc(t.nombre)}</button>
+      ${platos.length ? '' : `<p class="field-hint">Cuando cocines algo con estas cantidades, dale a <strong>«Plato con esto»</strong> y la próxima vez lo tendrás aquí arriba sin pensarlo.</p>`}
+      <button class="btn ghost block danger" data-rm-toma="${UI.esc(t.id)}" style="margin-top:26px">${UI.icon('trash', 15)} Borrar ${UI.esc(t.nombre)}</button>
     </div>`;
   }
 
@@ -314,7 +333,9 @@ const VNutrition = (() => {
           opcion.recetas = opcion.recetas || [];
           opcion.recetas.push({ id: DB.uid('rec'), nombre: n, preparacion: prep || undefined, elige });
           await guardar(app);
-          UI.toast('Plato guardado');
+          UI.toast(`"${n}" guardado en tus platos`);
+          // La lista de platos está arriba: se lleva la vista hasta ella para que se vea.
+          setTimeout(() => { const el = document.getElementById('nutPlatos'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 250);
         } },
       ],
     });
@@ -654,6 +675,9 @@ const VNutrition = (() => {
     const addT = root.querySelector('#nutAddToma');
     if (addT) addT.addEventListener('click', () => addToma(app));
 
+    const planes = root.querySelector('#nutPlanes');
+    if (planes) planes.addEventListener('click', () => { _planId = null; app.go('nutrition', {}, true); });
+
     const share = root.querySelector('#nutShare');
     if (share) share.addEventListener('click', () => VData.exportNutrition(app, _plan));
     const del = root.querySelector('#nutDel');
@@ -981,5 +1005,5 @@ ${extra.join('\n')}
 Devuelve únicamente el JSON, en un bloque de código, y como archivo descargable si puedes.`;
   }
 
-  return { render, bind, buildPrompt, validar, previewImport: previsualizar, SCHEMA_VERSION };
+  return { render, bind, buildPrompt, validar, previewImport: previsualizar, headerTitle, SCHEMA_VERSION };
 })();
