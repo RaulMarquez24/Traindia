@@ -137,11 +137,21 @@ const VNutrition = (() => {
   // que el botón de atrás siempre devuelve a la lista. Con un solo plan se entra
   // directo, pero dejando la lista en el historial para poder volver.
   let _saltarA = null;
+  let _docs = [];           // documentos guardados en este dispositivo
+  let _docsOK = false;      // ¿está creado el almacén de documentos?
+
+  // Los documentos viven en 'files' (compartidos con la sección Documentos) y el
+  // plan solo guarda sus ids: así el mismo PDF sirve para el entreno y la dieta.
+  const docsDelPlan = () => (_plan && Array.isArray(_plan.docIds) ? _plan.docIds : [])
+    .map(id => _docs.find(d => d.id === id)).filter(Boolean);
 
   async function render(app, params) {
     if (!(await DB.hasStore('nutrition'))) return prepararHTML();
     const planes = await DB.nutritionOf(app.activeUser.id);
     if (!planes.length) { _plan = null; return vacioHTML(); }
+
+    _docsOK = await DB.hasStore('files');
+    _docs = _docsOK ? await DB.filesOf(app.activeUser.id) : [];
 
     for (const pl of planes) {
       if (arreglarDiaLigero(pl)) await DB.saveNutrition(pl);
@@ -218,6 +228,20 @@ const VNutrition = (() => {
           <p class="field-hint">Coteja cada una con tu nutricionista, corrígela en la comida que toque y márcala como aclarada para quitarla de aquí.</p>
         </div>` : '';
 
+    const misDocs = docsDelPlan();
+    const docs = `<div class="nut-reglas">
+      <div class="card-label">Documentos del plan</div>
+      ${misDocs.length ? misDocs.map(d => `<div class="duda-row">
+          <span class="duda-txt">${UI.icon(app.docIcon(d.type), 14)} ${UI.esc(d.name)}</span>
+          <button class="btn ghost small" data-doc-open="${UI.esc(d.id)}">Abrir</button>
+          <button class="btn ghost small danger" data-doc-rm="${UI.esc(d.id)}">Quitar</button>
+        </div>`).join('')
+        : '<p class="field-hint" style="margin-top:0">El PDF de tu nutricionista, la foto de la hoja que te dio… para consultarlo desde aquí cuando dudes.</p>'}
+      ${_docsOK
+        ? `<button class="btn ghost small block" id="nutAddDoc" style="margin-top:10px">${UI.icon('plus', 14)} Adjuntar documento</button>`
+        : '<p class="field-hint">Para guardar documentos hay que activarlos primero en <strong>Más → Documentos</strong>.</p>'}
+    </div>`;
+
     return `<div class="section">
       <div class="nut-head">
         <div class="nut-head-txt"><strong>${UI.esc(_plan.nombre || 'Mi plan')}</strong><span class="dim">${UI.esc(UI.fmtDate(DB.todayISO()))}</span></div>
@@ -226,7 +250,7 @@ const VNutrition = (() => {
       <div class="sec-label">Comidas del día</div>
       ${filas || '<div class="empty-state"><p class="dim">Tu pauta no tiene comidas todavía.</p></div>'}
       <button class="btn ghost block" id="nutAddToma">${UI.icon('plus', 15)} Añadir comida (desayuno, cena…)</button>
-      ${reglas}${sup}${dudas}
+      ${reglas}${sup}${docs}${dudas}
       <div class="detail-toolbar">
         <button class="btn ghost" id="nutShare">${UI.icon('upload', 15)} Compartir</button>
         <button class="btn ghost danger" id="nutDel">${UI.icon('trash', 15)} Borrar plan</button>
@@ -312,6 +336,7 @@ const VNutrition = (() => {
     return `<div class="section">
       <div class="nut-head">
         <div class="nut-head-txt"><strong>${UI.esc(t.nombre)}</strong><span class="dim">${UI.esc(v ? v.nombre : '')}</span></div>
+        ${docsDelPlan().length ? `<button class="icon-btn" id="nutDocs" title="Ver los documentos del plan">${UI.icon('book', 18)}</button>` : ''}
       </div>
       ${dias}
       ${platos.length ? `
@@ -954,6 +979,43 @@ const VNutrition = (() => {
     });
   }
 
+  async function adjuntarDoc(app) {
+    const yaEstan = (_plan.docIds || []);
+    const libres = _docs.filter(d => !yaEstan.includes(d.id));
+    const subir = async (file) => {
+      if (file.size > app.MAX_DOC_MB * 1048576) { UI.toast(`Máximo ${app.MAX_DOC_MB} MB por documento`, 'err'); return; }
+      const rec = await DB.addFile(app.activeUser.id, { name: file.name, type: file.type, size: file.size, data: await file.arrayBuffer() });
+      _plan.docIds = yaEstan.concat(rec.id);
+      await guardar(app);
+      UI.toast('Documento adjuntado');
+    };
+    const elegirArchivo = () => {
+      const inp = document.createElement('input');
+      inp.type = 'file';   // sin filtro: en Android los adjuntos de WhatsApp llegan como octet-stream
+      inp.addEventListener('change', async () => { const f = inp.files[0]; if (f) await subir(f); });
+      inp.click();
+    };
+
+    UI.modal({
+      title: 'Adjuntar documento',
+      bodyHTML: `<p class="modal-text">El PDF de tu nutricionista, una foto de la hoja que te dio… Se queda enganchado al plan y lo abres desde cualquier comida.</p>
+        ${libres.length ? `<div class="sec-label">Ya los tienes en el móvil</div>
+          <div class="menu-list">${libres.map(d => `<button class="picker-row" data-pick="${UI.esc(d.id)}"><span class="picker-name">${UI.icon(app.docIcon(d.type), 16)} ${UI.esc(d.name)}</span></button>`).join('')}</div>` : ''}
+        <button class="btn ghost block" id="nutDocFile" style="margin-top:12px">${UI.icon('plus', 15)} Buscar en el móvil</button>
+        <p class="field-hint">Los documentos se guardan <strong>solo en este dispositivo</strong>: si compartes el plan, el archivo no viaja con él.</p>`,
+      actions: [{ label: 'Cerrar', kind: 'ghost' }],
+      onMount: (root) => {
+        root.querySelectorAll('[data-pick]').forEach(b => b.addEventListener('click', async () => {
+          _plan.docIds = yaEstan.concat(b.dataset.pick);
+          UI.closeModal(root);
+          await guardar(app);
+          UI.toast('Documento adjuntado');
+        }));
+        root.querySelector('#nutDocFile').addEventListener('click', () => { UI.closeModal(root); elegirArchivo(); });
+      },
+    });
+  }
+
   async function borrarToma(app, toma) {
     const ok = await UI.confirm({ title: 'Borrar toma', message: `Se borrará "${toma.nombre}" con todas sus comidas.`, confirmLabel: 'Borrar', danger: true });
     if (!ok) return;
@@ -1026,6 +1088,31 @@ const VNutrition = (() => {
       await guardar(app);
       UI.toast(_plan.dudas.length ? `Aclarada · quedan ${_plan.dudas.length}` : 'Sin dudas pendientes');
     }));
+
+    const addDoc = root.querySelector('#nutAddDoc');
+    if (addDoc) addDoc.addEventListener('click', () => adjuntarDoc(app));
+    root.querySelectorAll('[data-doc-open]').forEach(b => b.addEventListener('click', () => {
+      const d = _docs.find(x => x.id === b.dataset.docOpen); if (d) app.openDoc(d);
+    }));
+    root.querySelectorAll('[data-doc-rm]').forEach(b => b.addEventListener('click', async () => {
+      // Se desengancha del plan; el archivo sigue en Documentos.
+      _plan.docIds = (_plan.docIds || []).filter(id => id !== b.dataset.docRm);
+      await guardar(app);
+      UI.toast('Quitado del plan · sigue en Documentos');
+    }));
+    const verDocs = root.querySelector('#nutDocs');
+    if (verDocs) verDocs.addEventListener('click', () => {
+      const ds = docsDelPlan();
+      if (ds.length === 1) { app.openDoc(ds[0]); return; }
+      UI.modal({
+        title: 'Documentos del plan',
+        bodyHTML: `<div class="menu-list">${ds.map(d => `<button class="picker-row" data-doc="${UI.esc(d.id)}"><span class="picker-name">${UI.icon(app.docIcon(d.type), 16)} ${UI.esc(d.name)}</span></button>`).join('')}</div>`,
+        actions: [{ label: 'Cerrar', kind: 'ghost' }],
+        onMount: (r) => r.querySelectorAll('[data-doc]').forEach(b => b.addEventListener('click', () => {
+          const d = ds.find(x => x.id === b.dataset.doc); if (d) app.openDoc(d);
+        })),
+      });
+    });
 
     const addT = root.querySelector('#nutAddToma');
     if (addT) addT.addEventListener('click', () => addToma(app));

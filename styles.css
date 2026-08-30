@@ -655,7 +655,9 @@ body.modal-open { overflow: hidden; }
 .sec-label:first-child { margin-top: 4px; }
 
 /* Cabecera de la pantalla */
-.nut-head { padding: 16px 18px; background: var(--strong-bg); border-radius: 14px; margin-bottom: 14px; }
+.nut-head { display: flex; align-items: center; gap: 12px; padding: 16px 18px; background: var(--strong-bg); border-radius: 14px; margin-bottom: 14px; }
+.nut-head .nut-head-txt { flex: 1; min-width: 0; }
+.nut-head .icon-btn { flex: none; color: var(--strong); }
 .nut-head-txt { display: flex; flex-direction: column; gap: 3px; }
 .nut-head-txt strong { font-size: 19px; font-weight: 700; color: var(--strong); letter-spacing: -.01em; }
 .nut-head-txt .dim { font-size: 13px; }
@@ -716,6 +718,7 @@ body.modal-open { overflow: hidden; }
 .duda-row { display: flex; align-items: flex-start; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); }
 .duda-row:last-of-type { border-bottom: 0; }
 .duda-txt { flex: 1; font-size: 13px; color: var(--ink-soft); line-height: 1.5; }
+.duda-txt { overflow-wrap: anywhere; }
 .duda-row .btn { flex: none; white-space: nowrap; }
 .nut-dudas .field-hint { margin: 8px 0 0; }
 .nut-intro { background: var(--strong-bg); border-radius: 14px; padding: 18px; margin-bottom: 16px; }
