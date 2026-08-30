@@ -44,7 +44,10 @@
             "text/json",
             "text/plain",
             "application/octet-stream",
-            ".json"
+            ".json",
+            "application/pdf",
+            ".pdf",
+            "image/*"
           ]
         }
       ]

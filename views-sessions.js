@@ -209,6 +209,7 @@ const VSessions = (() => {
   }
 
   function emptySet(type) {
+    if (type === 'check') return { done: false, check: true }; // hecho / no hecho, sin más
     if (type === 'time') return { time: '', label: '', weight: '', speed: '', incline: '', level: '', done: false };
     if (type === 'reps') return { reps: '', load: '', loadMode: '', done: false };
     return { reps: '', weight: '', done: false };
@@ -227,6 +228,7 @@ const VSessions = (() => {
 
   function dropHasData(d) { return d && (d.reps || d.weight || d.load); }
   function setHasData(s) {
+    if (s && s.check) return !!s.done; // ejercicios de "hecho / no hecho": el dato es la marca
     return s.reps || s.weight || s.time || s.speed || s.level || s.incline || s.load || s.distance || s.kcal ||
       (s.drops && s.drops.some(dropHasData));
   }
@@ -241,6 +243,11 @@ const VSessions = (() => {
   // texto de una serie para detalle / contexto IA (incluye dropsets y esfuerzo)
   function setDisplay(type, set) {
     let v;
+    if (type === 'check') {
+      v = set.done ? 'Hecho' : '—';
+      if (set.effort) v += ` · ${set.effort}`;
+      return v;
+    }
     if (type === 'time') {
       const parts = [];
       const t = fmtTime(set.time); if (t) parts.push(t);
@@ -331,6 +338,7 @@ const VSessions = (() => {
   }
   let _lastTimeMap = null; // key -> { date, type, sets } de la sesión más reciente
   let _prevDaySession = null; // sesión completa anterior del MISMO día (vistazo rápido en vivo)
+  let _hasDocs = false;       // ¿hay documentos guardados? (botón en la cabecera del entreno)
   // La última sesión (no borrador) del mismo día del plan que la actual. Empareja por
   // dayId (preciso); si la actual no tiene dayId (entreno libre), cae al nombre.
   function findPrevDaySession(current, sessions) {
@@ -407,6 +415,7 @@ const VSessions = (() => {
   // ----- Récords personales (PR): mejor marca histórica por ejercicio -----
   // Métrica principal por tipo: peso → kg máx, corporal → reps máx, tiempo → s máx.
   function metricOf(type, set) {
+    if (type === 'check') return 0; // no compite por récords
     if (type === 'time') return parseFloat(set.time) || 0;
     if (type === 'reps') return parseFloat(set.reps) || 0;
     return parseFloat(set.weight) || 0;
@@ -672,18 +681,28 @@ const VSessions = (() => {
     const type = entry.type || 'weight';
     return (entry.sets || []).map((s, si) => {
       // En vivo, al marcar la serie (✓) se "bloquea": no se edita ni hay dropset.
-      const locked = mode === 'live' && s.done;
+      const locked = mode === 'live' && s.done && type !== 'check';
       const dis = locked ? ' disabled' : '';
-      const done = mode === 'live'
-        ? `<button class="set-done${s.done ? ' on' : ''}" data-done data-ei="${ei}" data-si="${si}" title="${s.done ? 'Desmarcar para editar' : 'Serie hecha'}">${UI.icon('check', 16)}</button>`
+      const done = (mode === 'live' || (mode === 'edit' && type === 'check'))
+        ? `<button class="set-done${s.done ? ' on' : ''}" data-done data-ei="${ei}" data-si="${si}" title="${s.done ? 'Desmarcar' : 'Marcar como hecho'}">${UI.icon('check', 16)}</button>`
         : '';
       const rm = locked ? '' : `<button class="icon-btn danger" data-rm-set data-ei="${ei}" data-si="${si}">×</button>`;
       const effortBtn = (mode === 'live' || mode === 'edit')
         ? `<button type="button" class="set-rpe${s.effort ? ' on' : ''}" data-set-effort data-ei="${ei}" data-si="${si}" title="Esfuerzo de la serie">${s.effort ? UI.esc(s.effort) : '%'}</button>`
         : '';
       // Pie de serie: duplicar (todos) + dropset (peso/reps). Oculto si está bloqueada (en vivo).
-      const footBtns = locked ? '' : `<div class="set-foot"><button type="button" class="set-drop-btn" data-dup-set data-ei="${ei}" data-si="${si}">↻ duplicar</button>${type !== 'time' ? ` <button type="button" class="set-drop-btn" data-add-drop data-ei="${ei}" data-si="${si}">↧ dropset</button>` : ''}</div>`;
+      const footBtns = (locked || type === 'check') ? '' : `<div class="set-foot"><button type="button" class="set-drop-btn" data-dup-set data-ei="${ei}" data-si="${si}">↻ duplicar</button>${type !== 'time' ? ` <button type="button" class="set-drop-btn" data-add-drop data-ei="${ei}" data-si="${si}">↧ dropset</button>` : ''}</div>`;
 
+      if (type === 'check') {
+        // Sin números: solo hecho / no hecho (estiramientos, movilidad…).
+        return `<div class="set-wrap${s.done ? ' done' : ''}">
+          <div class="set-row set-row-check">
+            <span class="set-n">${si + 1}</span>
+            <div class="set-vals"><span class="set-check-txt">${s.done ? 'Hecho' : 'Sin hacer'}</span></div>
+            <div class="set-acts">${done}${rm}</div>
+          </div>
+        </div>`;
+      }
       if (type === 'time') {
         const total = parseInt(s.time);
         const hasT = s.time !== '' && s.time != null && !isNaN(total);
@@ -871,12 +890,14 @@ const VSessions = (() => {
     _prMap = buildPRMap(hist, s.id);
     _prevDaySession = findPrevDaySession(s, hist);
     await loadExMeta(app);
+    try { _hasDocs = (await DB.filesOf(app.activeUser.id)).length > 0; } catch (e) { _hasDocs = false; }
     const elapsed = Math.floor((Date.now() - s.startTs) / 1000);
 
     return `
       <div class="live-head">
         <div class="live-title">${UI.esc(s.name)}</div>
         <div class="live-head-right">
+          ${_hasDocs ? `<button class="icon-btn" id="liveDocs" title="Ver mis documentos (PDF del fisio, fotos…)">${UI.icon('book', 18)}</button>` : ''}
           ${_prevDaySession ? `<button class="icon-btn" id="livePrev" title="Ver la última vez que hiciste este día">${UI.icon('calendar', 18)}</button>` : ''}
           <div class="live-timer" id="liveTimer">${fmtClock(elapsed)}</div>
         </div>
@@ -910,6 +931,8 @@ const VSessions = (() => {
 
     const prevBtn = root.querySelector('#livePrev');
     if (prevBtn) prevBtn.addEventListener('click', () => showPrevDaySession(app));
+    const docsBtn = root.querySelector('#liveDocs');
+    if (docsBtn) docsBtn.addEventListener('click', () => app.openDocsPicker());
 
     const sync = () => { syncLive(root, s); app.persistLive(); };
 
@@ -1393,6 +1416,7 @@ const VSessions = (() => {
   async function sessionEditor(app, existing) {
     const isNew = !existing;
     await loadExMeta(app);
+    try { _hasDocs = (await DB.filesOf(app.activeUser.id)).length > 0; } catch (e) { _hasDocs = false; }
     const users = await DB.getUsers();
     const draft = existing
       ? JSON.parse(JSON.stringify(existing))
@@ -1428,6 +1452,9 @@ const VSessions = (() => {
       root.querySelectorAll('[data-repeat-block]').forEach(b => b.addEventListener('click', () => { syncMeta(root); const e = draft.entries[+b.dataset.ei]; pickRepeat(e.sets.length, (n) => { const snap = e.sets.slice(); for (let k = 1; k < n; k++) snap.forEach(st => e.sets.push(cloneSet(st))); render(root); }); }));
       root.querySelectorAll('[data-set-totaltime]').forEach(b => b.addEventListener('click', () => { syncMeta(root); const entry = draft.entries[+b.dataset.ei]; pickTotalTime(entry, (sec) => { entry.totals = entry.totals || {}; if (sec == null) delete entry.totals.time; else entry.totals.time = sec; render(root); }); }));
       root.querySelectorAll('[data-howto]').forEach(b => b.addEventListener('click', () => showHowto(draft.entries[+b.dataset.ei])));
+      root.querySelectorAll('[data-done]').forEach(b => b.addEventListener('click', () => {
+        syncMeta(root); const st = draft.entries[+b.dataset.ei].sets[+b.dataset.si]; st.done = !st.done; render(root);
+      }));
       root.querySelectorAll('[data-rm-set]').forEach(b => b.addEventListener('click', () => { syncMeta(root); draft.entries[+b.dataset.ei].sets.splice(+b.dataset.si, 1); render(root); }));
       root.querySelectorAll('[data-add-drop]').forEach(b => b.addEventListener('click', () => { syncMeta(root); const set = draft.entries[+b.dataset.ei].sets[+b.dataset.si]; (set.drops = set.drops || []).push(emptyDrop(draft.entries[+b.dataset.ei].type)); render(root); }));
       root.querySelectorAll('[data-rm-drop]').forEach(b => b.addEventListener('click', () => { syncMeta(root); const set = draft.entries[+b.dataset.ei].sets[+b.dataset.si]; if (set.drops) set.drops.splice(+b.dataset.di, 1); render(root); }));

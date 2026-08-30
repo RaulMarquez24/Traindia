@@ -51,18 +51,48 @@ const app = {
       if (location.search) history.replaceState(null, '', location.pathname + location.hash);
     };
     if (!('caches' in window)) { clean(); return false; }
-    let txt = null;
+    let buf = null, type = '', name = 'archivo';
     try {
       const cache = await caches.open('traindia-share-inbox');
       const res = await cache.match('./__shared-import');
-      if (res) { txt = await res.text(); await cache.delete('./__shared-import'); }
+      if (res) {
+        type = res.headers.get('Content-Type') || '';
+        try { name = decodeURIComponent(res.headers.get('X-Share-Name') || 'archivo'); } catch (e) {}
+        buf = await res.arrayBuffer();
+        await cache.delete('./__shared-import');
+      }
     } catch (e) { /* sin caché disponible: nada que hacer */ }
     clean();
-    if (!txt) return false;
-    let parsed;
-    try { parsed = JSON.parse(txt); } catch (e) { UI.toast('El archivo compartido no es un JSON válido', 'err'); return true; }
-    if (!parsed || parsed.format !== 'cnp-export' || !parsed.data) { UI.toast('Ese archivo no es un export de Traindía', 'err'); return true; }
-    VData.routeImport(this, parsed);
+    if (!buf || !buf.byteLength) return false;
+
+    // ¿Es un export de Traindía? Entonces se importa. Si no, se guarda como documento.
+    let parsed = null;
+    try { parsed = JSON.parse(new TextDecoder().decode(buf)); } catch (e) { /* no es texto JSON */ }
+    if (parsed && parsed.format === 'cnp-export' && parsed.data) {
+      VData.routeImport(this, parsed);
+      return true;
+    }
+    return await this.offerSaveSharedDoc({ buf, type, name });
+  },
+
+  // Un archivo compartido que NO es un export: se ofrece guardarlo como documento
+  // para tenerlo a mano durante el entreno.
+  async offerSaveSharedDoc({ buf, type, name }) {
+    const mb = buf.byteLength / 1048576;
+    if (mb > this.MAX_DOC_MB) { UI.toast(`Ese archivo pesa ${mb.toFixed(1)} MB (máximo ${this.MAX_DOC_MB})`, 'err'); return true; }
+    UI.modal({
+      title: 'Guardar documento',
+      bodyHTML: `<p class="modal-text">Has compartido <strong>${UI.esc(name)}</strong>.</p>
+        <p class="modal-text dim">Se guardará en <strong>Documentos</strong> y podrás abrirlo durante el entreno, sin conexión.</p>`,
+      actions: [
+        { label: 'Ahora no', kind: 'ghost' },
+        { label: 'Guardar', kind: 'primary', onClick: async () => {
+          await DB.addFile(this.activeUser.id, { name, type, size: buf.byteLength, data: buf });
+          UI.toast('Documento guardado');
+          this.go('docs', {}, true);
+        } },
+      ],
+    });
     return true;
   },
 
@@ -132,6 +162,7 @@ const app = {
       data:     { render: (a, p) => VData.render(a, p),     bind: (a, r, p) => VData.bind(a, r, p) },
       settings: { render: (a, p) => this.renderSettings(),  bind: (a, r) => this.bindSettings(r) },
       backups:  { render: (a, p) => this.renderBackups(),   bind: (a, r) => this.bindBackups(r) },
+      docs:     { render: (a, p) => this.renderDocs(),      bind: (a, r) => this.bindDocs(r) },
     };
   },
 
@@ -224,7 +255,7 @@ const app = {
       week: 'Traindía', exercises: 'Ejercicios', places: 'Lugares', guides: 'Guías', info: 'El plan',
       sessions: 'Sesiones', live: 'Entreno', session: 'Sesión',
       progress: 'Progreso', journal: 'Diario',
-      more: 'Más', profiles: 'Perfiles', data: 'Datos', settings: 'Ajustes', backups: 'Copias internas',
+      more: 'Más', profiles: 'Perfiles', data: 'Datos', settings: 'Ajustes', backups: 'Copias internas', docs: 'Documentos',
     };
     let label = titles[this.currentView] || 'Traindía';
     if (this.currentView === 'day' && this.routine) {
@@ -242,7 +273,7 @@ const app = {
       week: 'week', day: 'week', exercises: 'week',
       sessions: 'sessions', session: 'sessions', live: 'sessions',
       progress: 'progress', journal: 'journal',
-      more: 'more', profiles: 'more', data: 'more', settings: 'more', guides: 'more', guide: 'more', info: 'more', places: 'more', backups: 'more',
+      more: 'more', profiles: 'more', data: 'more', settings: 'more', guides: 'more', guide: 'more', info: 'more', places: 'more', backups: 'more', docs: 'more',
     };
     const active = map[this.currentView] || 'week';
     document.querySelectorAll('.nav-btn').forEach(btn => {
@@ -379,7 +410,7 @@ const app = {
                 tipo: d.tipo,
                 mensaje: d.mensaje.trim(),
                 contacto: (d.contacto || '').trim() || '(no indicado)',
-                version: 'v2.6.4',
+                version: 'v2.6.5',
                 perfil: (this.mainUser && this.mainUser.name) || '',
                 navegador: navigator.userAgent,
               }),
@@ -407,18 +438,110 @@ const app = {
       { v: 'info', icon: 'info', color: 'var(--moderate)', label: 'El plan', sub: 'Tus planes de entrenamiento' },
       { v: 'profiles', icon: 'users', color: 'var(--sub-accent)', label: 'Perfiles', sub: 'Principal e invitados' },
       { v: 'data', icon: 'swap', color: 'var(--light)', label: 'Importar / Exportar', sub: 'Copias y traspasos JSON' },
+      { v: 'docs', icon: 'book', color: 'var(--sub-accent)', label: 'Documentos', sub: 'PDFs y fotos, a mano en el entreno' },
       { v: 'backups', icon: 'clock', color: 'var(--moderate)', label: 'Copias internas', sub: 'Puntos de restauración' },
       { v: 'settings', icon: 'settings', color: 'var(--rest)', label: 'Ajustes', sub: 'Perfil principal y app' },
     ].filter(r => !r.cnp || this.isCnp());
     return `<div class="section">
       ${rows.map(r => `<button class="big-row" data-link="${r.v}"><span class="big-row-icon tile" style="background:${r.color}">${UI.icon(r.icon, 20)}</span><span class="big-row-text"><strong>${r.label}</strong><span class="dim">${r.sub}</span></span><span class="chev">›</span></button>`).join('')}
       <button class="big-row" data-feedback><span class="big-row-icon tile" style="background:var(--strong)">${UI.icon('chat', 20)}</span><span class="big-row-text"><strong>Sugerencias y reportes</strong><span class="dim">Envíame ideas o fallos</span></span><span class="chev">›</span></button>
-      <p class="version-foot">Traindía · v2.6.4 · ${Object.keys(this.usersById).length} perfil(es)<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
+      <p class="version-foot">Traindía · v2.6.5 · ${Object.keys(this.usersById).length} perfil(es)<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
     </div>`;
   },
   bindMore(root) {
     const fb = root && root.querySelector('[data-feedback]');
     if (fb) fb.addEventListener('click', () => this.openFeedback());
+  },
+
+  // ---- Vista DOCUMENTOS (adjuntos consultables durante el entreno) ----
+  MAX_DOC_MB: 8,
+  _docs: [],
+  async loadDocs() {
+    this._docs = (await DB.filesOf(this.activeUser.id)).sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0));
+    return this._docs;
+  },
+  docIcon(type) {
+    if ((type || '').startsWith('image/')) return 'tag';
+    return 'book';
+  },
+  // Abre un documento: las imágenes se ven dentro de la app; el resto (PDF…) en el visor del móvil.
+  openDoc(rec) {
+    const blob = new Blob([rec.data], { type: rec.type || 'application/octet-stream' });
+    const url = URL.createObjectURL(blob);
+    if ((rec.type || '').startsWith('image/')) {
+      UI.modal({
+        title: rec.name, size: 'wide',
+        bodyHTML: `<img class="doc-view" src="${url}" alt="${UI.esc(rec.name)}">`,
+        actions: [{ label: 'Cerrar', kind: 'ghost' }],
+      });
+      setTimeout(() => URL.revokeObjectURL(url), 120000);
+      return;
+    }
+    window.open(url, '_blank', 'noopener');
+    setTimeout(() => URL.revokeObjectURL(url), 120000);
+  },
+  async renderDocs() {
+    await this.loadDocs();
+    const fmtKB = (n) => n > 1024 * 1024 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`;
+    const rows = (this._docs || []).map(d => `
+      <div class="bk-card">
+        <div class="bk-head">
+          <span class="big-row-icon tile" style="background:var(--sub-accent)">${UI.icon(this.docIcon(d.type), 18)}</span>
+          <div class="bk-meta"><strong>${UI.esc(d.name)}</strong><span class="dim">${fmtKB(d.size || 0)}</span></div>
+        </div>
+        <div class="bk-actions">
+          <button class="btn ghost small" data-open="${UI.esc(d.id)}">${UI.icon('book', 14)} Abrir</button>
+          <button class="btn ghost small danger" data-rm="${UI.esc(d.id)}">${UI.icon('trash', 14)} Quitar</button>
+        </div>
+      </div>`).join('');
+    return `<div class="section">
+      <p class="section-intro">Guarda aquí el <strong>PDF del fisio</strong>, fotos de una máquina o cualquier apunte. Se consultan <strong>durante el entreno</strong> con el botón de documentos, sin salir de la app y sin conexión.</p>
+      <p class="section-intro">Desde el móvil también puedes mandarlos con <strong>Compartir → Traindía</strong>.</p>
+      <button class="btn primary block" id="docAdd">${UI.icon('plus', 15)} Añadir documento</button>
+      ${(this._docs || []).length ? rows : '<div class="empty-state"><p class="dim">Todavía no has añadido ninguno.</p></div>'}
+      <p class="section-intro" style="color:var(--priority)">⚠️ Se guardan <strong>en este dispositivo</strong> y no entran en las copias ni en el export: si borras los datos de la app, hay que volver a añadirlos.</p>
+    </div>`;
+  },
+  bindDocs(root) {
+    const add = root.querySelector('#docAdd');
+    if (add) add.addEventListener('click', () => {
+      const inp = document.createElement('input');
+      inp.type = 'file'; // sin filtro: en Android los adjuntos de WhatsApp llegan como octet-stream
+      inp.addEventListener('change', async () => {
+        const f = inp.files[0]; if (!f) return;
+        if (f.size > this.MAX_DOC_MB * 1048576) { UI.toast(`Máximo ${this.MAX_DOC_MB} MB por documento`, 'err'); return; }
+        await DB.addFile(this.activeUser.id, { name: f.name, type: f.type, size: f.size, data: await f.arrayBuffer() });
+        await this.loadDocs();
+        this.render();
+        UI.toast('Documento añadido');
+      });
+      inp.click();
+    });
+    root.querySelectorAll('[data-open]').forEach(b => b.addEventListener('click', () => {
+      const d = (this._docs || []).find(x => x.id === b.dataset.open); if (d) this.openDoc(d);
+    }));
+    root.querySelectorAll('[data-rm]').forEach(b => b.addEventListener('click', async () => {
+      const d = (this._docs || []).find(x => x.id === b.dataset.rm); if (!d) return;
+      const ok = await UI.confirm({ title: 'Quitar documento', message: `Se borrará "${d.name}" de este dispositivo.`, confirmLabel: 'Quitar', danger: true });
+      if (!ok) return;
+      await DB.del('files', d.id);
+      await this.loadDocs();
+      this.render();
+      UI.toast('Documento quitado');
+    }));
+  },
+  // Lista rápida de documentos (se usa desde el entreno en vivo).
+  async openDocsPicker() {
+    const docs = await this.loadDocs();
+    if (!docs.length) { UI.toast('No tienes documentos guardados'); return; }
+    UI.modal({
+      title: 'Documentos',
+      bodyHTML: `<div class="menu-list">${docs.map(d => `<button class="picker-row" data-doc="${UI.esc(d.id)}"><span class="picker-name">${UI.icon(this.docIcon(d.type), 16)} ${UI.esc(d.name)}</span></button>`).join('')}</div>`,
+      actions: [{ label: 'Cerrar', kind: 'ghost' }],
+      onMount: (r) => r.querySelectorAll('[data-doc]').forEach(b => b.addEventListener('click', () => {
+        const d = docs.find(x => x.id === b.dataset.doc); if (d) this.openDoc(d);
+      })),
+    });
   },
 
   // ---- Vista COPIAS INTERNAS ----
@@ -569,7 +692,7 @@ const app = {
         <button class="btn danger block" id="resetApp">Borrar todos los datos</button>
         <p class="field-hint">Restablece la app al estado inicial (se borran todos los perfiles, sesiones y progreso).</p>
       </div>
-      <p class="version-foot">Traindía · v2.6.4</p>
+      <p class="version-foot">Traindía · v2.6.5</p>
     </div>`;
   },
 

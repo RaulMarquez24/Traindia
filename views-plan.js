@@ -256,7 +256,7 @@ const VPlan = (() => {
   }
 
   // ---- Editor de día (modal grande, con buscador de ejercicios) ----
-  const EX_TYPE_SHORT = { weight: 'peso+reps', reps: 'reps', time: 'tiempo' };
+  const EX_TYPE_SHORT = { weight: 'peso+reps', reps: 'reps', time: 'tiempo', check: 'hecho/no' };
 
   async function editDay(app, d) {
     const catalog = await DB.exercisesOf(app.activeUser.id); // lista mutable
@@ -853,7 +853,8 @@ const VPlan = (() => {
         ${UI.field('Tipo', UI.select('type', [
           { value: 'weight', label: 'Peso + repeticiones' },
           { value: 'reps', label: 'Repeticiones (peso corporal)' },
-          { value: 'time', label: 'Tiempo / duración' }], ex ? ex.type : 'weight'),
+          { value: 'time', label: 'Tiempo / duración' },
+          { value: 'check', label: 'Hecho / no hecho (sin números)' }], ex ? ex.type : 'weight'),
           'Determina qué campos verás al registrar la sesión.')}
         ${(() => {
           const chosen = (ex && Array.isArray(ex.metrics)) ? ex.metrics : [];
