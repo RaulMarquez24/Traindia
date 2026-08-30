@@ -615,3 +615,11 @@ body.modal-open { overflow: hidden; }
 .ex-card-name .ex-detail { margin-top: 3px; }
 .ed-ex-detail { width: 100%; margin-top: 6px; font-size: 13px; }
 .modal-text.prewrap { white-space: pre-wrap; }
+
+/* Vista de documento adjunto (imagen) */
+.doc-view { display: block; width: 100%; height: auto; border-radius: 10px; }
+
+/* Serie de tipo "hecho / no hecho" (estiramientos, movilidad) */
+.set-row-check .set-vals { align-items: center; }
+.set-check-txt { font-size: 13px; color: var(--ink-dim); }
+.set-wrap.done .set-check-txt { color: var(--strong); font-weight: 600; }

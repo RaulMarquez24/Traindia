@@ -13,7 +13,7 @@
 
 const DB = (() => {
   const DB_NAME = 'cnp-db';
-  const DB_VERSION = 1;
+  const DB_VERSION = 2; // v2: store 'files' (documentos adjuntos: PDF del fisio, fotos…)
   const STORES = {
     settings:  { keyPath: 'key', indexes: [] },
     users:     { keyPath: 'id', indexes: [] },
@@ -22,6 +22,7 @@ const DB = (() => {
     sessions:  { keyPath: 'id', indexes: ['userId', 'date'] },
     progress:  { keyPath: 'id', indexes: ['userId', 'date'] },
     journal:   { keyPath: 'id', indexes: ['userId', 'date'] },
+    files:     { keyPath: 'id', indexes: ['userId'] },   // { id, userId, name, type, size, addedAt, data:ArrayBuffer }
   };
 
   let dbPromise = null;
@@ -681,6 +682,13 @@ const DB = (() => {
   }
 
   // ---- Consultas por usuario ----
+  const filesOf = (userId) => byIndex('files', 'userId', userId);
+  // Guarda un documento (PDF, imagen…) como ArrayBuffer, para consultarlo sin conexión.
+  async function addFile(userId, { name, type, size, data }) {
+    const rec = { id: uid('file'), userId, name, type: type || '', size: size || 0, addedAt: Date.now(), data };
+    await put('files', rec);
+    return rec;
+  }
   const exercisesOf = (userId) => byIndex('exercises', 'userId', userId);
   const routinesOf  = (userId) => byIndex('routines', 'userId', userId);
   const sessionsOf  = (userId) => byIndex('sessions', 'userId', userId);
@@ -701,6 +709,7 @@ const DB = (() => {
     getUsers, getMainUser, createUser,
     seedForUser, createPlan, setActivePlan, deletePlan, restoreDefaultExercises, restoreDefaultRoutine, restoreDefaultDay, updateExercise, migrate, runCardioUnify, cardioUnifyPending, classifyType,
     saveInternalBackup, listInternalBackups, deleteInternalBackup, restoreInternalBackup,
+    filesOf, addFile,
     exercisesOf, routinesOf, sessionsOf, progressOf, journalOf, primaryRoutineOf,
     STORES,
   };

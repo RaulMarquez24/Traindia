@@ -164,6 +164,7 @@ const VProgress = (() => {
 
   // Métrica representativa de cada ejercicio para "récords" (la primera con datos).
   function recordMetrics(ex) {
+    if (ex.type === 'check') return [];  // hecho / no hecho: no hay métrica que seguir
     if (ex.type === 'time') return isCardioEx(ex) ? ['distance', 'totalTime', 'kcal'] : ['maxTime'];
     if (ex.type === 'reps') return ['maxReps'];
     return ['maxWeight'];

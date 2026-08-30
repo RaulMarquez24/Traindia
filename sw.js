@@ -1,10 +1,10 @@
 // Service Worker - Traindía
-// La versión visible de la app es v2.6.4 (ver pie en la app).
+// La versión visible de la app es v2.6.5 (ver pie en la app).
 // CACHE_NAME es solo la clave de caché: súbele el número de build en cada deploy
 // (build-6, build-7, …) para que los cambios lleguen a las apps ya instaladas.
 // Los fetch usan {cache:'reload'} para saltarse la caché HTTP del navegador/Pages
 // y traer SIEMPRE la última versión con red (offline tira de CACHE_NAME).
-const CACHE_NAME = 'traindia-build-88';
+const CACHE_NAME = 'traindia-build-89';
 // Buzón temporal para archivos que llegan por "Compartir" desde otra app
 // (WhatsApp, Archivos…). No se borra al activar: lo lee y vacía la app.
 const SHARE_CACHE = 'traindia-share-inbox';
@@ -67,10 +67,20 @@ self.addEventListener('fetch', (event) => {
       try {
         const fd = await req.formData();
         const file = fd.get('file');
-        const text = file && file.text ? await file.text() : (fd.get('text') || '');
-        if (text) {
-          const cache = await caches.open(SHARE_CACHE);
-          await cache.put(SHARE_KEY, new Response(text, { headers: { 'Content-Type': 'text/plain' } }));
+        const cache = await caches.open(SHARE_CACHE);
+        if (file && file.arrayBuffer) {
+          // Se guarda el binario tal cual + su nombre/tipo: la app decide si es un
+          // export JSON (importar) o un documento (PDF, imagen…) que adjuntar.
+          const buf = await file.arrayBuffer();
+          await cache.put(SHARE_KEY, new Response(buf, {
+            headers: {
+              'Content-Type': file.type || 'application/octet-stream',
+              'X-Share-Name': encodeURIComponent(file.name || 'archivo'),
+            },
+          }));
+        } else {
+          const text = fd.get('text') || '';
+          if (text) await cache.put(SHARE_KEY, new Response(text, { headers: { 'Content-Type': 'text/plain' } }));
         }
       } catch (e) { /* si algo falla, entra igual y avisa la app */ }
       return Response.redirect(new URL('./?shared=1', self.location).href, 303);
