@@ -199,6 +199,32 @@ const VNutrition = (() => {
     return listaPlanesHTML(planes);
   }
 
+  // Sin el almacén 'nutrition' todavía: hay que ampliar la base, y eso solo se
+  // puede hacer con la app cerrada en el resto de sitios.
+  function prepararHTML() {
+    return `<div class="section">
+      <p class="section-intro">Para usar Nutrición hay que ampliar el almacén de la app. Solo puede hacerse si <strong>Traindía no está abierta en ningún otro sitio</strong>: cierra las demás pestañas y la app de la pantalla de inicio.</p>
+      <button class="btn primary block" id="nutPrep">${UI.icon('refresh', 15)} Preparar Nutrición</button>
+      <p class="section-intro dim">El resto de la app funciona con normalidad; tus datos están intactos.</p>
+    </div>`;
+  }
+
+  // Primera vez: las dos maneras de empezar, sin preferir ninguna.
+  function vacioHTML() {
+    return `<div class="section">
+      <div class="nut-intro">
+        <h3>Lo que te toca comer hoy</h3>
+        <p>Las cantidades que te marcó tu nutricionista, con el gramaje del día que sea, y los platos que vayas guardando para esas medidas.</p>
+      </div>
+      <button class="btn primary block" id="nutWizard">${UI.icon('plus', 15)} Empezar a mano</button>
+      <p class="field-hint">Tres pasos y ya tienes tu primera comida montada.</p>
+      <div class="nut-or"><span>o</span></div>
+      <button class="btn ghost block" id="nutImport">${UI.icon('chat', 15)} Crear desde un documento <span class="beta-tag">beta</span></button>
+      <p class="field-hint">Con el PDF o las fotos de tu dieta y la ayuda de una IA. Tú hablas con la IA; Traindía no envía nada por su cuenta.</p>
+      <button class="btn ghost block" id="nutPaste">${UI.icon('upload', 15)} Ya tengo el archivo de la IA</button>
+    </div>`;
+  }
+
   function listaPlanesHTML(planes) {
     return `<div class="section">
       <div class="sec-label">Mis planes</div>
@@ -1022,6 +1048,29 @@ const VNutrition = (() => {
   }
   // Volver a la pantalla de una comida concreta (tras crearla en el asistente).
   const irAToma = (app, tomaId) => app.go('nutrition', { planId: _planId, tomaId });
+
+  function addToma(app) {
+    UI.modal({
+      title: 'Nueva toma',
+      bodyHTML: `<div class="effort-pick">${TOMAS_SUGERIDAS.map(t => `<button type="button" class="effort-opt" data-sug="${UI.esc(t)}">${UI.esc(t)}</button>`).join('')}</div>
+        ${UI.field('Nombre', UI.input('nombre', '', { placeholder: 'Desayuno, Cena…' }))}`,
+      actions: [
+        { label: 'Cancelar', kind: 'ghost' },
+        { label: 'Añadir', kind: 'primary', onClick: async (root) => {
+          const n = (root.querySelector('input[name="nombre"]').value || '').trim();
+          if (!n) { UI.toast('Ponle nombre', 'err'); return false; }
+          const t = { id: DB.uid('t'), nombre: n, orden: (_plan.tomas.length + 1), opciones: [] };
+          _plan.tomas.push(t);
+          _plan.userId = app.activeUser.id;
+          await DB.saveNutrition(_plan);
+          irAToma(app, t.id);
+        } },
+      ],
+      onMount: (root) => root.querySelectorAll('[data-sug]').forEach(b => b.addEventListener('click', () => {
+        root.querySelector('input[name="nombre"]').value = b.dataset.sug;
+      })),
+    });
+  }
 
   function addOpcion(app, toma) {
     const vs = _plan.variantes || [];
