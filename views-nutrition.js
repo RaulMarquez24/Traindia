@@ -272,7 +272,7 @@ const VNutrition = (() => {
         <div class="meal-list">${platos.map(({ op, r }) => `
           <button class="meal-card" data-receta="${UI.esc(t.id)}|${UI.esc(op.id)}|${UI.esc(r.id)}">
             <span class="meal-name">${UI.esc(r.nombre)}</span>
-            <span class="meal-sub">${UI.esc(Object.values(r.elige || {}).join(' · ') || op.nombre || '')}${extrasDe(r).length ? ` + ${UI.esc(extrasDe(r).map(x => x.alimento).join(' · '))}` : ''}</span>
+            <span class="meal-sub">${UI.esc(Object.values(r.elige || {}).map(e => typeof e === 'string' ? e : e.alimento).join(' · ') || op.nombre || '')}${extrasDe(r).length ? ` + ${UI.esc(extrasDe(r).map(x => x.alimento).join(' · '))}` : ''}</span>
             ${(r.preparacion || r.foto) ? `<span class="meal-flag">${r.foto ? UI.icon('tag', 11) + ' con foto' : ''}${(r.foto && r.preparacion) ? ' · ' : ''}${r.preparacion ? UI.icon('book', 11) + ' con preparación' : ''}</span>` : ''}
             <span class="meal-go">›</span>
           </button>`).join('')}</div>` : ''}
@@ -313,30 +313,173 @@ const VNutrition = (() => {
     if (typeof r.extras === 'string' && r.extras.trim()) return [{ alimento: r.extras.trim() }];
     return [];
   }
-  function extraTexto(x) {
-    const t = [x.valor, x.unidad].filter(v => v !== '' && v != null).join(' ').trim();
-    return t || x.nota || '';
+  function cantTexto(valor, unidad, nota) {
+    const t = [valor, unidad].filter(v => v !== '' && v != null).join(' ').trim();
+    return t || nota || '';
   }
+  const extraTexto = (x) => cantTexto(x.valor, x.unidad, x.nota);
   const extraLineaHTML = (x) => `<div class="nut-row">
       <div class="nut-line"><span class="nut-food">${UI.esc(x.alimento)}</span><span class="nut-dots"></span><span class="nut-qty extra">${UI.esc(extraTexto(x) || '—')}</span></div>
       ${(x.nota && extraTexto(x) !== x.nota) ? `<div class="nut-eq">${UI.esc(x.nota)}</div>` : ''}
     </div>`;
 
-  // Alimentos heredados de la pauta, con las cantidades del día del plato.
+  // La elección de un plato para una línea: qué alimento y con cuánta cantidad.
+  // La pauta es la GUÍA: si no ajustas nada, se usa su cantidad; si la cambias,
+  // manda la tuya. Compat: antes solo se guardaba el nombre del alimento.
+  function eleccionDe(r, gid) {
+    const e = (r.elige || {})[gid];
+    if (!e) return null;
+    return (typeof e === 'string') ? { alimento: e } : e;
+  }
+  function cantidadEfectiva(sel, alt, vId) {
+    const c = cantidadDe(alt, vId) || {};
+    const valor = (sel && sel.valor != null && sel.valor !== '') ? sel.valor : c.valor;
+    const unidad = (sel && sel.unidad != null && sel.unidad !== '') ? sel.unidad : c.unidad;
+    const ajustada = !!(sel && sel.valor != null && sel.valor !== '' && String(sel.valor) !== String(c.valor));
+    return { valor, unidad, nota: c.nota, equivale: ajustada ? null : c.equivale, ajustada };
+  }
+
+  // Alimentos del plato, con la cantidad que tenga guardada (o la de la pauta).
   function recetaFilasHTML(opcion, r, vId) {
     return (opcion.grupos || []).map(g => {
       const alts = g.alternativas || [];
       if (!alts.length) return '';
-      const el = alts.find(a => a.alimento === (r.elige || {})[g.id]) || alts[0];
-      const c = cantidadDe(el, vId) || {};
+      const sel = eleccionDe(r, g.id);
+      const el = alts.find(a => a.alimento === (sel && sel.alimento)) || alts[0];
+      const c = cantidadEfectiva(sel, el, vId);
+      const pie = [c.nota, c.equivale ? `≡ ${c.equivale}` : '', c.ajustada ? 'ajustado por ti' : ''].filter(Boolean).join(' · ');
       return `<div class="nut-row">
-        <div class="nut-line"><span class="nut-food">${UI.esc(el.alimento)}</span><span class="nut-dots"></span><span class="nut-qty">${UI.esc(cantidadTexto(el, vId) || '—')}</span></div>
-        ${(notaDe(el, vId) || c.equivale) ? `<div class="nut-eq">${UI.esc([notaDe(el, vId), c.equivale ? `≡ ${c.equivale}` : ''].filter(Boolean).join(' · '))}</div>` : ''}
+        <div class="nut-line"><span class="nut-food">${UI.esc(el.alimento)}</span><span class="nut-dots"></span><span class="nut-qty${c.ajustada ? ' tuya' : ''}">${UI.esc(cantTexto(c.valor, c.unidad, c.nota) || '—')}</span></div>
+        ${pie ? `<div class="nut-eq">${UI.esc(pie)}</div>` : ''}
       </div>`;
     }).join('');
   }
 
-  // ---------- VER un plato (solo lectura; para cambiarlo, "Editar plato") ----------
+  // ---------- FORMULARIO COMÚN de crear/editar plato ----------
+  // Mismo formulario en los dos sitios: si al crear falta algo, falta también al
+  // editar, y no hay dos caminos que mantener.
+  function formRecetaHTML(opcion, vId, est) {
+    const lineas = (opcion.grupos || []).map(g => {
+      const alts = (g.alternativas || []).filter(a => (a.cantidades || {})[vId]);
+      const lista = alts.length ? alts : (g.alternativas || []);
+      if (!lista.length) return '';
+      const sel = est.elige[g.id] || { alimento: lista[0].alimento };
+      const alt = lista.find(a => a.alimento === sel.alimento) || lista[0];
+      const guia = cantidadDe(alt, vId) || {};
+      const chips = lista.length > 1
+        ? `<div class="elige-opts">${lista.map(a => `<button type="button" class="nut-alt${a.alimento === sel.alimento ? ' on' : ''}" data-elige="${UI.esc(g.id)}" data-ali="${UI.esc(a.alimento)}">${UI.esc(a.alimento)}</button>`).join('')}</div>`
+        : `<div class="elige-uno">${UI.esc(alt.alimento)}</div>`;
+      return `<div class="elige-row">
+        <span class="elige-lbl">${UI.esc(g.nombre || '')}</span>
+        ${chips}
+        <div class="nut-qrow">
+          <span class="nut-qlbl">Cantidad</span>
+          <input class="inp" data-cant="${UI.esc(g.id)}" data-f="valor" type="number" step="0.01" inputmode="decimal" value="${sel.valor != null && sel.valor !== '' ? UI.esc(sel.valor) : (guia.valor == null ? '' : UI.esc(guia.valor))}" placeholder="cantidad">
+          <input class="inp" data-cant="${UI.esc(g.id)}" data-f="unidad" list="nutUnidades" value="${UI.esc(sel.unidad || guia.unidad || '')}" placeholder="g">
+        </div>
+        ${guia.valor != null ? `<div class="nut-eq">La pauta dice ${UI.esc(cantTexto(guia.valor, guia.unidad, guia.nota))}${guia.nota ? ` (${UI.esc(guia.nota)})` : ''}</div>` : ''}
+      </div>`;
+    }).join('');
+
+    return `<div id="recForm">
+      ${UI.field('Nombre del plato', UI.input('nombre', est.nombre || '', { placeholder: 'Ej: Risotto, Puchero, Salteado…' }))}
+      <div class="sec-label">¿Con qué lo haces?</div>
+      <div id="recElige">${lineas || '<p class="field-hint" style="margin:0">Esta opción no tiene alimentos.</p>'}</div>
+      <p class="field-hint">Las cantidades vienen de la pauta, pero puedes ajustarlas: manda lo que pongas aquí.</p>
+      <datalist id="nutUnidades">${UNIDADES.map(u => `<option value="${u}">`).join('')}</datalist>
+      <div class="sec-label">Además le pones</div>
+      <div id="recExtras"></div>
+      <button type="button" class="btn ghost small block" id="recAddExtra">+ Añadir ingrediente</button>
+      <div class="sec-label">Cómo se hace</div>
+      <textarea class="inp" id="nutRecPrep" rows="5" placeholder="Los pasos, a tu manera…">${UI.esc(est.preparacion || '')}</textarea>
+      <div class="sec-label">Foto</div>
+      <div id="recFotoPrev">${est.foto ? `<img class="rec-foto" src="${est.foto}" alt="">` : ''}</div>
+      <div class="pauta-foot" style="border:0;padding:0;margin-top:8px">
+        <button type="button" class="btn ghost small" id="recFoto">${UI.icon('plus', 13)} ${est.foto ? 'Cambiar foto' : 'Añadir foto'}</button>
+        <button type="button" class="btn ghost small danger" id="recFotoDel"${est.foto ? '' : ' style="display:none"'}>${UI.icon('trash', 13)} Quitar</button>
+      </div>
+    </div>`;
+  }
+
+  function bindRecetaForm(root, opcion, vId, est) {
+    const leerCantidades = () => {
+      root.querySelectorAll('[data-cant][data-f="valor"]').forEach(i => {
+        const gid = i.dataset.cant;
+        if (!est.elige[gid]) return;
+        est.elige[gid].valor = i.value === '' ? null : parseFloat(i.value);
+        const u = root.querySelector(`[data-cant="${gid}"][data-f="unidad"]`);
+        est.elige[gid].unidad = u ? u.value.trim() : '';
+      });
+    };
+    const repintar = () => {
+      const box = root.querySelector('#recElige');
+      const tmp = document.createElement('div');
+      tmp.innerHTML = formRecetaHTML(opcion, vId, est);
+      box.innerHTML = tmp.querySelector('#recElige').innerHTML;
+      enganchar();
+    };
+    const enganchar = () => {
+      root.querySelectorAll('[data-elige]').forEach(b => b.addEventListener('click', () => {
+        leerCantidades();
+        const gid = b.dataset.elige;
+        const alt = (opcion.grupos.find(g => g.id === gid).alternativas || []).find(a => a.alimento === b.dataset.ali);
+        const guia = cantidadDe(alt, vId) || {};
+        est.elige[gid] = { alimento: b.dataset.ali, valor: guia.valor == null ? null : guia.valor, unidad: guia.unidad || '' };
+        repintar();
+      }));
+    };
+    enganchar();
+
+    const pintarExtras = () => {
+      const box = root.querySelector('#recExtras');
+      box.innerHTML = est.extras.length
+        ? est.extras.map((x, i) => `<button type="button" class="extra-row" data-ex="${i}">
+             <span class="nut-food">${UI.esc(x.alimento)}</span><span class="nut-dots"></span>
+             <span class="nut-qty extra">${UI.esc(extraTexto(x) || '—')}</span><span class="nut-mini">${UI.icon('edit', 12)}</span>
+           </button>`).join('')
+        : '<p class="field-hint" style="margin:0">Nada añadido todavía.</p>';
+      box.querySelectorAll('[data-ex]').forEach(b => b.addEventListener('click', () => {
+        pedirExtra(est.extras[+b.dataset.ex], (val) => {
+          if (val === null) est.extras.splice(+b.dataset.ex, 1);
+          else if (val) est.extras[+b.dataset.ex] = val;
+          pintarExtras();
+        });
+      }));
+    };
+    pintarExtras();
+    root.querySelector('#recAddExtra').addEventListener('click', () => {
+      pedirExtra(null, (val) => { if (val) { est.extras.push(val); pintarExtras(); } });
+    });
+
+    const pintarFoto = () => {
+      root.querySelector('#recFotoPrev').innerHTML = est.foto ? `<img class="rec-foto" src="${est.foto}" alt="">` : '';
+      root.querySelector('#recFotoDel').style.display = est.foto ? '' : 'none';
+    };
+    root.querySelector('#recFoto').addEventListener('click', () => {
+      const inp = document.createElement('input');
+      inp.type = 'file'; inp.accept = 'image/*';
+      inp.addEventListener('change', () => {
+        const f = inp.files[0]; if (!f) return;
+        fotoDesdeArchivo(f, (data) => { if (!data) { UI.toast('No se ha podido leer la foto', 'err'); return; } est.foto = data; pintarFoto(); });
+      });
+      inp.click();
+    });
+    root.querySelector('#recFotoDel').addEventListener('click', () => { est.foto = null; pintarFoto(); });
+
+    return leerCantidades;
+  }
+
+  // Recoge el formulario en el estado. Devuelve false si falta el nombre.
+  function leerFormReceta(root, est, leerCantidades) {
+    const n = (root.querySelector('input[name="nombre"]').value || '').trim();
+    if (!n) { UI.toast('Ponle un nombre', 'err'); return false; }
+    leerCantidades();
+    est.nombre = n;
+    est.preparacion = (root.querySelector('#nutRecPrep').value || '').trim() || undefined;
+    return true;
+  }
+
+  // ---------- VER un plato ----------
   function verReceta(app, tomaId, opId, recId) {
     const { toma, opcion } = ref(tomaId, opId);
     const r = opcion && (opcion.recetas || []).find(x => x.id === recId);
@@ -366,92 +509,43 @@ const VNutrition = (() => {
     });
   }
 
-  // ---------- EDITAR un plato ----------
+  // ---------- EDITAR ----------
   function editarReceta(app, tomaId, opId, recId) {
-    const { toma, opcion } = ref(tomaId, opId);
+    const { opcion } = ref(tomaId, opId);
     const r = opcion && (opcion.recetas || []).find(x => x.id === recId);
     if (!r) { app.render(); return; }
     const vs = _plan.variantes || [];
     const vId = r.varianteId || (vs[0] && vs[0].id);
-    let foto = r.foto || null;
-    const extras = extrasDe(r).slice();
-    const elige = { ...(r.elige || {}) };
-
-    const pintarExtras = (root) => {
-      const box = root.querySelector('#recExtras');
-      box.innerHTML = extras.length
-        ? extras.map((x, i) => `<button type="button" class="extra-row" data-ex="${i}">
-             <span class="nut-food">${UI.esc(x.alimento)}</span><span class="nut-dots"></span>
-             <span class="nut-qty extra">${UI.esc(extraTexto(x) || '—')}</span><span class="nut-mini">${UI.icon('edit', 12)}</span>
-           </button>`).join('')
-        : '<p class="field-hint" style="margin:0">Nada añadido todavía.</p>';
-      box.querySelectorAll('[data-ex]').forEach(b => b.addEventListener('click', () => {
-        pedirExtra(extras[+b.dataset.ex], (val) => {
-          if (val === null) extras.splice(+b.dataset.ex, 1); else extras[+b.dataset.ex] = val;
-          pintarExtras(root);
-        });
-      }));
+    const est = {
+      nombre: r.nombre, preparacion: r.preparacion, foto: r.foto || null,
+      extras: extrasDe(r).slice(),
+      elige: Object.fromEntries((opcion.grupos || []).map(g => {
+        const sel = eleccionDe(r, g.id);
+        const alts = g.alternativas || [];
+        const alt = alts.find(a => a.alimento === (sel && sel.alimento)) || alts[0];
+        if (!alt) return null;
+        const c = cantidadEfectiva(sel, alt, vId);
+        return [g.id, { alimento: alt.alimento, valor: c.valor == null ? null : c.valor, unidad: c.unidad || '' }];
+      }).filter(Boolean)),
     };
-
+    let leerCantidades;
     UI.modal({
       title: `Editar ${r.nombre}`,
       size: 'wide',
-      bodyHTML: `<div id="recEdit">
-        ${UI.field('Nombre del plato', UI.input('nombre', r.nombre || '', { placeholder: 'Risotto, Puchero…' }))}
-        <div class="sec-label">¿Con qué lo haces?</div>
-        <div id="recElige">${eleccionHTML(opcion, vId, elige) || `<div>${recetaFilasHTML(opcion, r, vId)}</div><p class="field-hint">Esta opción no tiene alternativas.</p>`}</div>
-        <div class="sec-label">Además le pones</div>
-        <div id="recExtras"></div>
-        <button type="button" class="btn ghost small block" id="recAddExtra">+ Añadir ingrediente</button>
-        <div class="sec-label">Cómo se hace</div>
-        <textarea class="inp" id="nutRecPrep" rows="5" placeholder="Los pasos, a tu manera…">${UI.esc(r.preparacion || '')}</textarea>
-        <div class="sec-label">Foto</div>
-        <div id="recFotoPrev">${foto ? `<img class="rec-foto" src="${foto}" alt="">` : ''}</div>
-        <div class="pauta-foot" style="border:0;padding:0;margin-top:8px">
-          <button type="button" class="btn ghost small" id="recFoto">${UI.icon('plus', 13)} ${foto ? 'Cambiar foto' : 'Añadir foto'}</button>
-          <button type="button" class="btn ghost small danger" id="recFotoDel"${foto ? '' : ' style="display:none"'}>${UI.icon('trash', 13)} Quitar</button>
-        </div>
-      </div>`,
+      bodyHTML: formRecetaHTML(opcion, vId, est),
       actions: [
         { label: 'Cancelar', kind: 'ghost' },
         { label: 'Guardar', kind: 'primary', onClick: async (root) => {
-          const n = (root.querySelector('input[name="nombre"]').value || '').trim();
-          if (!n) { UI.toast('Ponle un nombre', 'err'); return false; }
-          r.nombre = n;
-          r.elige = { ...elige };
-          r.extras = extras.length ? extras : undefined;
-          r.preparacion = (root.querySelector('#nutRecPrep').value || '').trim() || undefined;
-          if (foto) r.foto = foto; else delete r.foto;
+          if (!leerFormReceta(root, est, leerCantidades)) return false;
+          r.nombre = est.nombre; r.elige = est.elige;
+          r.extras = est.extras.length ? est.extras : undefined;
+          r.preparacion = est.preparacion;
+          if (est.foto) r.foto = est.foto; else delete r.foto;
           await guardar(app);
           UI.toast('Plato guardado');
         } },
       ],
-      onMount: (root) => {
-        const refrescarElige = () => {
-          const box = root.querySelector('#recElige');
-          const html = eleccionHTML(opcion, vId, elige);
-          if (html) { box.innerHTML = html; bindEleccion(root, elige, refrescarElige); }
-        };
-        bindEleccion(root, elige, refrescarElige);
-        pintarExtras(root);
-        root.querySelector('#recAddExtra').addEventListener('click', () => {
-          pedirExtra(null, (val) => { if (val) { extras.push(val); pintarExtras(root); } });
-        });
-        const pintarFoto = () => {
-          root.querySelector('#recFotoPrev').innerHTML = foto ? `<img class="rec-foto" src="${foto}" alt="">` : '';
-          root.querySelector('#recFotoDel').style.display = foto ? '' : 'none';
-        };
-        root.querySelector('#recFoto').addEventListener('click', () => {
-          const inp = document.createElement('input');
-          inp.type = 'file'; inp.accept = 'image/*';
-          inp.addEventListener('change', () => {
-            const f = inp.files[0]; if (!f) return;
-            fotoDesdeArchivo(f, (data) => { if (!data) { UI.toast('No se ha podido leer la foto', 'err'); return; } foto = data; pintarFoto(); });
-          });
-          inp.click();
-        });
-        root.querySelector('#recFotoDel').addEventListener('click', () => { foto = null; pintarFoto(); });
-      },
+      onMount: (root) => { leerCantidades = bindRecetaForm(root, opcion, vId, est); },
     });
   }
 
@@ -464,9 +558,9 @@ const VNutrition = (() => {
         <div class="nut-qrow">
           <span class="nut-qlbl">Cantidad</span>
           <input class="inp" name="valor" type="number" step="0.01" inputmode="decimal" value="${actual && actual.valor != null ? UI.esc(actual.valor) : ''}" placeholder="cantidad">
-          <input class="inp" name="unidad" list="nutUnidades" value="${UI.esc((actual && actual.unidad) || 'g')}" placeholder="g">
+          <input class="inp" name="unidad" list="nutUnidadesEx" value="${UI.esc((actual && actual.unidad) || 'g')}" placeholder="g">
         </div>
-        <datalist id="nutUnidades">${UNIDADES.map(u => `<option value="${u}">`).join('')}</datalist>
+        <datalist id="nutUnidadesEx">${UNIDADES.map(u => `<option value="${u}">`).join('')}</datalist>
         ${UI.field('Nota (opcional)', UI.input('nota', (actual && actual.nota) || '', { placeholder: 'al gusto, picada…' }))}
         <p class="field-hint">Déjalo sin cantidad si va al gusto.</p>
       </div>`,
@@ -488,71 +582,45 @@ const VNutrition = (() => {
     });
   }
 
-  // Selector de "con qué lo haces": una fila por cada línea de la pauta que tenga
-  // más de un alimento posible. Es aquí donde se decide, no en la pauta, que es
-  // información de referencia.
-  function eleccionHTML(opcion, vId, elige) {
-    return (opcion.grupos || []).map(g => {
-      const alts = (g.alternativas || []).filter(a => (a.cantidades || {})[vId]);
-      const lista = alts.length ? alts : (g.alternativas || []);
-      if (lista.length < 2) return '';
-      const sel = elige[g.id] || lista[0].alimento;
-      return `<div class="elige-row">
-        <span class="elige-lbl">${UI.esc(g.nombre || '')}</span>
-        <div class="elige-opts">${lista.map(a => `<button type="button" class="nut-alt${a.alimento === sel ? ' on' : ''}" data-elige="${UI.esc(g.id)}" data-ali="${UI.esc(a.alimento)}">${UI.esc(a.alimento)}${(a.cantidades || {})[vId] ? ` <em>${UI.esc(cantidadTexto(a, vId))}</em>` : ''}</button>`).join('')}</div>
-      </div>`;
-    }).join('');
-  }
-  function bindEleccion(root, elige, alRefrescar) {
-    root.querySelectorAll('[data-elige]').forEach(b => b.addEventListener('click', () => {
-      elige[b.dataset.elige] = b.dataset.ali;
-      if (alRefrescar) alRefrescar();
-    }));
-  }
-
+  // ---------- CREAR ----------
   function addReceta(app, tomaId, opId) {
-    const { toma, opcion } = ref(tomaId, opId);
+    const { opcion } = ref(tomaId, opId);
     if (!opcion) return;
     const { vs, vId, v } = variantesDe(app);
-    const elige = {};
-    (opcion.grupos || []).forEach(g => {
-      const alts = (g.alternativas || []).filter(a => (a.cantidades || {})[vId]);
-      const lista = alts.length ? alts : (g.alternativas || []);
-      if (lista.length) elige[g.id] = lista[0].alimento;
-    });
-
+    const est = {
+      nombre: '', preparacion: '', foto: null, extras: [],
+      elige: Object.fromEntries((opcion.grupos || []).map(g => {
+        const alts = (g.alternativas || []).filter(a => (a.cantidades || {})[vId]);
+        const lista = alts.length ? alts : (g.alternativas || []);
+        if (!lista.length) return null;
+        const c = cantidadDe(lista[0], vId) || {};
+        return [g.id, { alimento: lista[0].alimento, valor: c.valor == null ? null : c.valor, unidad: c.unidad || '' }];
+      }).filter(Boolean)),
+    };
+    let leerCantidades;
     UI.modal({
       title: 'Guardar un plato',
       size: 'wide',
-      bodyHTML: `<p class="modal-text">Le pones nombre a lo que cocinas con estas cantidades, y la próxima vez lo tienes hecho.</p>
+      bodyHTML: `<p class="modal-text">Le pones nombre a lo que cocinas y queda guardado para la próxima vez.</p>
         ${vs.length > 1 ? `<p class="modal-text"><strong>Se guarda para ${UI.esc(v ? v.nombre.toLowerCase() : '')}</strong>, que es el día que tienes seleccionado.</p>` : ''}
-        ${UI.field('Nombre del plato', UI.input('nombre', '', { placeholder: 'Ej: Risotto, Puchero, Salteado…' }))}
-        <div class="sec-label">¿Con qué lo haces?</div>
-        <div id="recElige">${eleccionHTML(opcion, vId, elige) || '<p class="field-hint" style="margin:0">Esta opción no tiene alternativas: se guarda tal cual.</p>'}</div>
-        ${UI.field('Cómo se hace (opcional)', UI.textarea('prep', '', 'Los pasos, a tu manera…', 4))}
-        <p class="field-hint">Los ingredientes extra y la foto se añaden luego, desde <strong>Editar plato</strong>.</p>`,
+        ${formRecetaHTML(opcion, vId, est)}`,
       actions: [
         { label: 'Cancelar', kind: 'ghost' },
         { label: 'Guardar', kind: 'primary', onClick: async (root) => {
-          const n = (root.querySelector('input[name="nombre"]').value || '').trim();
-          if (!n) { UI.toast('Ponle un nombre', 'err'); return false; }
+          if (!leerFormReceta(root, est, leerCantidades)) return false;
           opcion.recetas = opcion.recetas || [];
           opcion.recetas.push({
-            id: DB.uid('rec'), nombre: n, varianteId: vId, elige: { ...elige },
-            preparacion: (root.querySelector('textarea[name="prep"]').value || '').trim() || undefined,
+            id: DB.uid('rec'), nombre: est.nombre, varianteId: vId, elige: est.elige,
+            extras: est.extras.length ? est.extras : undefined,
+            preparacion: est.preparacion,
+            foto: est.foto || undefined,
           });
           await guardar(app);
-          UI.toast(`"${n}" guardado en tus platos`);
+          UI.toast(`"${est.nombre}" guardado en tus platos`);
           setTimeout(() => { const el = document.getElementById('nutPlatos'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 250);
         } },
       ],
-      onMount: (root) => {
-        const refrescar = () => {
-          root.querySelector('#recElige').innerHTML = eleccionHTML(opcion, vId, elige);
-          bindEleccion(root, elige, refrescar);
-        };
-        bindEleccion(root, elige, refrescar);
-      },
+      onMount: (root) => { leerCantidades = bindRecetaForm(root, opcion, vId, est); },
     });
   }
 
