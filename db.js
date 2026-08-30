@@ -27,10 +27,14 @@ const DB = (() => {
 
   let dbPromise = null;
 
-  function open() {
-    if (dbPromise) return dbPromise;
-    dbPromise = new Promise((resolve, reject) => {
-      const req = indexedDB.open(DB_NAME, DB_VERSION);
+  // Abre la base. Si se pide una versión y otra copia de la app tiene abierta una
+  // versión anterior, el navegador BLOQUEA la subida. Antes eso dejaba la promesa
+  // sin resolver para siempre (app en blanco). Ahora hay plan B: si no se puede
+  // subir de versión, se abre CON LA QUE HAYA. La app funciona igual; como mucho
+  // faltará el almacén de documentos hasta que se pueda actualizar.
+  function openWith(version) {
+    return new Promise((resolve, reject) => {
+      const req = version ? indexedDB.open(DB_NAME, version) : indexedDB.open(DB_NAME);
       req.onupgradeneeded = (e) => {
         const db = e.target.result;
         for (const [name, def] of Object.entries(STORES)) {
@@ -40,25 +44,71 @@ const DB = (() => {
           }
         }
       };
-      // Si otra pestaña/ventana tiene la base abierta con una versión anterior, la
-      // subida de versión se queda BLOQUEADA y sin esto la promesa no se resolvía
-      // nunca: la app se quedaba en blanco para siempre. Ahora falla con mensaje.
       req.onblocked = () => reject(new Error('BLOCKED'));
       req.onsuccess = () => {
         const db = req.result;
-        // Clave para que esto no vuelva a pasar: si OTRA instancia pide subir de
-        // versión, esta cierra su conexión en vez de bloquearla.
+        // Si otra copia pide subir de versión, esta cierra su conexión en vez de bloquearla.
         db.onversionchange = () => { try { db.close(); } catch (e) {} dbPromise = null; };
         resolve(db);
       };
       req.onerror = () => reject(req.error);
     });
-    dbPromise.catch(() => { dbPromise = null; }); // permite reintentar tras un fallo
+  }
+  function withTimeout(p, ms, label) {
+    return Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error(label)), ms))]);
+  }
+  // REGLA DE ORO: en el arranque NUNCA se pide una versión concreta.
+  // Pedir una subida que otra copia bloquea deja una petición encolada que cuelga
+  // TODAS las aperturas siguientes — y sobrevive incluso a recargar la página. Abrir
+  // sin versión, en cambio, nunca se bloquea. Si faltan almacenes nuevos, la app
+  // arranca igual en modo degradado y la subida se pide aparte, a propósito.
+  let dbFallback = false; // true = faltan almacenes nuevos (p. ej. documentos)
+
+  function open() {
+    if (dbPromise) return dbPromise;
+    dbPromise = (async () => {
+      const db = await openWith(null);
+      if (db.objectStoreNames.length === 0) {
+        // Base recién creada (instalación nueva): aquí sí hay que montar el esquema,
+        // y no puede bloquearse porque no hay nada anterior que subir.
+        db.close();
+        return openWith(DB_VERSION);
+      }
+      dbFallback = Object.keys(STORES).some(n => !db.objectStoreNames.contains(n));
+      return db;
+    })();
+    dbPromise.catch(() => { dbPromise = null; }); // permite reintentar
     return dbPromise;
   }
 
+  // Sube de versión A PROPÓSITO (lo pide el usuario, avisado de cerrar otras copias).
+  // Devuelve true si se completó. Si se bloquea, hay que cerrar las otras copias y recargar.
+  async function upgradeNow() {
+    const db = await open();
+    if (!Object.keys(STORES).some(n => !db.objectStoreNames.contains(n))) return true;
+    try { db.close(); } catch (e) {}
+    dbPromise = null;
+    try {
+      const nuevo = await withTimeout(openWith(DB_VERSION), 4000, 'BLOCKED');
+      dbPromise = Promise.resolve(nuevo);
+      dbFallback = false;
+      return true;
+    } catch (e) {
+      dbPromise = null;
+      return false;
+    }
+  }
+  // ¿Existe ese almacén en la base realmente abierta?
+  async function hasStore(name) {
+    try { return (await open()).objectStoreNames.contains(name); } catch (e) { return false; }
+  }
+  const isFallback = () => dbFallback;
+
   function tx(store, mode = 'readonly') {
-    return open().then(db => db.transaction(store, mode).objectStore(store));
+    return open().then(db => {
+      if (!db.objectStoreNames.contains(store)) throw new Error(`NO_STORE:${store}`);
+      return db.transaction(store, mode).objectStore(store);
+    });
   }
 
   function reqToPromise(request) {
@@ -693,9 +743,13 @@ const DB = (() => {
   }
 
   // ---- Consultas por usuario ----
-  const filesOf = (userId) => byIndex('files', 'userId', userId);
+  async function filesOf(userId) {
+    if (!(await hasStore('files'))) return []; // sin subir de versión aún: sin documentos
+    return byIndex('files', 'userId', userId);
+  }
   // Guarda un documento (PDF, imagen…) como ArrayBuffer, para consultarlo sin conexión.
   async function addFile(userId, { name, type, size, data }) {
+    if (!(await hasStore('files'))) throw new Error('Cierra las demás copias de Traindía y recarga para poder guardar documentos.');
     const rec = { id: uid('file'), userId, name, type: type || '', size: size || 0, addedAt: Date.now(), data };
     await put('files', rec);
     return rec;
@@ -720,7 +774,7 @@ const DB = (() => {
     getUsers, getMainUser, createUser,
     seedForUser, createPlan, setActivePlan, deletePlan, restoreDefaultExercises, restoreDefaultRoutine, restoreDefaultDay, updateExercise, migrate, runCardioUnify, cardioUnifyPending, classifyType,
     saveInternalBackup, listInternalBackups, deleteInternalBackup, restoreInternalBackup,
-    filesOf, addFile,
+    filesOf, addFile, hasStore, isFallback, upgradeNow,
     exercisesOf, routinesOf, sessionsOf, progressOf, journalOf, primaryRoutineOf,
     STORES,
   };
