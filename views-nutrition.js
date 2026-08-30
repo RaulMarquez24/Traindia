@@ -687,14 +687,14 @@ const VNutrition = (() => {
       bodyHTML: `
         <p class="modal-text dim">${UI.esc(toma.nombre)}${vs.length > 1 ? ` · ${UI.esc((vs.find(x => x.id === vId) || {}).nombre || '')}` : ''}</p>
         ${UI.field('Nombre corto', UI.input('opNombre', op.nombre || '', { placeholder: 'Yogur, Pan, Legumbres…' }), 'Es la etiqueta para elegir, no el nombre de un plato.')}
-        ${filas || '<p class="modal-text dim">Esta comida todavía no tiene alimentos.</p>'}
+        ${filas || '<p class="modal-text dim">Esta opción todavía no tiene alimentos.</p>'}
         <button class="btn ghost small block" id="nutAddAli">+ Añadir alimento</button>
         <p class="field-hint">Esto son las <strong>cantidades que te marcó tu nutricionista</strong>. Los platos que cocinas con ellas se guardan aparte, en «Con esto puedes hacerte».</p>`,
       actions: [
         { label: 'Borrar', kind: 'danger', onClick: async () => {
           const i = toma.opciones.indexOf(op);
           if (i >= 0) toma.opciones.splice(i, 1);
-          await guardar(app); UI.toast('Comida borrada');
+          await guardar(app); UI.toast('Opción borrada');
         } },
         { label: 'Duplicar', kind: 'ghost', onClick: async () => {
           const copia = JSON.parse(JSON.stringify(op));
@@ -782,8 +782,8 @@ const VNutrition = (() => {
   function wizardComida(app, toma) {
     UI.modal({
       title: `Paso 3 de 3 · ${UI.esc(toma.nombre)}`,
-      bodyHTML: `<p class="modal-text">Ponle nombre a un plato que hagas para esta comida. Luego le añadirás los alimentos con sus gramos.</p>
-        ${UI.field('Nombre del plato', UI.input('nombre', '', { placeholder: 'Ej: Arroz con pollo, Tostada con pavo…' }))}`,
+      bodyHTML: `<p class="modal-text">Ponle nombre a una de las opciones que tienes para esta comida —«Arroz o pasta», «Legumbres»—. Luego le añadirás los alimentos con sus cantidades.</p>
+        ${UI.field('Cómo la llamas', UI.input('nombre', '', { placeholder: 'Ej: Arroz o pasta, Yogur con fruta…' }))}`,
       actions: [
         { label: 'Cancelar', kind: 'ghost' },
         { label: 'Crear', kind: 'primary', onClick: async (root) => {
@@ -909,11 +909,11 @@ const VNutrition = (() => {
     });
   }
 
-  function addComida(app, toma) {
+  function addOpcion(app, toma) {
     UI.modal({
-      title: `Nueva comida · ${UI.esc(toma.nombre)}`,
-      bodyHTML: `${UI.field('Nombre del plato', UI.input('nombre', '', { placeholder: 'Ej: Lentejas con arroz' }))}
-        <p class="field-hint">Es una de las cosas que puedes comer en esta toma. Después le añades los alimentos.</p>`,
+      title: `Nueva opción · ${UI.esc(toma.nombre)}`,
+      bodyHTML: `${UI.field('Cómo la llamas', UI.input('nombre', '', { placeholder: 'Ej: Arroz o pasta, Legumbres, Tortitas…' }))}
+        <p class="field-hint">Es una de las <strong>opciones que te marcó tu nutricionista</strong> para esta comida, no un plato: después le pones los alimentos y sus cantidades. Los platos que cocines con ella se guardan aparte.</p>`,
       actions: [
         { label: 'Cancelar', kind: 'ghost' },
         { label: 'Crear', kind: 'primary', onClick: async (root) => {
@@ -975,7 +975,7 @@ const VNutrition = (() => {
 
     const tomaPorId = (id) => (_plan.tomas || []).find(t => t.id === id);
     root.querySelectorAll('[data-add-op]').forEach(b => b.addEventListener('click', () => {
-      const t = tomaPorId(b.dataset.addOp); if (t) addComida(app, t);
+      const t = tomaPorId(b.dataset.addOp); if (t) addOpcion(app, t);
     }));
     root.querySelectorAll('[data-open-op]').forEach(b => b.addEventListener('click', () => {
       const [tid, oid] = b.dataset.openOp.split('|');
