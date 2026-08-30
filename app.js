@@ -35,9 +35,35 @@ const app = {
     // Unificación de cardio (v10): si hay variantes, avisa y deja hacer copia antes.
     if (await DB.cardioUnifyPending()) { this.showCardioMigration(); return; }
     if (((this.settings && this.settings.dataVersion) || 0) < 10) await DB.runCardioUnify(); // nada que cambiar: solo marca hecho
+    // Un archivo compartido es una acción explícita del usuario: va ANTES que el aviso
+    // de entreno a medias (si no, se apilan dos modales). El aviso vuelve al siguiente inicio.
+    if (await this.checkSharedImport()) return;
     await VSessions.checkResume(this);
     VData.checkBackupReminder(this); // recordatorio semanal de copia (si procede)
     VPlan.checkDuplicates(this);     // avisa si hay ejercicios duplicados sin usar
+  },
+
+  // Archivo recibido por "Compartir" desde otra app (WhatsApp, Archivos…). El SW lo
+  // deja en una caché-buzón y aquí lo leemos, lo vaciamos y lanzamos la importación.
+  // Devuelve true si había algo que importar.
+  async checkSharedImport() {
+    const clean = () => { // quita ?shared=1 para que al recargar no se repita
+      if (location.search) history.replaceState(null, '', location.pathname + location.hash);
+    };
+    if (!('caches' in window)) { clean(); return false; }
+    let txt = null;
+    try {
+      const cache = await caches.open('traindia-share-inbox');
+      const res = await cache.match('./__shared-import');
+      if (res) { txt = await res.text(); await cache.delete('./__shared-import'); }
+    } catch (e) { /* sin caché disponible: nada que hacer */ }
+    clean();
+    if (!txt) return false;
+    let parsed;
+    try { parsed = JSON.parse(txt); } catch (e) { UI.toast('El archivo compartido no es un JSON válido', 'err'); return true; }
+    if (!parsed || parsed.format !== 'cnp-export' || !parsed.data) { UI.toast('Ese archivo no es un export de Traindía', 'err'); return true; }
+    VData.routeImport(this, parsed);
+    return true;
   },
 
   // Aviso de la reorganización de cardio (unificar máquinas + etiqueta), con copia.
@@ -353,7 +379,7 @@ const app = {
                 tipo: d.tipo,
                 mensaje: d.mensaje.trim(),
                 contacto: (d.contacto || '').trim() || '(no indicado)',
-                version: 'v2.6.2',
+                version: 'v2.6.3',
                 perfil: (this.mainUser && this.mainUser.name) || '',
                 navegador: navigator.userAgent,
               }),
@@ -387,7 +413,7 @@ const app = {
     return `<div class="section">
       ${rows.map(r => `<button class="big-row" data-link="${r.v}"><span class="big-row-icon tile" style="background:${r.color}">${UI.icon(r.icon, 20)}</span><span class="big-row-text"><strong>${r.label}</strong><span class="dim">${r.sub}</span></span><span class="chev">›</span></button>`).join('')}
       <button class="big-row" data-feedback><span class="big-row-icon tile" style="background:var(--strong)">${UI.icon('chat', 20)}</span><span class="big-row-text"><strong>Sugerencias y reportes</strong><span class="dim">Envíame ideas o fallos</span></span><span class="chev">›</span></button>
-      <p class="version-foot">Traindía · v2.6.2 · ${Object.keys(this.usersById).length} perfil(es)<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
+      <p class="version-foot">Traindía · v2.6.3 · ${Object.keys(this.usersById).length} perfil(es)<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
     </div>`;
   },
   bindMore(root) {
@@ -543,7 +569,7 @@ const app = {
         <button class="btn danger block" id="resetApp">Borrar todos los datos</button>
         <p class="field-hint">Restablece la app al estado inicial (se borran todos los perfiles, sesiones y progreso).</p>
       </div>
-      <p class="version-foot">Traindía · v2.6.2</p>
+      <p class="version-foot">Traindía · v2.6.3</p>
     </div>`;
   },
 

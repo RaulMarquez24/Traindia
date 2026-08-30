@@ -140,7 +140,7 @@ const VData = (() => {
     UI.modal({
       title: 'Importar datos', size: 'wide',
       bodyHTML: `
-        <p class="field-hint" style="margin-top:0">Pega aquí el texto JSON exportado, o elige un archivo.</p>
+        <p class="field-hint" style="margin-top:0">Pega aquí el texto JSON exportado, o elige un archivo. <strong>Desde el móvil</strong>: en WhatsApp o Archivos, dale al documento → <strong>Compartir</strong> → <strong>Traindía</strong> y se importa solo.</p>
         <textarea class="inp" id="impText" rows="6" placeholder='Pega el JSON aquí… (empieza por {"format":"cnp-export"…})'></textarea>
         <button class="btn ghost block" id="impFileBtn" style="margin-top:8px">${UI.icon('upload', 15)} …o elegir un archivo</button>`,
       actions: [
@@ -157,7 +157,10 @@ const VData = (() => {
       onMount: (root) => {
         root.querySelector('#impFileBtn').addEventListener('click', () => {
           const inp = document.createElement('input');
-          inp.type = 'file'; inp.accept = 'application/json,.json';
+          // SIN filtro 'accept': en Android los .json guardados por WhatsApp llegan
+          // como application/octet-stream y el selector los ocultaba (ni salían en
+          // "Recientes"), obligando a navegar a mano hasta la carpeta.
+          inp.type = 'file';
           inp.addEventListener('change', () => {
             const f = inp.files[0]; if (!f) return;
             const reader = new FileReader();
