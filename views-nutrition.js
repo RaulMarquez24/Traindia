@@ -361,11 +361,6 @@ const VNutrition = (() => {
           if (i >= 0) opcion.recetas.splice(i, 1);
           await guardar(app); UI.toast('Plato borrado');
         } },
-        { label: 'Usar hoy', kind: 'ghost', onClick: async () => {
-          Object.entries(r.elige || {}).forEach(([gid, ali]) => { _elegido[`${opcion.id}|${gid}`] = ali; });
-          app.render();
-          UI.toast(`${r.nombre} · alimentos ajustados`);
-        } },
         { label: 'Editar plato', kind: 'primary', onClick: () => { setTimeout(() => editarReceta(app, tomaId, opId, recId), 220); } },
       ],
     });
@@ -380,6 +375,7 @@ const VNutrition = (() => {
     const vId = r.varianteId || (vs[0] && vs[0].id);
     let foto = r.foto || null;
     const extras = extrasDe(r).slice();
+    const elige = { ...(r.elige || {}) };
 
     const pintarExtras = (root) => {
       const box = root.querySelector('#recExtras');
@@ -402,9 +398,8 @@ const VNutrition = (() => {
       size: 'wide',
       bodyHTML: `<div id="recEdit">
         ${UI.field('Nombre del plato', UI.input('nombre', r.nombre || '', { placeholder: 'Risotto, Puchero…' }))}
-        <div class="sec-label">Lo que lleva (de la pauta)</div>
-        ${recetaFilasHTML(opcion, r, vId)}
-        <p class="field-hint">Esto viene de la pauta. Para cambiarlo, edita las cantidades de <strong>${UI.esc(opcion.nombre || '')}</strong>.</p>
+        <div class="sec-label">¿Con qué lo haces?</div>
+        <div id="recElige">${eleccionHTML(opcion, vId, elige) || `<div>${recetaFilasHTML(opcion, r, vId)}</div><p class="field-hint">Esta opción no tiene alternativas.</p>`}</div>
         <div class="sec-label">Además le pones</div>
         <div id="recExtras"></div>
         <button type="button" class="btn ghost small block" id="recAddExtra">+ Añadir ingrediente</button>
@@ -423,6 +418,7 @@ const VNutrition = (() => {
           const n = (root.querySelector('input[name="nombre"]').value || '').trim();
           if (!n) { UI.toast('Ponle un nombre', 'err'); return false; }
           r.nombre = n;
+          r.elige = { ...elige };
           r.extras = extras.length ? extras : undefined;
           r.preparacion = (root.querySelector('#nutRecPrep').value || '').trim() || undefined;
           if (foto) r.foto = foto; else delete r.foto;
@@ -431,6 +427,12 @@ const VNutrition = (() => {
         } },
       ],
       onMount: (root) => {
+        const refrescarElige = () => {
+          const box = root.querySelector('#recElige');
+          const html = eleccionHTML(opcion, vId, elige);
+          if (html) { box.innerHTML = html; bindEleccion(root, elige, refrescarElige); }
+        };
+        bindEleccion(root, elige, refrescarElige);
         pintarExtras(root);
         root.querySelector('#recAddExtra').addEventListener('click', () => {
           pedirExtra(null, (val) => { if (val) { extras.push(val); pintarExtras(root); } });
@@ -486,26 +488,47 @@ const VNutrition = (() => {
     });
   }
 
+  // Selector de "con qué lo haces": una fila por cada línea de la pauta que tenga
+  // más de un alimento posible. Es aquí donde se decide, no en la pauta, que es
+  // información de referencia.
+  function eleccionHTML(opcion, vId, elige) {
+    return (opcion.grupos || []).map(g => {
+      const alts = (g.alternativas || []).filter(a => (a.cantidades || {})[vId]);
+      const lista = alts.length ? alts : (g.alternativas || []);
+      if (lista.length < 2) return '';
+      const sel = elige[g.id] || lista[0].alimento;
+      return `<div class="elige-row">
+        <span class="elige-lbl">${UI.esc(g.nombre || '')}</span>
+        <div class="elige-opts">${lista.map(a => `<button type="button" class="nut-alt${a.alimento === sel ? ' on' : ''}" data-elige="${UI.esc(g.id)}" data-ali="${UI.esc(a.alimento)}">${UI.esc(a.alimento)}${(a.cantidades || {})[vId] ? ` <em>${UI.esc(cantidadTexto(a, vId))}</em>` : ''}</button>`).join('')}</div>
+      </div>`;
+    }).join('');
+  }
+  function bindEleccion(root, elige, alRefrescar) {
+    root.querySelectorAll('[data-elige]').forEach(b => b.addEventListener('click', () => {
+      elige[b.dataset.elige] = b.dataset.ali;
+      if (alRefrescar) alRefrescar();
+    }));
+  }
+
   function addReceta(app, tomaId, opId) {
     const { toma, opcion } = ref(tomaId, opId);
     if (!opcion) return;
     const { vs, vId, v } = variantesDe(app);
-    // se guarda con los alimentos elegidos ahora mismo Y para el día seleccionado
     const elige = {};
     (opcion.grupos || []).forEach(g => {
       const alts = (g.alternativas || []).filter(a => (a.cantidades || {})[vId]);
       const lista = alts.length ? alts : (g.alternativas || []);
-      if (!lista.length) return;
-      const k = `${opcion.id}|${g.id}`;
-      elige[g.id] = (lista.find(a => a.alimento === _elegido[k]) || lista[0]).alimento;
+      if (lista.length) elige[g.id] = lista[0].alimento;
     });
-    const usa = Object.values(elige).join(' · ');
+
     UI.modal({
       title: 'Guardar un plato',
+      size: 'wide',
       bodyHTML: `<p class="modal-text">Le pones nombre a lo que cocinas con estas cantidades, y la próxima vez lo tienes hecho.</p>
-        <p class="modal-text dim">Con: ${UI.esc(usa || '—')}</p>
         ${vs.length > 1 ? `<p class="modal-text"><strong>Se guarda para ${UI.esc(v ? v.nombre.toLowerCase() : '')}</strong>, que es el día que tienes seleccionado.</p>` : ''}
         ${UI.field('Nombre del plato', UI.input('nombre', '', { placeholder: 'Ej: Risotto, Puchero, Salteado…' }))}
+        <div class="sec-label">¿Con qué lo haces?</div>
+        <div id="recElige">${eleccionHTML(opcion, vId, elige) || '<p class="field-hint" style="margin:0">Esta opción no tiene alternativas: se guarda tal cual.</p>'}</div>
         ${UI.field('Cómo se hace (opcional)', UI.textarea('prep', '', 'Los pasos, a tu manera…', 4))}
         <p class="field-hint">Los ingredientes extra y la foto se añaden luego, desde <strong>Editar plato</strong>.</p>`,
       actions: [
@@ -515,7 +538,7 @@ const VNutrition = (() => {
           if (!n) { UI.toast('Ponle un nombre', 'err'); return false; }
           opcion.recetas = opcion.recetas || [];
           opcion.recetas.push({
-            id: DB.uid('rec'), nombre: n, varianteId: vId, elige,
+            id: DB.uid('rec'), nombre: n, varianteId: vId, elige: { ...elige },
             preparacion: (root.querySelector('textarea[name="prep"]').value || '').trim() || undefined,
           });
           await guardar(app);
@@ -523,6 +546,13 @@ const VNutrition = (() => {
           setTimeout(() => { const el = document.getElementById('nutPlatos'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 250);
         } },
       ],
+      onMount: (root) => {
+        const refrescar = () => {
+          root.querySelector('#recElige').innerHTML = eleccionHTML(opcion, vId, elige);
+          bindEleccion(root, elige, refrescar);
+        };
+        bindEleccion(root, elige, refrescar);
+      },
     });
   }
 
