@@ -140,7 +140,8 @@ const VPlan = (() => {
         const nameCls = ex.priority ? 'ex-name priority' : 'ex-name';
         const optCls = ex.optional ? 'optional' : '';
         const sl = subsLine(ex);
-        return `<li class="${optCls}"><span class="ex-line-main"><span class="${nameCls}">${UI.esc(ex.name)}${ex.label ? ` <span class="ex-variant">${UI.esc(ex.label)}</span>` : ''}</span>${sl}</span><span class="ex-sets">${UI.esc(ex.sets || '')}</span></li>`;
+        const det = ex.notes ? `<span class="ex-detail">${UI.esc(ex.notes)}</span>` : '';
+        return `<li class="${optCls}"><span class="ex-line-main"><span class="${nameCls}">${UI.esc(ex.name)}${ex.label ? ` <span class="ex-variant">${UI.esc(ex.label)}</span>` : ''}</span>${det}${sl}</span><span class="ex-sets">${UI.esc(ex.sets || '')}</span></li>`;
       }).join('');
       const labelCls = b.optional ? 'block-label optional' : 'block-label';
       const labelText = b.optional ? `${UI.esc(b.label)} · si hay tiempo` : UI.esc(b.label);
@@ -283,6 +284,7 @@ const VPlan = (() => {
             <button class="icon-btn danger" data-mv="del">×</button>
           </span>
         </div>
+        <input class="inp ed-ex-detail" data-f="notes" value="${UI.esc(ex.notes || '')}" placeholder="detalle: tempo, carga inicial, tope de rango…" maxlength="90">
       </div>`;
 
     const editorHTML = () => {
@@ -353,6 +355,7 @@ const VPlan = (() => {
         ex.priority = el.querySelector('[data-f="priority"]').checked;
         ex.optional = el.querySelector('[data-f="optional"]').checked;
         ex.label = el.querySelector('[data-f="label"]').value.trim() || undefined;
+        ex.notes = el.querySelector('[data-f="notes"]').value.trim() || undefined; // prescripción del plan
       });
       root.querySelectorAll('[data-block-opt]').forEach(c => { draft.blocks[+c.dataset.blockOpt].optional = c.checked; });
     };
@@ -386,7 +389,7 @@ const VPlan = (() => {
         sync(root);
         const bi = +b.dataset.addEx;
         const cat = draft.blocks[bi].label || 'General';
-        openPicker(cat, (ex) => { draft.blocks[bi].exercises.push({ exerciseId: ex.id, name: ex.name, type: ex.type, sets: '', priority: false, optional: false }); rerender(root); });
+        openPicker(cat, (ex) => { draft.blocks[bi].exercises.push({ exerciseId: ex.id, name: ex.name, type: ex.type, sets: '', notes: '', priority: false, optional: false }); rerender(root); });
       }));
       root.querySelectorAll('[data-block-cat]').forEach(b => b.addEventListener('click', () => {
         sync(root);
@@ -860,6 +863,8 @@ const VPlan = (() => {
             <p class="field-hint">Solo se mostrarán estos al registrar. También puedes cambiarlos durante el entreno.</p>
           </div>`;
         })()}
+        ${UI.field('Vídeo · cómo se hace', `<input class="inp" name="videoUrl" type="url" value="${UI.esc(ex ? (ex.videoUrl || '') : '')}" placeholder="https://youtube.com/…">`, 'Se abre desde el entreno, sin buscarlo.')}
+        ${UI.field('Notas de técnica', UI.textarea('howto', (ex && ex.howto) || '', 'Puntos clave: postura, tempo, hasta dónde bajar…', 3))}
         <span class="field-label">Suplentes (el sustituto de este ejercicio es…)</span>
         <div class="subs-box" id="subsBox"></div>
         <button type="button" class="btn ghost small" id="addSub">+ Añadir suplente</button>
@@ -878,9 +883,9 @@ const VPlan = (() => {
             ? VSessions.TIME_FIELDS.map(f => f.key).filter(k => root.querySelector(`#exMetrics [data-mk="${k}"]`)?.checked)
             : undefined;
           if (isNew) {
-            await DB.put('exercises', { id: DB.uid('ex'), userId: app.activeUser.id, name: d.name.trim(), muscleGroup: d.muscleGroup.trim() || 'General', type: d.type, substitutes: subs, metrics, createdAt: Date.now() });
+            await DB.put('exercises', { id: DB.uid('ex'), userId: app.activeUser.id, name: d.name.trim(), muscleGroup: d.muscleGroup.trim() || 'General', type: d.type, substitutes: subs, metrics, videoUrl: (d.videoUrl || '').trim() || undefined, howto: (d.howto || '').trim() || undefined, createdAt: Date.now() });
           } else {
-            await DB.updateExercise(app.activeUser.id, ex.id, { name: d.name.trim(), muscleGroup: d.muscleGroup.trim() || 'General', type: d.type, substitutes: subs, metrics });
+            await DB.updateExercise(app.activeUser.id, ex.id, { name: d.name.trim(), muscleGroup: d.muscleGroup.trim() || 'General', type: d.type, substitutes: subs, metrics, videoUrl: (d.videoUrl || '').trim() || undefined, howto: (d.howto || '').trim() || undefined });
             await app.refreshRoutine();
           }
           app.render();

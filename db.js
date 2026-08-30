@@ -296,7 +296,8 @@ const DB = (() => {
     });
   }
 
-  const PLAN_NAME = 'Plan CNP María';
+  // Nombre genérico: es una plantilla para cualquiera, no el plan de una persona.
+  const PLAN_NAME = 'Plan CNP';
   function routineName() { return PLAN_NAME; }
 
   const WEEKDAYS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
@@ -663,8 +664,7 @@ const DB = (() => {
             if (flat.length) d.blocks = groupIntoBlocks(flat, groupOf);
           }
         });
-        // renombrar el plan principal al nombre actual (si conserva el nombre sembrado)
-        if (rt.isPrimary && /^Plan CNP/.test(rt.name || '')) rt.name = PLAN_NAME;
+        // (antes se renombraba aquí el plan principal: pisaba el nombre que hubiera puesto el usuario)
         // tipo de plan: las rutinas antiguas son el plan CNP
         if (!rt.planType) { rt.planType = 'cnp'; }
         await put('routines', rt);

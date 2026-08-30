@@ -298,8 +298,30 @@ const VSessions = (() => {
       name: ex.name,
       type: ex.type || 'weight',
       target: ex.sets || '',
+      detail: ex.notes || undefined, // prescripción del plan (tempo, carga, tope…)
       sets: [],
     };
+  }
+
+  // Vídeo y notas de técnica del catálogo, para el botón "cómo se hace".
+  let _exMeta = {};
+  async function loadExMeta(app) {
+    _exMeta = {};
+    (await DB.exercisesOf(app.activeUser.id)).forEach(x => {
+      if (x.videoUrl || x.howto) _exMeta[x.id] = { videoUrl: x.videoUrl, howto: x.howto, name: x.name };
+    });
+  }
+  function showHowto(entry) {
+    const m = entry && entry.exerciseId && _exMeta[entry.exerciseId];
+    if (!m) return;
+    const acts = [{ label: 'Cerrar', kind: 'ghost' }];
+    if (m.videoUrl) acts.push({ label: 'Ver vídeo', kind: 'primary', onClick: () => { window.open(m.videoUrl, '_blank', 'noopener'); return false; } });
+    UI.modal({
+      title: entry.name || m.name,
+      bodyHTML: `${entry.detail ? `<p class="modal-text"><strong>En este plan:</strong> ${UI.esc(entry.detail)}</p>` : ''}
+        ${m.howto ? `<p class="modal-text prewrap">${UI.esc(m.howto)}</p>` : '<p class="modal-text dim">Sin notas de técnica.</p>'}`,
+      actions: acts,
+    });
   }
 
   // ----- "Última vez": qué hiciste la sesión anterior con cada ejercicio -----
@@ -755,8 +777,9 @@ const VSessions = (() => {
       <div class="ex-card-body">
         <div class="ex-card-head">
           <button type="button" class="drag-handle" data-drag="card" title="Arrastra para reordenar" aria-label="Arrastrar">${UI.icon('grip', 18)}</button>
-          <div class="ex-card-name"><strong>${UI.esc(entry.name)}</strong>${entry.target ? `<span class="ex-target">obj: ${UI.esc(entry.target)}</span>` : ''}</div>
+          <div class="ex-card-name"><strong>${UI.esc(entry.name)}</strong>${entry.target ? `<span class="ex-target">obj: ${UI.esc(entry.target)}</span>` : ''}${entry.detail ? `<span class="ex-detail">${UI.esc(entry.detail)}</span>` : ''}</div>
           <span class="ex-card-actions">
+            ${(entry.exerciseId && _exMeta[entry.exerciseId]) ? `<button class="icon-btn" data-howto data-ei="${ei}" title="Cómo se hace">${UI.icon('info', 17)}</button>` : ''}
             ${mode === 'live' ? `<button class="icon-btn" data-ai-ex data-ei="${ei}" title="Consultar a una IA sobre este ejercicio">${UI.icon('chat', 17)}</button>` : ''}
             <button class="icon-btn danger" data-rm-ex data-ei="${ei}">${UI.icon('trash', 17)}</button>
           </span>
@@ -847,6 +870,7 @@ const VSessions = (() => {
     _lastTimeMap = buildLastTimeMap(hist, s.id);
     _prMap = buildPRMap(hist, s.id);
     _prevDaySession = findPrevDaySession(s, hist);
+    await loadExMeta(app);
     const elapsed = Math.floor((Date.now() - s.startTs) / 1000);
 
     return `
@@ -894,6 +918,7 @@ const VSessions = (() => {
       root.querySelectorAll('[data-add-set]').forEach(b => b.addEventListener('click', () => {
         sync(); const e = s.entries[+b.dataset.ei]; e.sets.push(emptySet(e.type)); redraw(); // serie vacía (para copiar está "duplicar")
       }));
+      root.querySelectorAll('[data-howto]').forEach(b => b.addEventListener('click', () => showHowto(s.entries[+b.dataset.ei])));
       root.querySelectorAll('[data-dup-set]').forEach(b => b.addEventListener('click', () => {
         sync(); const e = s.entries[+b.dataset.ei], si = +b.dataset.si; e.sets.splice(si + 1, 0, cloneSet(e.sets[si])); redraw();
       }));
@@ -1367,6 +1392,7 @@ const VSessions = (() => {
   // =====================================================
   async function sessionEditor(app, existing) {
     const isNew = !existing;
+    await loadExMeta(app);
     const users = await DB.getUsers();
     const draft = existing
       ? JSON.parse(JSON.stringify(existing))
@@ -1401,6 +1427,7 @@ const VSessions = (() => {
       root.querySelectorAll('[data-dup-set]').forEach(b => b.addEventListener('click', () => { syncMeta(root); const e = draft.entries[+b.dataset.ei], si = +b.dataset.si; e.sets.splice(si + 1, 0, cloneSet(e.sets[si])); render(root); }));
       root.querySelectorAll('[data-repeat-block]').forEach(b => b.addEventListener('click', () => { syncMeta(root); const e = draft.entries[+b.dataset.ei]; pickRepeat(e.sets.length, (n) => { const snap = e.sets.slice(); for (let k = 1; k < n; k++) snap.forEach(st => e.sets.push(cloneSet(st))); render(root); }); }));
       root.querySelectorAll('[data-set-totaltime]').forEach(b => b.addEventListener('click', () => { syncMeta(root); const entry = draft.entries[+b.dataset.ei]; pickTotalTime(entry, (sec) => { entry.totals = entry.totals || {}; if (sec == null) delete entry.totals.time; else entry.totals.time = sec; render(root); }); }));
+      root.querySelectorAll('[data-howto]').forEach(b => b.addEventListener('click', () => showHowto(draft.entries[+b.dataset.ei])));
       root.querySelectorAll('[data-rm-set]').forEach(b => b.addEventListener('click', () => { syncMeta(root); draft.entries[+b.dataset.ei].sets.splice(+b.dataset.si, 1); render(root); }));
       root.querySelectorAll('[data-add-drop]').forEach(b => b.addEventListener('click', () => { syncMeta(root); const set = draft.entries[+b.dataset.ei].sets[+b.dataset.si]; (set.drops = set.drops || []).push(emptyDrop(draft.entries[+b.dataset.ei].type)); render(root); }));
       root.querySelectorAll('[data-rm-drop]').forEach(b => b.addEventListener('click', () => { syncMeta(root); const set = draft.entries[+b.dataset.ei].sets[+b.dataset.si]; if (set.drops) set.drops.splice(+b.dataset.di, 1); render(root); }));
