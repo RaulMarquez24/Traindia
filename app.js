@@ -18,6 +18,33 @@ const app = {
   views: {},
 
   async init() {
+    try {
+      await this.boot();
+    } catch (e) {
+      console.error(e);
+      this.showBootError(e);
+    }
+  },
+
+  // Pantalla de error en vez de dejar la app en blanco si el arranque falla.
+  showBootError(e) {
+    const bloqueada = e && (e.message === 'BLOCKED' || e.name === 'VersionError');
+    const main = document.getElementById('mainContent');
+    if (!main) return;
+    main.innerHTML = `<div class="view active"><div class="section">
+      <div class="empty-state">
+        <p><strong>${bloqueada ? 'Traindía está abierta en otro sitio' : 'No se ha podido arrancar'}</strong></p>
+        <p class="dim">${bloqueada
+          ? 'Para terminar de actualizar hay que cerrar las demás copias: cierra las pestañas del navegador y la app de la pantalla de inicio (deslízala fuera de recientes) y vuelve a abrirla.'
+          : UI.esc((e && e.message) || 'Error desconocido')}</p>
+      </div>
+      <button class="btn primary block" id="bootRetry">Reintentar</button>
+    </div></div>`;
+    const r = main.querySelector('#bootRetry');
+    if (r) r.addEventListener('click', () => location.reload());
+  },
+
+  async boot() {
     await DB.open();
     this.registerViews();
     this.bindShell();
@@ -410,7 +437,7 @@ const app = {
                 tipo: d.tipo,
                 mensaje: d.mensaje.trim(),
                 contacto: (d.contacto || '').trim() || '(no indicado)',
-                version: 'v2.6.5',
+                version: 'v2.6.6',
                 perfil: (this.mainUser && this.mainUser.name) || '',
                 navegador: navigator.userAgent,
               }),
@@ -445,7 +472,7 @@ const app = {
     return `<div class="section">
       ${rows.map(r => `<button class="big-row" data-link="${r.v}"><span class="big-row-icon tile" style="background:${r.color}">${UI.icon(r.icon, 20)}</span><span class="big-row-text"><strong>${r.label}</strong><span class="dim">${r.sub}</span></span><span class="chev">›</span></button>`).join('')}
       <button class="big-row" data-feedback><span class="big-row-icon tile" style="background:var(--strong)">${UI.icon('chat', 20)}</span><span class="big-row-text"><strong>Sugerencias y reportes</strong><span class="dim">Envíame ideas o fallos</span></span><span class="chev">›</span></button>
-      <p class="version-foot">Traindía · v2.6.5 · ${Object.keys(this.usersById).length} perfil(es)<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
+      <p class="version-foot">Traindía · v2.6.6 · ${Object.keys(this.usersById).length} perfil(es)<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
     </div>`;
   },
   bindMore(root) {
@@ -692,7 +719,7 @@ const app = {
         <button class="btn danger block" id="resetApp">Borrar todos los datos</button>
         <p class="field-hint">Restablece la app al estado inicial (se borran todos los perfiles, sesiones y progreso).</p>
       </div>
-      <p class="version-foot">Traindía · v2.6.5</p>
+      <p class="version-foot">Traindía · v2.6.6</p>
     </div>`;
   },
 
