@@ -713,6 +713,11 @@ body.modal-open { overflow: hidden; }
 .nut-dudas { border-color: var(--moderate); }
 .nut-reglas ul, .nut-dudas ul { margin: 0; padding-left: 17px; }
 .nut-reglas li, .nut-dudas li { font-size: 13px; color: var(--ink-soft); line-height: 1.5; margin-bottom: 5px; }
+.duda-row { display: flex; align-items: flex-start; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.duda-row:last-of-type { border-bottom: 0; }
+.duda-txt { flex: 1; font-size: 13px; color: var(--ink-soft); line-height: 1.5; }
+.duda-row .btn { flex: none; white-space: nowrap; }
+.nut-dudas .field-hint { margin: 8px 0 0; }
 .nut-intro { background: var(--strong-bg); border-radius: 14px; padding: 18px; margin-bottom: 16px; }
 .nut-intro h3 { font-size: 17px; color: var(--strong); margin-bottom: 6px; }
 .nut-intro p { font-size: 13.5px; color: var(--ink-soft); line-height: 1.5; }
