@@ -95,6 +95,7 @@ const VNutrition = (() => {
   let _planId = null;   // plan elegido cuando hay más de uno
   // La cabecera de la app dice dónde estás: Nutrición → nombre de la pauta → comida.
   function headerTitle(params) {
+    if (params && params.lista) return 'Mis planes';
     if (!_plan) return 'Nutrición';
     if (params && params.tomaId) {
       const t = (_plan.tomas || []).find(x => x.id === params.tomaId);
@@ -124,7 +125,7 @@ const VNutrition = (() => {
     if (!(await DB.hasStore('nutrition'))) return prepararHTML();
     const planes = await DB.nutritionOf(app.activeUser.id);
     if (!planes.length) { _plan = null; return vacioHTML(); }
-    if (planes.length > 1 && !_planId) return listaPlanesHTML(planes);
+    if ((params && params.lista) || (planes.length > 1 && !_planId)) return listaPlanesHTML(planes);
     _plan = planes.find(x => x.id === _planId) || planes.find(x => x.isPrimary) || planes[0];
     _planId = _plan.id;
     if (params && params.tomaId) {
@@ -136,7 +137,7 @@ const VNutrition = (() => {
 
   function listaPlanesHTML(planes) {
     return `<div class="section">
-      <div class="sec-label">Mis pautas</div>
+      <div class="sec-label">Mis planes</div>
       ${planes.map(p => `<button class="big-row" data-plan="${UI.esc(p.id)}">
           <span class="big-row-icon tile" style="background:var(--strong)">${UI.icon('book', 20)}</span>
           <span class="big-row-text"><strong>${UI.esc(p.nombre || 'Pauta')}</strong><span class="dim">${(p.tomas || []).length} comidas${p.isPrimary ? ' · en uso' : ''}</span></span>
@@ -161,7 +162,7 @@ const VNutrition = (() => {
 
     const filas = tomas.map(t => {
       const ops = (t.opciones || []).filter(o => comidaAplica(o, vId));
-      const platos = (t.opciones || []).reduce((n, o) => n + (o.recetas || []).length, 0);
+      const platos = (t.opciones || []).reduce((n, o) => n + (o.recetas || []).filter(r => !r.varianteId || r.varianteId === vId).length, 0);
       return `<button class="big-row" data-toma="${UI.esc(t.id)}">
         <span class="big-row-text"><strong>${UI.esc(t.nombre)}</strong><span class="dim">${ops.length} ${ops.length === 1 ? 'opción' : 'opciones'} hoy${platos ? ` · ${platos} ${platos === 1 ? 'plato' : 'platos'}` : ''}</span></span>
         <span class="chev">›</span>
@@ -177,7 +178,7 @@ const VNutrition = (() => {
 
     return `<div class="section">
       <div class="nut-head">
-        <div class="nut-head-txt"><strong>${UI.esc(_plan.nombre || 'Mi pauta')}</strong><span class="dim">${UI.esc(UI.fmtDate(DB.todayISO()))}</span></div>
+        <div class="nut-head-txt"><strong>${UI.esc(_plan.nombre || 'Mi plan')}</strong><span class="dim">${UI.esc(UI.fmtDate(DB.todayISO()))}</span></div>
       </div>
       ${dias}
       <div class="sec-label">Comidas del día</div>
@@ -185,11 +186,11 @@ const VNutrition = (() => {
       <button class="btn ghost block" id="nutAddToma">${UI.icon('plus', 15)} Añadir comida (desayuno, cena…)</button>
       ${reglas}${sup}${dudas}
       <div class="detail-toolbar">
-        <button class="btn ghost" id="nutPlanes">${UI.icon('swap', 15)} Mis pautas</button>
+        <button class="btn ghost" id="nutPlanes">${UI.icon('swap', 15)} Mis planes</button>
         <button class="btn ghost" id="nutShare">${UI.icon('upload', 15)} Compartir</button>
-        <button class="btn ghost danger" id="nutDel">${UI.icon('trash', 15)} Borrar pauta</button>
+        <button class="btn ghost danger" id="nutDel">${UI.icon('trash', 15)} Borrar plan</button>
       </div>
-      <p class="field-hint">Para crear otra pauta, sal a <strong>Mis pautas</strong>.</p>
+      <p class="field-hint">Para crear otro plan, entra en <strong>Mis planes</strong>.</p>
     </div>`;
   }
 
@@ -237,8 +238,12 @@ const VNutrition = (() => {
     }).join('');
 
     // todos los platos de esta comida, vengan de la opción que vengan
+    // Un plato pertenece al tipo de día con el que se creó: en descanso no se ven
+    // los de entreno y al revés. Los antiguos (sin tipo) se ven siempre.
     const platos = [];
-    (t.opciones || []).forEach(op => (op.recetas || []).forEach(r => platos.push({ op, r })));
+    (t.opciones || []).forEach(op => (op.recetas || [])
+      .filter(r => !r.varianteId || r.varianteId === vId)
+      .forEach(r => platos.push({ op, r })));
 
     return `<div class="section">
       <div class="nut-head">
@@ -250,8 +255,8 @@ const VNutrition = (() => {
         <div class="meal-list">${platos.map(({ op, r }) => `
           <button class="meal-card" data-receta="${UI.esc(t.id)}|${UI.esc(op.id)}|${UI.esc(r.id)}">
             <span class="meal-name">${UI.esc(r.nombre)}</span>
-            <span class="meal-sub">${UI.esc(Object.values(r.elige || {}).join(' · ') || op.nombre || '')}</span>
-            ${r.preparacion ? `<span class="meal-flag">${UI.icon('book', 11)} con preparación</span>` : ''}
+            <span class="meal-sub">${UI.esc(Object.values(r.elige || {}).join(' · ') || op.nombre || '')}${r.extras ? ` + ${UI.esc(r.extras)}` : ''}</span>
+            ${(r.preparacion || r.foto) ? `<span class="meal-flag">${r.foto ? UI.icon('tag', 11) + ' con foto' : ''}${(r.foto && r.preparacion) ? ' · ' : ''}${r.preparacion ? UI.icon('book', 11) + ' con preparación' : ''}</span>` : ''}
             <span class="meal-go">›</span>
           </button>`).join('')}</div>` : ''}
 
@@ -263,28 +268,62 @@ const VNutrition = (() => {
     </div>`;
   }
 
+  // Reduce la foto antes de guardarla: va dentro del plan y este se comparte.
+  function fotoDesdeArchivo(file, cb) {
+    const rd = new FileReader();
+    rd.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const max = 900;
+        let w = img.width, h = img.height;
+        if (w > max || h > max) { const k = max / Math.max(w, h); w = Math.round(w * k); h = Math.round(h * k); }
+        const c = document.createElement('canvas'); c.width = w; c.height = h;
+        c.getContext('2d').drawImage(img, 0, 0, w, h);
+        try { cb(c.toDataURL('image/jpeg', 0.72)); } catch (e) { cb(null); }
+      };
+      img.onerror = () => cb(null);
+      img.src = rd.result;
+    };
+    rd.onerror = () => cb(null);
+    rd.readAsDataURL(file);
+  }
+
   // ---------- RECETAS: tus platos que cumplen una directriz ----------
   function verReceta(app, tomaId, opId, recId) {
     const { toma, opcion } = ref(tomaId, opId);
     const r = opcion && (opcion.recetas || []).find(x => x.id === recId);
     if (!r) { app.render(); return; }
     const vs = _plan.variantes || [];
-    const vId = _varianteId || (varianteDeHoy(_plan, app) || {}).id || (vs[0] && vs[0].id);
-    // los alimentos que usa este plato, según lo que eligió al guardarse
+    const vId = r.varianteId || _varianteId || (varianteDeHoy(_plan, app) || {}).id || (vs[0] && vs[0].id);
+    const vNombre = (vs.find(x => x.id === vId) || {}).nombre || '';
+    let foto = r.foto || null;
+
     const filas = (opcion.grupos || []).map(g => {
       const alts = g.alternativas || [];
       if (!alts.length) return '';
-      const nombre = (r.elige || {})[g.id];
-      const el = alts.find(a => a.alimento === nombre) || alts[0];
-      return `<div class="nut-line"><span class="nut-food">${UI.esc(el.alimento)}</span><span class="nut-dots"></span><span class="nut-qty">${UI.esc(cantidadTexto(el, vId) || '—')}</span></div>`;
+      const el = alts.find(a => a.alimento === (r.elige || {})[g.id]) || alts[0];
+      const c = cantidadDe(el, vId) || {};
+      return `<div class="nut-row">
+        <div class="nut-line"><span class="nut-food">${UI.esc(el.alimento)}</span><span class="nut-dots"></span><span class="nut-qty">${UI.esc(cantidadTexto(el, vId) || '—')}</span></div>
+        ${(notaDe(el, vId) || c.equivale) ? `<div class="nut-eq">${UI.esc([notaDe(el, vId), c.equivale ? `≡ ${c.equivale}` : ''].filter(Boolean).join(' · '))}</div>` : ''}
+      </div>`;
     }).join('');
+
     UI.modal({
       title: r.nombre,
       size: 'wide',
-      bodyHTML: `<p class="modal-text dim">${UI.esc(toma.nombre)} · ${UI.esc(opcion.nombre || '')}</p>
-        ${filas}
-        <div class="card-label" style="margin-top:16px">Cómo se hace</div>
-        <textarea class="inp" id="nutRecPrep" rows="5" placeholder="Ej: sofríes la cebolla, añades el arroz…">${UI.esc(r.preparacion || '')}</textarea>`,
+      bodyHTML: `<p class="modal-text dim">${UI.esc(toma.nombre)} · ${UI.esc(opcion.nombre || '')}${vs.length > 1 ? ` · ${UI.esc(vNombre)}` : ''}</p>
+        <div class="sec-label">Lo que lleva</div>
+        ${filas || '<p class="modal-text dim">Sin alimentos.</p>'}
+        ${UI.field('Ingredientes extra', UI.input('extras', r.extras || '', { placeholder: 'Cebolla, pimiento, especias…' }), 'Lo que le añades y no viene en la pauta.')}
+        <div class="sec-label">Cómo se hace</div>
+        <textarea class="inp" id="nutRecPrep" rows="5" placeholder="Ej: sofríes la cebolla, añades el arroz…">${UI.esc(r.preparacion || '')}</textarea>
+        <div class="sec-label">Foto</div>
+        <div id="recFotoPrev">${foto ? `<img class="rec-foto" src="${foto}" alt="">` : ''}</div>
+        <div class="pauta-foot" style="border:0;padding:0;margin-top:8px">
+          <button type="button" class="btn ghost small" id="recFoto">${UI.icon('plus', 13)} ${foto ? 'Cambiar foto' : 'Añadir foto'}</button>
+          ${foto ? `<button type="button" class="btn ghost small danger" id="recFotoDel">${UI.icon('trash', 13)} Quitar foto</button>` : ''}
+        </div>`,
       actions: [
         { label: 'Borrar', kind: 'danger', onClick: async () => {
           const i = opcion.recetas.indexOf(r);
@@ -292,56 +331,98 @@ const VNutrition = (() => {
           await guardar(app); UI.toast('Plato borrado');
         } },
         { label: 'Usar hoy', kind: 'ghost', onClick: async (root) => {
-          r.preparacion = (root.querySelector('#nutRecPrep').value || '').trim() || undefined;
           Object.entries(r.elige || {}).forEach(([gid, ali]) => { _elegido[`${opcion.id}|${gid}`] = ali; });
-          _abierta[toma.id] = opcion.id;
-          await guardar(app);
+          await guardarReceta(app, root, r, () => foto);
           UI.toast(`${r.nombre} · alimentos ajustados`);
         } },
-        { label: 'Guardar', kind: 'primary', onClick: async (root) => {
-          r.preparacion = (root.querySelector('#nutRecPrep').value || '').trim() || undefined;
-          await guardar(app);
-        } },
+        { label: 'Guardar', kind: 'primary', onClick: async (root) => { await guardarReceta(app, root, r, () => foto); } },
       ],
+      onMount: (root) => {
+        const pintar = () => {
+          root.querySelector('#recFotoPrev').innerHTML = foto ? `<img class="rec-foto" src="${foto}" alt="">` : '';
+        };
+        root.querySelector('#recFoto').addEventListener('click', () => {
+          const inp = document.createElement('input');
+          inp.type = 'file'; inp.accept = 'image/*';
+          inp.addEventListener('change', () => {
+            const f = inp.files[0]; if (!f) return;
+            fotoDesdeArchivo(f, (data) => { if (!data) { UI.toast('No se ha podido leer la foto', 'err'); return; } foto = data; pintar(); });
+          });
+          inp.click();
+        });
+        const del = root.querySelector('#recFotoDel');
+        if (del) del.addEventListener('click', () => { foto = null; pintar(); UI.toast('Foto quitada al guardar'); });
+      },
     });
+  }
+  async function guardarReceta(app, root, r, getFoto) {
+    r.preparacion = (root.querySelector('#nutRecPrep').value || '').trim() || undefined;
+    r.extras = (root.querySelector('input[name="extras"]').value || '').trim() || undefined;
+    const f = getFoto();
+    if (f) r.foto = f; else delete r.foto;
+    await guardar(app);
   }
 
   function addReceta(app, tomaId, opId) {
     const { toma, opcion } = ref(tomaId, opId);
     if (!opcion) return;
-    // se guarda con los alimentos que estén elegidos ahora mismo
+    const { vs, vId, v } = variantesDe(app);
+    // se guarda con los alimentos elegidos ahora mismo Y para el día seleccionado
     const elige = {};
     (opcion.grupos || []).forEach(g => {
-      const alts = g.alternativas || [];
-      if (!alts.length) return;
+      const alts = (g.alternativas || []).filter(a => (a.cantidades || {})[vId]);
+      const lista = alts.length ? alts : (g.alternativas || []);
+      if (!lista.length) return;
       const k = `${opcion.id}|${g.id}`;
-      elige[g.id] = (alts.find(a => a.alimento === _elegido[k]) || alts[0]).alimento;
+      elige[g.id] = (lista.find(a => a.alimento === _elegido[k]) || lista[0]).alimento;
     });
     const usa = Object.values(elige).join(' · ');
+    let foto = null;
     UI.modal({
       title: 'Guardar un plato',
       bodyHTML: `<p class="modal-text">Le pones nombre a lo que cocinas con estas cantidades, y la próxima vez lo tienes hecho.</p>
         <p class="modal-text dim">Con: ${UI.esc(usa || '—')}</p>
+        ${vs.length > 1 ? `<p class="modal-text"><strong>Se guarda para ${UI.esc(v ? v.nombre.toLowerCase() : '')}</strong>, que es el día que tienes seleccionado.</p>` : ''}
         ${UI.field('Nombre del plato', UI.input('nombre', '', { placeholder: 'Ej: Risotto, Puchero, Salteado…' }))}
-        ${UI.field('Cómo se hace (opcional)', UI.textarea('prep', '', 'Los pasos, a tu manera…', 4))}`,
+        ${UI.field('Ingredientes extra (opcional)', UI.input('extras', '', { placeholder: 'Cebolla, pimiento, especias…' }), 'Lo que le añades y no viene en la pauta.')}
+        ${UI.field('Cómo se hace (opcional)', UI.textarea('prep', '', 'Los pasos, a tu manera…', 4))}
+        <button type="button" class="btn ghost block" id="recFoto">${UI.icon('plus', 15)} Añadir una foto</button>
+        <div id="recFotoPrev"></div>`,
       actions: [
         { label: 'Cancelar', kind: 'ghost' },
         { label: 'Guardar', kind: 'primary', onClick: async (root) => {
           const n = (root.querySelector('input[name="nombre"]').value || '').trim();
           if (!n) { UI.toast('Ponle un nombre', 'err'); return false; }
-          const prep = (root.querySelector('textarea[name="prep"]').value || '').trim();
           opcion.recetas = opcion.recetas || [];
-          opcion.recetas.push({ id: DB.uid('rec'), nombre: n, preparacion: prep || undefined, elige });
+          opcion.recetas.push({
+            id: DB.uid('rec'), nombre: n, varianteId: vId, elige,
+            extras: (root.querySelector('input[name="extras"]').value || '').trim() || undefined,
+            preparacion: (root.querySelector('textarea[name="prep"]').value || '').trim() || undefined,
+            foto: foto || undefined,
+          });
           await guardar(app);
           UI.toast(`"${n}" guardado en tus platos`);
-          // La lista de platos está arriba: se lleva la vista hasta ella para que se vea.
           setTimeout(() => { const el = document.getElementById('nutPlatos'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 250);
         } },
       ],
+      onMount: (root) => {
+        root.querySelector('#recFoto').addEventListener('click', () => {
+          const inp = document.createElement('input');
+          inp.type = 'file'; inp.accept = 'image/*';
+          inp.addEventListener('change', () => {
+            const f = inp.files[0]; if (!f) return;
+            fotoDesdeArchivo(f, (data) => {
+              if (!data) { UI.toast('No se ha podido leer la foto', 'err'); return; }
+              foto = data;
+              root.querySelector('#recFotoPrev').innerHTML = `<img class="rec-foto" src="${data}" alt="">`;
+            });
+          });
+          inp.click();
+        });
+      },
     });
   }
 
-  // ---------- DETALLE DE UNA COMIDA (la tarjeta abierta) ----------
   function abrirComida(app, tomaId, opId) {
     const { toma, opcion: op } = ref(tomaId, opId);
     if (!toma || !op) { app.render(); return; }
@@ -421,15 +502,15 @@ const VNutrition = (() => {
   // tener UNA comida completa, que es cuando la sección ya sirve para algo.
   function wizard(app) {
     UI.modal({
-      title: 'Paso 1 de 3 · Tu pauta',
+      title: 'Paso 1 de 3 · Tu plan',
       bodyHTML: `<p class="modal-text">Vamos a montar tu primera comida. Son tres pasos y luego puedes seguir añadiendo cuando quieras.</p>
-        ${UI.field('¿Cómo la llamamos?', UI.input('nombre', 'Mi pauta', { placeholder: 'Mi pauta' }))}
+        ${UI.field('¿Cómo la llamamos?', UI.input('nombre', 'Mi plan', { placeholder: 'Mi plan' }))}
         <label class="metric-opt"><input type="checkbox" id="nutDias" checked><span>Como distinto los días que entreno</span></label>
         <p class="field-hint">Si lo marcas, cada alimento guardará dos cantidades y la app enseñará la que toque mirando tu plan de entreno.</p>`,
       actions: [
         { label: 'Cancelar', kind: 'ghost' },
         { label: 'Siguiente', kind: 'primary', onClick: async (root) => {
-          const nombre = (root.querySelector('input[name="nombre"]').value || '').trim() || 'Mi pauta';
+          const nombre = (root.querySelector('input[name="nombre"]').value || '').trim() || 'Mi plan';
           const dos = root.querySelector('#nutDias').checked;
           const variantes = dos
             ? [{ id: 'v_desc', nombre: 'Día de descanso', match: { porTipoDia: ['rest', 'light'] } },
@@ -639,7 +720,7 @@ const VNutrition = (() => {
 
     // elegir plan cuando hay varios
     root.querySelectorAll('[data-plan]').forEach(b => b.addEventListener('click', () => {
-      _planId = b.dataset.plan; app.render();
+      _planId = b.dataset.plan; app.go('nutrition', {}, true);
     }));
     // día (descanso / entrenamiento)
     root.querySelectorAll('[data-variante]').forEach(b => b.addEventListener('click', () => {
@@ -676,18 +757,18 @@ const VNutrition = (() => {
     if (addT) addT.addEventListener('click', () => addToma(app));
 
     const planes = root.querySelector('#nutPlanes');
-    if (planes) planes.addEventListener('click', () => { _planId = null; app.go('nutrition', {}, true); });
+    if (planes) planes.addEventListener('click', () => app.go('nutrition', { lista: 1 }));
 
     const share = root.querySelector('#nutShare');
     if (share) share.addEventListener('click', () => VData.exportNutrition(app, _plan));
     const del = root.querySelector('#nutDel');
     if (del) del.addEventListener('click', async () => {
-      const ok = await UI.confirm({ title: 'Borrar pauta', message: 'Se borrará tu pauta de alimentación entera.', confirmLabel: 'Borrar', danger: true });
+      const ok = await UI.confirm({ title: 'Borrar plan', message: 'Se borrará este plan de nutrición entero, con sus comidas y tus platos.', confirmLabel: 'Borrar', danger: true });
       if (!ok) return;
       await DB.del('nutrition', _plan.id);
       _plan = null; _planId = null;
       app.go('nutrition', {}, true);
-      UI.toast('Pauta borrada');
+      UI.toast('Plan borrado');
     });
   }
 
@@ -833,7 +914,7 @@ const VNutrition = (() => {
       actions: [
         { label: 'Cancelar', kind: 'ghost' },
         { label: 'Contar qué tal', kind: 'ghost', onClick: () => { reportar(app, plan); return false; } },
-        { label: 'Guardar pauta', kind: 'primary', onClick: async () => {
+        { label: 'Guardar plan', kind: 'primary', onClick: async () => {
           const rec = {
             ...plan,
             id: DB.uid('nut'),
@@ -847,7 +928,7 @@ const VNutrition = (() => {
           await DB.saveNutrition(rec);
           _plan = rec; _abierta = {}; _elegido = {}; _varianteId = null;
           app.go('nutrition', {}, true);
-          UI.toast('Pauta guardada');
+          UI.toast('Plan guardado');
         } },
       ],
     });
