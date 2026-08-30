@@ -85,7 +85,6 @@ const VNutrition = (() => {
   // ---------- estado ----------
   let _plan = null;
   let _varianteId = null;
-  let _elegido = {};        // `${opId}|${grupoId}` -> alimento elegido
   // Se guarda fuera de memoria: el usuario se va a la IA y al volver Android
   // puede haber recargado la app entera. Si no, el botón de pegar desaparece.
   const PROMPT_KEY = 'traindia-nut-prompt-pedido';
@@ -661,22 +660,24 @@ const VNutrition = (() => {
     const filas = (op.grupos || []).map(g => {
       const alts = g.alternativas || [];
       if (!alts.length) return '';
-      const key = `${op.id}|${g.id}`;
-      const el = alts.find(a => a.alimento === _elegido[key]) || alts[0];
-      const otras = alts.filter(a => a !== el);
-      const c = cantidadDe(el, vId) || {};
+      // Ninguno manda sobre los demás: si hay varios, todos se editan igual y
+      // cada uno lleva su propia cantidad.
+      const linea = (a, extra) => {
+        const c = cantidadDe(a, vId) || {};
+        return `<div class="nut-line${extra}">
+            <span class="nut-food">${UI.esc(a.alimento)}</span>
+            <span class="nut-dots"></span>
+            <span class="nut-qty">${UI.esc(cantidadTexto(a, vId) || '—')}</span>
+            <button class="nut-mini" data-ed-ali="${UI.esc(g.id)}|${UI.esc(a.alimento)}" title="Editar">${UI.icon('edit', 13)}</button>
+          </div>
+          ${c.equivale ? `<div class="nut-eq">≡ ${UI.esc(c.equivale)}</div>` : ''}`;
+      };
+      const add = `<div class="nut-swap"><button class="nut-alt add" data-add-alt="${UI.esc(g.id)}">+ alimento equivalente</button></div>`;
+      if (alts.length === 1) return `<div class="nut-row">${linea(alts[0], '')}${add}</div>`;
       return `<div class="nut-row">
-        <div class="nut-line">
-          <span class="nut-food">${UI.esc(el.alimento)}</span>
-          <span class="nut-dots"></span>
-          <span class="nut-qty">${UI.esc(cantidadTexto(el, vId) || '—')}</span>
-          <button class="nut-mini" data-ed-ali="${UI.esc(g.id)}|${UI.esc(el.alimento)}" title="Editar">${UI.icon('edit', 13)}</button>
-        </div>
-        ${c.equivale ? `<div class="nut-eq">≡ ${UI.esc(c.equivale)}</div>` : ''}
-        <div class="nut-swap">
-          ${otras.length ? `<span class="nut-swap-lbl">Puedes cambiarlo por:</span>${otras.map(a => `<button class="nut-alt" data-key="${UI.esc(key)}" data-alt="${UI.esc(a.alimento)}">${UI.esc(a.alimento)}</button>`).join('')}` : ''}
-          <button class="nut-alt add" data-add-alt="${UI.esc(g.id)}">+ cambio posible</button>
-        </div>
+        <div class="nut-grupo-lbl">${UI.esc(g.nombre || 'Elige uno')} · cualquiera de estos</div>
+        ${alts.map(a => linea(a, ' igual')).join('')}
+        ${add}
       </div>`;
     }).join('');
 
@@ -709,10 +710,6 @@ const VNutrition = (() => {
         } },
       ],
       onMount: (root) => {
-        root.querySelectorAll('[data-alt]').forEach(b => b.addEventListener('click', () => {
-          _elegido[b.dataset.key] = b.dataset.alt;
-          UI.closeModal(root); abrirComida(app, tomaId, opId);
-        }));
         root.querySelector('#nutAddAli').addEventListener('click', () => {
           UI.closeModal(root); editAlimento(app, { tomaId, opId });
         });
@@ -811,6 +808,12 @@ const VNutrition = (() => {
   // Volver a la pantalla de una comida concreta (tras crearla en el asistente).
   const irAToma = (app, tomaId) => app.go('nutrition', { planId: _planId, tomaId });
 
+  const listaAlimentos = (g) => {
+    const n = (g.alternativas || []).map(a => a.alimento);
+    if (n.length <= 1) return n[0] || '';
+    return `${n.slice(0, -1).join(', ')} o ${n[n.length - 1]}`;
+  };
+
   function editAlimento(app, { tomaId, opId, grupoId, altNombre, primero }) {
     const { toma, opcion, grupo, alt } = ref(tomaId, opId, grupoId, altNombre);
     if (!toma || !opcion) { app.render(); return; }
@@ -826,10 +829,11 @@ const VNutrition = (() => {
     }).join('');
     const c0 = (alt && cantidadDe(alt, vs[0] && vs[0].id)) || {};
     UI.modal({
-      title: esNuevo ? (grupo ? 'Un cambio posible' : 'Añadir alimento') : 'Editar alimento',
+      title: esNuevo ? (grupo ? 'Alimento equivalente' : 'Añadir alimento') : 'Editar alimento',
       bodyHTML: `<div id="nutAli">
         ${primero ? `<p class="modal-text">Ya casi. Añade el primer alimento de <strong>${UI.esc(opcion.nombre)}</strong> con la cantidad que te marcó tu nutricionista.</p>` : ''}
-        ${grupo && esNuevo ? `<p class="modal-text">Un alimento que puedes poner <strong>en lugar de ${UI.esc((grupo.alternativas[0] || {}).alimento || '')}</strong> cuando no lo tengas. Pon su cantidad equivalente.</p>` : ''}
+        ${grupo && esNuevo ? `<p class="modal-text">Otro alimento que vale <strong>lo mismo</strong> que ${UI.esc(listaAlimentos(grupo))}: cada día tomas uno u otro. Pon la cantidad que le toca a este.</p>
+        ${UI.field('Cómo se llama el conjunto', UI.input('grupoNombre', grupo.nombre || '', { placeholder: 'Hidrato, Proteína, Fruta…' }), 'Es el nombre que verás encima de los alimentos.')}` : ''}
         ${UI.field('Alimento', UI.input('alimento', alt ? alt.alimento : '', { placeholder: 'Ej: Arroz integral' }))}
         <span class="field-label">Cantidad</span>
         ${campos}
@@ -867,7 +871,11 @@ const VNutrition = (() => {
           if (alt) { alt.alimento = nombre; alt.cantidades = cantidades; }
           else {
             const nuevo = { alimento: nombre, cantidades };
-            if (grupo) grupo.alternativas.push(nuevo);
+            if (grupo) {
+              grupo.alternativas.push(nuevo);
+              const gn = root.querySelector('input[name="grupoNombre"]');
+              if (gn && gn.value.trim()) grupo.nombre = gn.value.trim();
+            }
             else opcion.grupos.push({ id: DB.uid('g'), nombre, alternativas: [nuevo] });
           }
           await guardar(app);
@@ -1157,7 +1165,7 @@ const VNutrition = (() => {
           const previas = await DB.nutritionOf(app.activeUser.id);
           for (const x of previas) { x.isPrimary = false; await DB.saveNutrition(x); }
           await DB.saveNutrition(rec);
-          _plan = rec; _planId = rec.id; _abierta = {}; _elegido = {}; _varianteId = null;
+          _plan = rec; _planId = rec.id; _abierta = {}; _varianteId = null;
           app.go('nutrition', { planId: rec.id }, true);
           UI.toast('Plan guardado');
         } },
