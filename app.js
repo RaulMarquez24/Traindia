@@ -437,7 +437,7 @@ const app = {
                 tipo: d.tipo,
                 mensaje: d.mensaje.trim(),
                 contacto: (d.contacto || '').trim() || '(no indicado)',
-                version: 'v2.6.6',
+                version: 'v2.6.7',
                 perfil: (this.mainUser && this.mainUser.name) || '',
                 navegador: navigator.userAgent,
               }),
@@ -472,7 +472,7 @@ const app = {
     return `<div class="section">
       ${rows.map(r => `<button class="big-row" data-link="${r.v}"><span class="big-row-icon tile" style="background:${r.color}">${UI.icon(r.icon, 20)}</span><span class="big-row-text"><strong>${r.label}</strong><span class="dim">${r.sub}</span></span><span class="chev">›</span></button>`).join('')}
       <button class="big-row" data-feedback><span class="big-row-icon tile" style="background:var(--strong)">${UI.icon('chat', 20)}</span><span class="big-row-text"><strong>Sugerencias y reportes</strong><span class="dim">Envíame ideas o fallos</span></span><span class="chev">›</span></button>
-      <p class="version-foot">Traindía · v2.6.6 · ${Object.keys(this.usersById).length} perfil(es)<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
+      <p class="version-foot">Traindía · v2.6.7 · ${Object.keys(this.usersById).length} perfil(es)<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
     </div>`;
   },
   bindMore(root) {
@@ -484,7 +484,8 @@ const app = {
   MAX_DOC_MB: 8,
   _docs: [],
   async loadDocs() {
-    this._docs = (await DB.filesOf(this.activeUser.id)).sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0));
+    try { this._docs = (await DB.filesOf(this.activeUser.id)).sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0)); }
+    catch (e) { this._docs = []; }
     return this._docs;
   },
   docIcon(type) {
@@ -521,6 +522,15 @@ const app = {
           <button class="btn ghost small danger" data-rm="${UI.esc(d.id)}">${UI.icon('trash', 14)} Quitar</button>
         </div>
       </div>`).join('');
+    const listo = await DB.hasStore('files');
+    if (!listo) {
+      return `<div class="section">
+        <p class="section-intro">Aquí podrás guardar el <strong>PDF del fisio</strong> o fotos y consultarlos durante el entreno.</p>
+        <p class="section-intro">Para activarlo hay que ampliar el almacén de la app, y eso solo puede hacerse si <strong>Traindía no está abierta en ningún otro sitio</strong>: cierra las demás pestañas y la app de la pantalla de inicio, y pulsa el botón.</p>
+        <button class="btn primary block" id="docEnable">${UI.icon('refresh', 15)} Activar documentos</button>
+        <p class="section-intro dim">Mientras tanto el resto de la app funciona con normalidad; tus datos están intactos.</p>
+      </div>`;
+    }
     return `<div class="section">
       <p class="section-intro">Guarda aquí el <strong>PDF del fisio</strong>, fotos de una máquina o cualquier apunte. Se consultan <strong>durante el entreno</strong> con el botón de documentos, sin salir de la app y sin conexión.</p>
       <p class="section-intro">Desde el móvil también puedes mandarlos con <strong>Compartir → Traindía</strong>.</p>
@@ -530,6 +540,18 @@ const app = {
     </div>`;
   },
   bindDocs(root) {
+    const enable = root.querySelector('#docEnable');
+    if (enable) enable.addEventListener('click', async () => {
+      enable.disabled = true; enable.textContent = 'Activando…';
+      const ok = await DB.upgradeNow();
+      if (ok) { UI.toast('Documentos activados'); this.render(); return; }
+      UI.modal({
+        title: 'Sigue abierta en otro sitio',
+        bodyHTML: `<p class="modal-text">No se ha podido ampliar el almacén porque Traindía sigue abierta en otro lado.</p>
+          <p class="modal-text dim">Cierra las demás pestañas y la app de la pantalla de inicio (deslízala fuera de recientes) y vuelve a intentarlo. Tus datos no corren ningún riesgo.</p>`,
+        actions: [{ label: 'Entendido', kind: 'primary', onClick: () => location.reload() }],
+      });
+    });
     const add = root.querySelector('#docAdd');
     if (add) add.addEventListener('click', () => {
       const inp = document.createElement('input');
@@ -719,7 +741,7 @@ const app = {
         <button class="btn danger block" id="resetApp">Borrar todos los datos</button>
         <p class="field-hint">Restablece la app al estado inicial (se borran todos los perfiles, sesiones y progreso).</p>
       </div>
-      <p class="version-foot">Traindía · v2.6.6</p>
+      <p class="version-foot">Traindía · v2.6.7</p>
     </div>`;
   },
 
