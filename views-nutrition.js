@@ -15,7 +15,9 @@
 //   variantes: [ { id, nombre, match: { porTipoDia:[...] } | { porDiaSemana:[1..7] } | null } ],
 //   tomas: [ { id, nombre, orden,
 //     opciones: [                       // en la interfaz: COMIDAS
-//       { id, nombre, preparacion?,     // preparacion = cómo se hace (opcional)
+//       { id, nombre,                 // la DIRECTRIZ del nutricionista
+//         recetas?: [ { id, nombre, preparacion?,   // TUS platos que la cumplen
+//                       elige?: { [grupoId]: 'alimento' } } ],
 //         grupos: [                     // en la interfaz: cada línea de la comida
 //           { id, nombre, opcional?,   // opcional: no impide que la comida valga hoy
 //             alternativas: [           // intercambiables entre sí
@@ -204,18 +206,104 @@ const VNutrition = (() => {
     }).join('');
 
     const noAplica = !comidaAplica(op, vId) && vs.length > 1
-      ? `<p class="nut-hint warn">Esta comida no tiene cantidades para hoy. Ábrela para añadirlas.</p>` : '';
+      ? `<p class="nut-hint warn">Esto no encaja con el día de hoy. Ábrelo para añadir las cantidades que falten.</p>` : '';
+
+    const recetas = op.recetas || [];
+    const cocina = `<div class="nut-cook">
+      <div class="nut-cook-lbl">Con esto puedes hacerte</div>
+      <div class="nut-cook-list">
+        ${recetas.map(r => `<button class="dish" data-receta="${UI.esc(t.id)}|${UI.esc(op.id)}|${UI.esc(r.id)}">${UI.esc(r.nombre)}${r.preparacion ? ` ${UI.icon('book', 11)}` : ''}</button>`).join('')}
+        <button class="dish ghost" data-add-receta="${UI.esc(t.id)}|${UI.esc(op.id)}">+ guardar un plato</button>
+      </div>
+      ${recetas.length ? '' : '<p class="field-hint" style="margin-top:6px">Cuando cocines algo con estas cantidades, guárdalo aquí y la próxima vez no tendrás que pensarlo.</p>'}
+    </div>`;
 
     return `<div class="nut-toma">
       ${cabecera}
       ${pestañas}
       ${noAplica}
-      ${filas || '<p class="dim" style="font-size:13px">Esta comida no tiene alimentos todavía.</p>'}
+      ${filas || '<p class="dim" style="font-size:13px">Esta directriz no tiene alimentos todavía.</p>'}
+      ${cocina}
       <div class="meal-foot">
-        ${op.preparacion ? `<span class="meal-flag">${UI.icon('book', 12)} tiene preparación</span>` : ''}
-        <button class="btn ghost small" data-open-op="${UI.esc(t.id)}|${UI.esc(op.id)}">${UI.icon('edit', 13)} Abrir ${UI.esc(op.nombre || '')}</button>
+        <button class="btn ghost small" data-open-op="${UI.esc(t.id)}|${UI.esc(op.id)}">${UI.icon('edit', 13)} Editar cantidades</button>
       </div>
     </div>`;
+  }
+
+  // ---------- RECETAS: tus platos que cumplen una directriz ----------
+  function verReceta(app, tomaId, opId, recId) {
+    const { toma, opcion } = ref(tomaId, opId);
+    const r = opcion && (opcion.recetas || []).find(x => x.id === recId);
+    if (!r) { app.render(); return; }
+    const vs = _plan.variantes || [];
+    const vId = _varianteId || (varianteDeHoy(_plan, app) || {}).id || (vs[0] && vs[0].id);
+    // los alimentos que usa este plato, según lo que eligió al guardarse
+    const filas = (opcion.grupos || []).map(g => {
+      const alts = g.alternativas || [];
+      if (!alts.length) return '';
+      const nombre = (r.elige || {})[g.id];
+      const el = alts.find(a => a.alimento === nombre) || alts[0];
+      return `<div class="nut-line"><span class="nut-food">${UI.esc(el.alimento)}</span><span class="nut-dots"></span><span class="nut-qty">${UI.esc(cantidadTexto(el, vId) || '—')}</span></div>`;
+    }).join('');
+    UI.modal({
+      title: r.nombre,
+      size: 'wide',
+      bodyHTML: `<p class="modal-text dim">${UI.esc(toma.nombre)} · ${UI.esc(opcion.nombre || '')}</p>
+        ${filas}
+        <div class="card-label" style="margin-top:16px">Cómo se hace</div>
+        <textarea class="inp" id="nutRecPrep" rows="5" placeholder="Ej: sofríes la cebolla, añades el arroz…">${UI.esc(r.preparacion || '')}</textarea>`,
+      actions: [
+        { label: 'Borrar', kind: 'danger', onClick: async () => {
+          const i = opcion.recetas.indexOf(r);
+          if (i >= 0) opcion.recetas.splice(i, 1);
+          await guardar(app); UI.toast('Plato borrado');
+        } },
+        { label: 'Usar hoy', kind: 'ghost', onClick: async (root) => {
+          r.preparacion = (root.querySelector('#nutRecPrep').value || '').trim() || undefined;
+          Object.entries(r.elige || {}).forEach(([gid, ali]) => { _elegido[`${opcion.id}|${gid}`] = ali; });
+          _abierta[toma.id] = opcion.id;
+          await guardar(app);
+          UI.toast(`${r.nombre} · alimentos ajustados`);
+        } },
+        { label: 'Guardar', kind: 'primary', onClick: async (root) => {
+          r.preparacion = (root.querySelector('#nutRecPrep').value || '').trim() || undefined;
+          await guardar(app);
+        } },
+      ],
+    });
+  }
+
+  function addReceta(app, tomaId, opId) {
+    const { toma, opcion } = ref(tomaId, opId);
+    if (!opcion) return;
+    // se guarda con los alimentos que estén elegidos ahora mismo
+    const elige = {};
+    (opcion.grupos || []).forEach(g => {
+      const alts = g.alternativas || [];
+      if (!alts.length) return;
+      const k = `${opcion.id}|${g.id}`;
+      elige[g.id] = (alts.find(a => a.alimento === _elegido[k]) || alts[0]).alimento;
+    });
+    const usa = Object.values(elige).join(' · ');
+    UI.modal({
+      title: 'Guardar un plato',
+      bodyHTML: `<p class="modal-text">Le pones nombre a lo que cocinas con estas cantidades, y la próxima vez lo tienes hecho.</p>
+        <p class="modal-text dim">Con: ${UI.esc(usa || '—')}</p>
+        ${UI.field('Nombre del plato', UI.input('nombre', '', { placeholder: 'Ej: Risotto, Puchero, Salteado…' }))}
+        ${UI.field('Cómo se hace (opcional)', UI.textarea('prep', '', 'Los pasos, a tu manera…', 4))}`,
+      actions: [
+        { label: 'Cancelar', kind: 'ghost' },
+        { label: 'Guardar', kind: 'primary', onClick: async (root) => {
+          const n = (root.querySelector('input[name="nombre"]').value || '').trim();
+          if (!n) { UI.toast('Ponle un nombre', 'err'); return false; }
+          const prep = (root.querySelector('textarea[name="prep"]').value || '').trim();
+          opcion.recetas = opcion.recetas || [];
+          opcion.recetas.push({ id: DB.uid('rec'), nombre: n, preparacion: prep || undefined, elige });
+          await guardar(app);
+          UI.toast('Plato guardado');
+        } },
+      ],
+    });
   }
 
   // ---------- DETALLE DE UNA COMIDA (la tarjeta abierta) ----------
@@ -253,27 +341,21 @@ const VNutrition = (() => {
         <p class="modal-text dim">${UI.esc(toma.nombre)}${vs.length > 1 ? ` · ${UI.esc((vs.find(x => x.id === vId) || {}).nombre || '')}` : ''}</p>
         ${filas || '<p class="modal-text dim">Esta comida todavía no tiene alimentos.</p>'}
         <button class="btn ghost small block" id="nutAddAli">+ Añadir alimento</button>
-        <div class="card-label" style="margin-top:16px">Cómo se hace</div>
-        <textarea class="inp" id="nutPrep2" rows="4" placeholder="Ej: sofríes la cebolla, añades el arroz…">${UI.esc(op.preparacion || '')}</textarea>
-        <p class="field-hint">Opcional. Es lo que te evita pensar qué cocinar cuando la abras.</p>`,
+        <p class="field-hint">Esto son las <strong>cantidades que te marcó tu nutricionista</strong>. Los platos que cocinas con ellas se guardan aparte, en «Con esto puedes hacerte».</p>`,
       actions: [
-        { label: 'Borrar comida', kind: 'danger', onClick: async () => {
+        { label: 'Borrar', kind: 'danger', onClick: async () => {
           const i = toma.opciones.indexOf(op);
           if (i >= 0) toma.opciones.splice(i, 1);
           await guardar(app); UI.toast('Comida borrada');
         } },
-        { label: 'Duplicar', kind: 'ghost', onClick: async (root) => {
+        { label: 'Duplicar', kind: 'ghost', onClick: async () => {
           const copia = JSON.parse(JSON.stringify(op));
           copia.id = DB.uid('o'); copia.nombre = `${op.nombre} (copia)`;
-          copia.preparacion = (root.querySelector('#nutPrep2').value || '').trim() || undefined;
           toma.opciones.push(copia);
           await guardar(app);
-          UI.toast('Duplicada · cámbiale el nombre y la preparación');
+          UI.toast('Duplicada · cámbiale el nombre');
         } },
-        { label: 'Guardar', kind: 'primary', onClick: async (root) => {
-          op.preparacion = (root.querySelector('#nutPrep2').value || '').trim() || undefined;
-          await guardar(app);
-        } },
+        { label: 'Cerrar', kind: 'primary' },
       ],
       onMount: (root) => {
         root.querySelectorAll('[data-alt]').forEach(b => b.addEventListener('click', () => {
@@ -396,6 +478,7 @@ const VNutrition = (() => {
         ${UI.field('Alimento', UI.input('alimento', alt ? alt.alimento : '', { placeholder: 'Ej: Arroz integral' }))}
         <span class="field-label">Cantidad</span>
         ${campos}
+        ${vs.length > 1 ? '<p class="field-hint" style="margin-top:-4px">Deja en blanco el día en que <strong>no</strong> tomes este alimento.</p>' : ''}
         <datalist id="nutUnidades">${UNIDADES.map(u => `<option value="${u}">`).join('')}</datalist>
         ${UI.field('Nota (opcional)', UI.input('nota', c0.nota || '', { placeholder: 'en crudo, al gusto…' }))}
         ${UI.field('Equivalencia (opcional)', UI.input('equivale', c0.equivale || '', { placeholder: '180 g cocido' }), 'La MISMA cantidad medida de otra forma. No es otro alimento.')}
@@ -420,7 +503,7 @@ const VNutrition = (() => {
           vs.forEach(v => {
             const val = root.querySelector(`[data-q="${v.id}"][data-f="valor"]`).value;
             const uni = (root.querySelector(`[data-q="${v.id}"][data-f="unidad"]`).value || '').trim();
-            if (val === '' && !nota) return;
+            if (val === '' && !uni) return;   // en blanco = este alimento NO va ese día
             const c = { valor: val === '' ? null : parseFloat(val), unidad: uni };
             if (nota) c.nota = nota;
             if (equivale) c.equivale = equivale;
@@ -526,6 +609,14 @@ const VNutrition = (() => {
     }));
     root.querySelectorAll('[data-alt]').forEach(b => b.addEventListener('click', () => {
       _elegido[b.dataset.key] = b.dataset.alt; app.render();
+    }));
+    root.querySelectorAll('[data-receta]').forEach(b => b.addEventListener('click', () => {
+      const [tid, oid, rid] = b.dataset.receta.split('|');
+      verReceta(app, tid, oid, rid);
+    }));
+    root.querySelectorAll('[data-add-receta]').forEach(b => b.addEventListener('click', () => {
+      const [tid, oid] = b.dataset.addReceta.split('|');
+      addReceta(app, tid, oid);
     }));
     root.querySelectorAll('[data-open-op]').forEach(b => b.addEventListener('click', () => {
       const [tid, oid] = b.dataset.openOp.split('|');
