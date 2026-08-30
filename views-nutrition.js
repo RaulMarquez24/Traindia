@@ -148,6 +148,7 @@ const VNutrition = (() => {
         ${vs.length > 1 ? `<button class="nut-variant" id="nutVariant">${UI.esc(v ? v.nombre : '')} ▾</button>` : (v ? `<span class="nut-variant static">${UI.esc(v.nombre)}</span>` : '')}
       </div>
       ${vs.length > 1 ? `<p class="nut-hint">Las cantidades son las de <strong>${UI.esc(v ? v.nombre.toLowerCase() : '')}</strong>. La app lo elige por tu plan de entreno; tócalo para cambiarlo.</p>` : ''}
+      ${_pidioPrompt ? `<button class="btn primary block" id="nutPaste">${UI.icon('upload', 15)} Pegar el resultado de la IA</button>` : ''}
       ${cuerpo || '<div class="empty-state"><p class="dim">Tu pauta está vacía.</p></div>'}
       <button class="btn ghost block" id="nutAddToma">${UI.icon('plus', 15)} Añadir toma (desayuno, cena…)</button>
       ${reglas}${sup}${dudas}
@@ -574,19 +575,37 @@ const VNutrition = (() => {
     });
   }
 
+  // La gente pega lo que le da la IA tal cual: con vallas de markdown, con un
+  // "Aquí tienes tu JSON:" delante, o con texto detrás. Se limpia todo eso antes
+  // de intentar entenderlo, en vez de soltar "no es un JSON válido".
+  function extraerJSON(txt) {
+    let t = String(txt || '').trim();
+    const bloque = t.match(/```(?:json)?\s*([\s\S]*?)```/i);
+    if (bloque) t = bloque[1].trim();
+    const i = t.indexOf('{'), j = t.lastIndexOf('}');
+    if (i >= 0 && j > i) t = t.slice(i, j + 1);
+    return JSON.parse(t);
+  }
+
   function pegarFlow(app) {
     UI.modal({
       title: 'Pegar el resultado',
       size: 'wide',
-      bodyHTML: `<p class="modal-text">Cuando la IA te devuelva el JSON, pégalo aquí. También puedes descargarlo y mandarlo con <strong>Compartir → Traindía</strong>.</p>
-        <textarea class="inp" id="nutJson" rows="7" placeholder='{"format":"cnp-export","kind":"nutrition"…'></textarea>`,
+      bodyHTML: `<p class="modal-text">La IA te devuelve un bloque de texto. Tienes dos formas de traerlo:</p>
+        <ul class="nut-check">
+          <li><strong>Si te ha dado un archivo</strong> para descargar: ábrelo desde tus descargas y dale a <strong>Compartir → Traindía</strong>. No hace falta nada más.</li>
+          <li><strong>Si te lo ha escrito en el chat</strong>: toca el <strong>botón de copiar</strong> que aparece en la esquina del bloque, vuelve aquí y pega abajo.</li>
+        </ul>
+        <textarea class="inp" id="nutJson" rows="6" placeholder="Pega aquí lo que te haya dado la IA"></textarea>
+        <p class="field-hint">Da igual si viene con texto alrededor o con las comillas del bloque: se limpia solo.</p>`,
       actions: [
         { label: 'Cerrar', kind: 'ghost' },
         { label: 'Revisar', kind: 'primary', onClick: (root) => {
           const txt = (root.querySelector('#nutJson').value || '').trim();
-          if (!txt) { UI.toast('Pega el JSON', 'err'); return false; }
+          if (!txt) { UI.toast('Pega aquí lo que te dio la IA', 'err'); return false; }
           let parsed;
-          try { parsed = JSON.parse(txt); } catch (e) { UI.toast('Eso no es un JSON válido', 'err'); return false; }
+          try { parsed = extraerJSON(txt); }
+          catch (e) { UI.toast('No he sabido leer eso. Copia el bloque entero, desde la primera llave.', 'err'); return false; }
           previsualizar(app, parsed);
         } },
       ],
@@ -695,7 +714,14 @@ const VNutrition = (() => {
     if (op.idioma) extra.push('- El documento puede estar en otro idioma: traduce los nombres de alimentos al español pero respeta las cantidades tal cual.');
 
     return `Eres un asistente que convierte planes de alimentación en un JSON para la app Traindía.
-Te adjunto mi plan de alimentación. Devuélveme SOLO el JSON, sin explicaciones ni bloques de código.
+Te adjunto mi plan de alimentación.
+
+# CÓMO ME LO TIENES QUE ENTREGAR (importante)
+1. Si puedes generar archivos descargables, dame el resultado como un ARCHIVO llamado
+   "traindia-nutricion.json". Es lo que más me facilita las cosas.
+2. Además, y siempre, escribe el JSON dentro de un bloque de código \`\`\`json … \`\`\`
+   para que pueda copiarlo con el botón de copiar.
+3. No escribas nada más: ni resumen, ni explicación, ni comentarios dentro del JSON.
 
 # REGLA MÁS IMPORTANTE
 NO INVENTES NADA. Solo puedes usar lo que aparezca literalmente en el documento.
@@ -794,7 +820,7 @@ como "al gusto" o "libre", pon valor null y ese texto en "nota".
 # MI CASO
 ${extra.join('\n')}
 
-Devuelve únicamente el JSON.`;
+Devuelve únicamente el JSON, en un bloque de código, y como archivo descargable si puedes.`;
   }
 
   return { render, bind, buildPrompt, validar, previewImport: previsualizar, SCHEMA_VERSION };
