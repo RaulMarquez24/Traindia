@@ -623,3 +623,24 @@ body.modal-open { overflow: hidden; }
 .set-row-check .set-vals { align-items: center; }
 .set-check-txt { font-size: 13px; color: var(--ink-dim); }
 .set-wrap.done .set-check-txt { color: var(--strong); font-weight: 600; }
+
+/* ---- Semáforo: respuesta del cuerpo al día siguiente ---- */
+.resp-chip { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 999px; border: 1px solid; }
+.resp-chip i, .resp-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex: none; }
+.resp-dot { margin-right: 6px; vertical-align: baseline; }
+.resp-chip.go   { color: #1f7a52; border-color: #a8d8c2; background: #e6f4ed; }
+.resp-chip.wait { color: #8a6100; border-color: #e6cf94; background: #fbf1dc; }
+.resp-chip.stop { color: #a33a2e; border-color: #e6b3ab; background: #fae7e3; }
+.resp-chip.go i, .resp-dot.go { background: #2f9c6a; }
+.resp-chip.wait i, .resp-dot.wait { background: #c08a12; }
+.resp-chip.stop i, .resp-dot.stop { background: #c4503f; }
+.detail-resp { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 12px; font-size: 12px; }
+.resp-pick { display: flex; flex-direction: column; gap: 8px; margin: 6px 0 4px; }
+.resp-opt { display: flex; align-items: center; gap: 12px; text-align: left; width: 100%; cursor: pointer;
+  background: var(--bg-card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; font-family: inherit; color: var(--ink); }
+.resp-opt:active { opacity: .7; }
+.resp-opt i { width: 12px; height: 12px; border-radius: 50%; flex: none; }
+.resp-opt span { display: flex; flex-direction: column; gap: 2px; }
+.resp-opt strong { font-size: 15px; font-weight: 600; }
+.resp-opt em { font-style: normal; font-size: 12px; color: var(--ink-dim); }
+.resp-opt.go i { background: #2f9c6a; } .resp-opt.wait i { background: #c08a12; } .resp-opt.stop i { background: #c4503f; }

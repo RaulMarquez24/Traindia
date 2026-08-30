@@ -1228,7 +1228,7 @@ const VSessions = (() => {
         return `<button class="session-row" data-link="session" data-params='${JSON.stringify({ sessionId: s.id, ownerId: s.userId })}'>
           <div class="session-main">
             <strong>${UI.esc(s.name || 'Sesión')}</strong>
-            <span class="dim">${(s.entries || []).length} ejercicios · ${setCount} series${s.durationSec ? ' · ' + fmtClock(s.durationSec) : ''}</span>
+            <span class="dim">${responseDot(s)}${(s.entries || []).length} ejercicios · ${setCount} series${s.durationSec ? ' · ' + fmtClock(s.durationSec) : ''}</span>
           </div>
           ${filter === 'all' && author ? UI.avatar(author, 26) : '<span class="chev">›</span>'}
         </button>`;
@@ -1303,6 +1303,59 @@ const VSessions = (() => {
     });
   }
 
+  // ============ SEMÁFORO: cómo respondió el cuerpo AL DÍA SIGUIENTE ============
+  // No manda lo que duele durante la serie, sino cómo amaneces. Es el criterio para
+  // decidir si se sube carga, y aquí queda registrado por sesión.
+  const RESPONSES = [
+    { key: 'verde', label: 'Igual o mejor', hint: 'Puedes mantener o subir', cls: 'go' },
+    { key: 'ambar', label: 'Algo cargado', hint: 'Repite la misma carga, no subas', cls: 'wait' },
+    { key: 'rojo',  label: 'Peor', hint: 'La próxima vez baja o acorta el rango', cls: 'stop' },
+  ];
+  const RESPONSE = Object.fromEntries(RESPONSES.map(r => [r.key, r]));
+  function responseChip(s) {
+    const r = s && s.response && RESPONSE[s.response];
+    if (!r) return '';
+    return `<span class="resp-chip ${r.cls}" title="Al día siguiente: ${r.label}"><i></i>${r.label}</span>`;
+  }
+  function responseDot(s) {
+    const r = s && s.response && RESPONSE[s.response];
+    return r ? `<span class="resp-dot ${r.cls}" title="Al día siguiente: ${r.label}"></span>` : '';
+  }
+  // Pregunta por una sesión concreta. onDone(guardada) tras responder o saltar.
+  function askResponse(app, sess, onDone) {
+    UI.modal({
+      title: '¿Cómo amaneciste?',
+      bodyHTML: `<p class="modal-text">Tu entreno <strong>${UI.esc(sess.name || 'Sesión')}</strong> del ${UI.esc(UI.fmtDateShort(sess.date))}.</p>
+        <p class="modal-text dim">Lo que decide si puedes subir carga no es lo que notaste durante el ejercicio, sino cómo te levantaste al día siguiente.</p>
+        <div class="resp-pick">
+          ${RESPONSES.map(r => `<button type="button" class="resp-opt ${r.cls}" data-resp="${r.key}"><i></i><span><strong>${r.label}</strong><em>${r.hint}</em></span></button>`).join('')}
+        </div>`,
+      actions: [{ label: 'Ahora no', kind: 'ghost', onClick: async () => {
+        sess.responseSkipped = true; await DB.put('sessions', sess); if (onDone) onDone(false);
+      } }],
+      onMount: (root) => root.querySelectorAll('[data-resp]').forEach(b => b.addEventListener('click', async () => {
+        sess.response = b.dataset.resp;
+        delete sess.responseSkipped;
+        await DB.put('sessions', sess);
+        UI.closeModal(root);
+        UI.toast('Anotado');
+        if (onDone) onDone(true);
+      })),
+    });
+  }
+  // Al abrir la app: si hay un entreno de ayer (o de hasta 3 días) sin responder, pregunta.
+  async function checkDayAfter(app) {
+    const hoy = DB.todayISO();
+    const hace = (n) => { const d = new Date(hoy + 'T12:00:00'); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10); };
+    const desde = hace(3), hasta = hace(1); // ya ha pasado al menos una noche
+    const cand = (await DB.sessionsOf(app.activeUser.id))
+      .filter(s => !s.draft && !s.response && !s.responseSkipped && s.date >= desde && s.date <= hasta)
+      .sort((a, b) => (b.date || '').localeCompare(a.date || ''))[0];
+    if (!cand) return false;
+    askResponse(app, cand, () => { if (app.currentView === 'sessions' || app.currentView === 'session') app.render(); });
+    return true;
+  }
+
   // Bloques por ejercicio de una sesión (series + totales + nota). Reutilizado por el
   // detalle y por el vistazo rápido a la sesión anterior. opts.ai añade el botón de IA.
   function sessionEntriesHTML(s, opts) {
@@ -1348,6 +1401,7 @@ const VSessions = (() => {
           <span>${UI.icon('calendar', 13)} ${UI.esc(UI.fmtDate(prev.date))}</span>
           ${prev.durationSec ? `<span>${UI.icon('clock', 13)} ${fmtClock(prev.durationSec)}</span>` : ''}
           ${vol ? `<span>${UI.icon('dumbbell', 13)} ${vol} kg vol.</span>` : ''}
+          ${responseChip(prev)}
         </div>
         ${sessionEntriesHTML(prev, { ai: false }) || '<p class="dim">Sin ejercicios.</p>'}
         ${prev.notes ? `<div class="note-box"><div class="block-label">Notas</div><p>${UI.esc(prev.notes)}</p></div>` : ''}
@@ -1379,6 +1433,7 @@ const VSessions = (() => {
           ${s.durationSec ? `<span>${UI.icon('clock', 13)} ${fmtClock(s.durationSec)}</span>` : ''}
           ${vol ? `<span>${UI.icon('dumbbell', 13)} ${vol} kg vol.</span>` : ''}
         </div>
+        <div class="detail-resp">${responseChip(s) || '<span class="dim">Sin anotar cómo amaneciste</span>'}<button class="btn ghost small" data-act="resp">${UI.icon('edit', 13)} ${s.response ? 'Cambiar' : 'Anotar'}</button></div>
       </div>
       ${(s.prs && s.prs.length) ? `<div class="pr-banner">${UI.icon('star', 16)}<div><strong>Récord${s.prs.length > 1 ? 's' : ''} personal${s.prs.length > 1 ? 'es' : ''}</strong>${s.prs.map(p => `<span class="pr-chip">${UI.esc(p.name)}: <b>${UI.esc(prValueText(p.type, p.value))}</b></span>`).join('')}</div></div>` : ''}
       ${entries || '<p class="dim">Sin ejercicios.</p>'}
@@ -1397,6 +1452,11 @@ const VSessions = (() => {
       sessionEditor(app, s);
     });
     root.querySelector('[data-act="share"]').addEventListener('click', () => VData.exportSession(app, params.sessionId));
+    const respBtn = root.querySelector('[data-act="resp"]');
+    if (respBtn) respBtn.addEventListener('click', async () => {
+      const s = await DB.get('sessions', params.sessionId);
+      if (s) askResponse(app, s, () => app.render());
+    });
     root.querySelectorAll('[data-ai-done]').forEach(b => b.addEventListener('click', async () => {
       const s = await DB.get('sessions', params.sessionId);
       if (s) UI.askAI(buildExerciseContext(s, s.entries[+b.dataset.ei], { past: true }));
@@ -1510,5 +1570,5 @@ const VSessions = (() => {
     });
   }
 
-  return { live, liveBind, list, listBind, detail, detailBind, sessionVolume, checkResume, liveHasData, restEnsure, TIME_FIELDS };
+  return { live, liveBind, list, listBind, detail, detailBind, checkDayAfter, sessionVolume, checkResume, liveHasData, restEnsure, TIME_FIELDS };
 })();
