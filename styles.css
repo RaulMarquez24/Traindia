@@ -735,3 +735,9 @@ body.modal-open { overflow: hidden; }
 .nut-x { background: none; border: none; color: var(--priority); font-size: 16px; cursor: pointer; padding: 0 6px; line-height: 1; }
 .btn.ghost.block.danger { color: var(--priority); }
 .rec-foto { display: block; width: 100%; height: auto; border-radius: 12px; margin: 8px 0 4px; }
+/* Ingredientes extra del plato */
+.nut-qty.extra { color: var(--moderate); }
+.extra-row { display: flex; align-items: baseline; gap: 7px; width: 100%; text-align: left;
+  background: none; border: none; padding: 7px 0; cursor: pointer; font-family: inherit; }
+.extra-row .nut-food { font-size: 14.5px; }
+.extra-row .nut-mini { color: var(--ink-dim); }
