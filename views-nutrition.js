@@ -395,7 +395,8 @@ const VNutrition = (() => {
       <div class="sec-label">Foto</div>
       <div id="recFotoPrev">${est.foto ? `<img class="rec-foto" src="${est.foto}" alt="">` : ''}</div>
       <div class="pauta-foot" style="border:0;padding:0;margin-top:8px">
-        <button type="button" class="btn ghost small" id="recFoto">${UI.icon('plus', 13)} ${est.foto ? 'Cambiar foto' : 'Añadir foto'}</button>
+        <button type="button" class="btn ghost small" id="recFotoCam">${UI.icon('plus', 13)} Hacer foto</button>
+        <button type="button" class="btn ghost small" id="recFoto">${UI.icon('upload', 13)} De la galería</button>
         <button type="button" class="btn ghost small danger" id="recFotoDel"${est.foto ? '' : ' style="display:none"'}>${UI.icon('trash', 13)} Quitar</button>
       </div>
     </div>`;
@@ -455,15 +456,20 @@ const VNutrition = (() => {
       root.querySelector('#recFotoPrev').innerHTML = est.foto ? `<img class="rec-foto" src="${est.foto}" alt="">` : '';
       root.querySelector('#recFotoDel').style.display = est.foto ? '' : 'none';
     };
-    root.querySelector('#recFoto').addEventListener('click', () => {
+    // Dos caminos a propósito: con accept="image/*" a secas, Android abre a veces
+    // solo la galería. Con capture se va directo a la cámara.
+    const pedirFoto = (conCamara) => {
       const inp = document.createElement('input');
       inp.type = 'file'; inp.accept = 'image/*';
+      if (conCamara) inp.setAttribute('capture', 'environment');
       inp.addEventListener('change', () => {
         const f = inp.files[0]; if (!f) return;
         fotoDesdeArchivo(f, (data) => { if (!data) { UI.toast('No se ha podido leer la foto', 'err'); return; } est.foto = data; pintarFoto(); });
       });
       inp.click();
-    });
+    };
+    root.querySelector('#recFotoCam').addEventListener('click', () => pedirFoto(true));
+    root.querySelector('#recFoto').addEventListener('click', () => pedirFoto(false));
     root.querySelector('#recFotoDel').addEventListener('click', () => { est.foto = null; pintarFoto(); });
 
     return leerCantidades;
