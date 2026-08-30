@@ -643,14 +643,25 @@ const VData = (() => {
       if (!ex) {
         ex = { id: DB.uid('ex'), userId, name: (ie.name || '').trim(), muscleGroup: ie.muscleGroup || 'General', type: ie.type || 'weight', substitutes: [], createdAt: Date.now() };
         if (Array.isArray(ie.metrics)) ex.metrics = ie.metrics.slice(); // conservar datos a registrar (tiempo)
+        if (ie.videoUrl) ex.videoUrl = ie.videoUrl;   // vídeo "cómo se hace"
+        if (ie.howto) ex.howto = ie.howto;             // notas de técnica
         await DB.put('exercises', ex); byName.set(key, ex); created.push({ ex, srcSubs: ie.substitutes || [] });
       } else if (overwrite) {
         // reemplazar: vuelca los datos importados en tu ejercicio (mantiene id y createdAt)
+        if (ie.videoUrl) ex.videoUrl = ie.videoUrl;
+        if (ie.howto) ex.howto = ie.howto;
         if (ie.muscleGroup) ex.muscleGroup = ie.muscleGroup;
         if (ie.type) ex.type = ie.type;
         if (Array.isArray(ie.metrics)) ex.metrics = ie.metrics.slice();
         else if (ie.type && ie.type !== 'time') delete ex.metrics; // un no-cardio no lleva métricas
         updated.push({ ex, srcSubs: ie.substitutes || [] });
+      }
+      // Enriquecer SIN pisar: si el ejercicio ya existía y no tenía vídeo/técnica, se rellenan.
+      if (!overwrite && !created.some(c => c.ex.id === ex.id)) {
+        let touched = false;
+        if (ie.videoUrl && !ex.videoUrl) { ex.videoUrl = ie.videoUrl; touched = true; }
+        if (ie.howto && !ex.howto) { ex.howto = ie.howto; touched = true; }
+        if (touched) await DB.put('exercises', ex);
       }
       idMap[ie.id] = ex.id;
     }
