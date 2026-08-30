@@ -32,6 +32,7 @@ const VNutrition = (() => {
 
   const SCHEMA_VERSION = 1;
   const DIAS = ['', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo'];
+  const TIPOS = ['Hidrato', 'Proteína', 'Grasa', 'Verdura', 'Fruta', 'Lácteo', 'Fruto seco'];
   const UNIDADES = ['g', 'ml', 'unidad', 'pieza', 'ración', 'cucharada', 'puñado', 'lata', 'onza'];
   const TOMAS_SUGERIDAS = ['Desayuno', 'Media mañana', 'Almuerzo', 'Merienda', 'Cena'];
 
@@ -47,7 +48,7 @@ const VNutrition = (() => {
     if (!c) return '';
     const val = (c.valor === null || c.valor === undefined || c.valor === '') ? '' : c.valor;
     const t = [val, c.unidad].filter(x => x !== '' && x != null).join(' ').trim();
-    return t || c.nota || c.texto || '';
+    return t || c.nota || c.texto || 'al gusto';
   }
   const notaDe = (alt, vId) => {
     const c = cantidadDe(alt, vId);
@@ -768,13 +769,12 @@ const VNutrition = (() => {
     };
 
     const cuerpoHTML = () => op.grupos.map((g, gi) => `<div class="grp-card">
-        ${(g.alternativas || []).length > 1
-          ? `<input class="inp grp-name" data-gname="${gi}" value="${UI.esc(g.nombre || '')}" placeholder="Ponle nombre: Hidrato, Proteína…">
-             <p class="grp-hint">Cualquiera de estos, nunca los dos a la vez.</p>`
-          : ''}
+        <input class="inp grp-name" data-gname="${gi}" value="${UI.esc(g.nombre || '')}" placeholder="Tipo: hidrato, proteína, grasa…">
+        ${g.nombre ? '' : `<div class="tipo-chips">${TIPOS.map(t => `<button type="button" class="nut-alt" data-tipo="${gi}|${UI.esc(t)}">${UI.esc(t)}</button>`).join('')}</div>`}
+        ${(g.alternativas || []).length > 1 ? '<p class="grp-hint">Cualquiera de estos, nunca los dos a la vez.</p>' : ''}
         ${(g.alternativas || []).map((a, ai) => abierta === `${gi}|${ai}` ? filaEditHTML(a, gi, ai) : filaVistaHTML(a, gi, ai)).join('')}
         <button class="btn ghost small" data-add-alt="${gi}">${UI.icon('plus', 13)} Otro que valga lo mismo</button>
-      </div>`).join('') || '<p class="modal-text dim">Todavía no tiene alimentos. Empieza por el primero.</p>';
+      </div>`).join('') || '<p class="modal-text dim">Empieza por un tipo de alimento: el hidrato, la proteína…</p>';
 
     // ---- leer lo que hay escrito antes de repintar o guardar ----
     const leer = (root) => {
@@ -801,14 +801,18 @@ const VNutrition = (() => {
       const chk = ed.querySelector('[data-mismo]');
       const unico = !chk || chk.checked;
       const cantidades = {};
-      const meter = (vid, val, uni) => {
-        if (val === '' && !uni) return;   // en blanco = ese día no se toma
+      const meter = (vid, val, uni, siempre) => {
+        if (val === '' && !uni && !siempre) return;   // en blanco = ese día no se toma
         const c = { valor: val === '' ? null : parseFloat(val), unidad: uni };
         if (nota) c.nota = nota;
         if (equivale) c.equivale = equivale;
         cantidades[vid] = c;
       };
-      if (unico) { const { val, uni } = dato('__uni'); vs.forEach(v => meter(v.id, val, uni)); }
+      if (unico) {
+        const { val, uni } = dato('__uni');
+        // Sin número es "al gusto"; se guarda igual para que el alimento cuente.
+        vs.forEach(v => meter(v.id, val, val === '' ? '' : uni, true));
+      }
       else vs.forEach(v => { const { val, uni } = dato(v.id); meter(v.id, val, uni); });
       a.cantidades = cantidades;
     };
@@ -817,7 +821,7 @@ const VNutrition = (() => {
     const limpiar = () => {
       op.grupos.forEach(g => { g.alternativas = (g.alternativas || []).filter(a => a.alimento); });
       op.grupos = op.grupos.filter(g => g.alternativas.length);
-      op.grupos.forEach(g => { if (g.alternativas.length === 1 || !g.nombre) g.nombre = g.alternativas[0].alimento; });
+      op.grupos.forEach(g => { if (!g.nombre) g.nombre = g.alternativas[0].alimento; });
     };
 
     const volcar = () => { real.nombre = op.nombre; real.grupos = op.grupos; };
@@ -830,9 +834,9 @@ const VNutrition = (() => {
         ${UI.field('Cómo la llamas', UI.input('opNombre', op.nombre || '', { placeholder: 'Arroz o pasta, Legumbres…' }), 'La etiqueta que ves al elegir. No es el nombre de un plato.')}
         <div class="sec-label">Lo que lleva</div>
         <div id="opBody">${cuerpoHTML()}</div>
-        <button class="btn ghost block" id="nutAddAli">${UI.icon('plus', 15)} Añadir otro alimento</button>
+        <button class="btn ghost block" id="nutAddAli">${UI.icon('plus', 15)} Añadir tipo de alimento</button>
         <datalist id="nutUnidades">${UNIDADES.map(u => `<option value="${u}">`).join('')}</datalist>
-        <p class="field-hint">Cada línea es una cosa que lleva la opción. Si un alimento se puede cambiar por otro —arroz o pasta—, va <strong>dentro de la misma línea</strong>.</p>`,
+        <p class="field-hint">Cada bloque es un <strong>tipo</strong> de alimento —el hidrato, la proteína, la grasa— y dentro van los alimentos que valen lo mismo: arroz <em>o</em> pasta <em>o</em> cuscús, con su cantidad.</p>`,
       actions: [
         { label: 'Borrar', kind: 'danger', onClick: async () => {
           const i = toma.opciones.indexOf(real);
@@ -881,6 +885,12 @@ const VNutrition = (() => {
             if (!op.grupos[gi].alternativas.length) op.grupos.splice(gi, 1);
             abierta = null; pintar();
           });
+          root.querySelectorAll('[data-tipo]').forEach(b => b.addEventListener('click', () => {
+            const [gi, t] = b.dataset.tipo.split('|');
+            const inp = root.querySelector(`[data-gname="${gi}"]`);
+            inp.value = t;
+            b.closest('.tipo-chips').remove();
+          }));
           const chk = root.querySelector('[data-mismo]');
           if (chk) chk.addEventListener('change', () => {
             root.querySelector('[data-uni]').hidden = !chk.checked;

@@ -772,6 +772,8 @@ body.modal-open { overflow: hidden; }
 .grp-head { margin-bottom: 4px; }
 .inp.grp-name { font-weight: 600; padding: 7px 10px; font-size: 14px; }
 .grp-hint { font-size: 11.5px; color: var(--ink-dim); margin: 0 0 8px; }
+.tipo-chips { display: flex; flex-wrap: wrap; gap: 5px; margin: 7px 0 4px; }
+.tipo-chips .nut-alt { font-size: 12px; }
 .grp-card .btn.small { margin-top: 8px; }
 /* Edición de un alimento dentro de la propia lista */
 .fila-ed { border: 1px solid var(--strong); border-radius: 10px; padding: 11px 12px; margin: 6px 0 8px; background: var(--bg); }
