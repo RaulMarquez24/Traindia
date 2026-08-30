@@ -17,7 +17,7 @@
 //     opciones: [                       // en la interfaz: COMIDAS
 //       { id, nombre, preparacion?,     // preparacion = cómo se hace (opcional)
 //         grupos: [                     // en la interfaz: cada línea de la comida
-//           { id, nombre,
+//           { id, nombre, opcional?,   // opcional: no impide que la comida valga hoy
 //             alternativas: [           // intercambiables entre sí
 //               { alimento,
 //                 cantidades: { [varianteId]: { valor, unidad, nota?, equivale? } } } ] } ] } ] } ],
@@ -110,7 +110,22 @@ const VNutrition = (() => {
     </div>`;
   }
 
-  // ---------- PANTALLA DE HOY: tomas con tarjetas de comida ----------
+  // ---------- PANTALLA DE HOY ----------
+  // Cada toma enseña QUÉ OPCIONES tienes (las comidas, en pestañas) y, de la
+  // elegida, los alimentos CON SUS CANTIDADES del día que toca. Si las cantidades
+  // quedan escondidas dentro de la tarjeta, la distinción entreno/descanso se
+  // vuelve invisible y la sección pierde su sentido.
+  let _abierta = {};   // idToma -> idComida abierta
+
+  // ¿Esta comida se puede hacer hoy? Solo si CADA línea tiene al menos un alimento
+  // con cantidad para esta variante. Si falta una entera (p. ej. los fideos de una
+  // sopa que solo existe en día de descanso), la comida no aplica.
+  function comidaAplica(op, vId) {
+    const gs = (op.grupos || []).filter(g => (g.alternativas || []).length && !g.opcional);
+    if (!gs.length) return (op.grupos || []).length > 0;
+    return gs.every(g => g.alternativas.some(a => (a.cantidades || {})[vId]));
+  }
+
   function planHTML(app) {
     const vs = _plan.variantes || [];
     const auto = varianteDeHoy(_plan, app);
@@ -118,20 +133,7 @@ const VNutrition = (() => {
     const v = vs.find(x => x.id === vId) || vs[0];
     const tomas = (_plan.tomas || []).slice().sort((a, b) => (a.orden || 0) - (b.orden || 0));
 
-    const cuerpo = tomas.map(t => {
-      const cards = (t.opciones || []).map(op => `
-        <button class="meal-card" data-open-op="${UI.esc(t.id)}|${UI.esc(op.id)}">
-          <span class="meal-name">${UI.esc(op.nombre || 'Comida')}</span>
-          <span class="meal-sub">${UI.esc(resumenComida(op) || 'Sin alimentos todavía')}</span>
-          ${op.preparacion ? `<span class="meal-flag">${UI.icon('book', 11)} con preparación</span>` : ''}
-          <span class="meal-go">›</span>
-        </button>`).join('');
-      return `<div class="nut-toma">
-        <div class="nut-toma-lbl">${UI.esc(t.nombre)}<button class="nut-x" data-rm-toma="${UI.esc(t.id)}" title="Borrar toma">×</button></div>
-        <div class="meal-list">${cards || '<p class="dim" style="font-size:13px">Todavía no hay comidas aquí.</p>'}</div>
-        <button class="btn ghost small" data-add-op="${UI.esc(t.id)}">+ Añadir comida</button>
-      </div>`;
-    }).join('');
+    const cuerpo = tomas.map(t => tomaHTML(t, vId, vs)).join('');
 
     const reglas = (_plan.reglas || []).length
       ? `<div class="nut-reglas"><div class="card-label">A tener en cuenta</div><ul>${_plan.reglas.map(r => `<li>${UI.esc(r.texto)}</li>`).join('')}</ul></div>` : '';
@@ -145,6 +147,7 @@ const VNutrition = (() => {
         <div class="nut-head-txt"><strong>${UI.esc(_plan.nombre || 'Mi pauta')}</strong><span class="dim">${UI.esc(UI.fmtDate(DB.todayISO()))}</span></div>
         ${vs.length > 1 ? `<button class="nut-variant" id="nutVariant">${UI.esc(v ? v.nombre : '')} ▾</button>` : (v ? `<span class="nut-variant static">${UI.esc(v.nombre)}</span>` : '')}
       </div>
+      ${vs.length > 1 ? `<p class="nut-hint">Las cantidades son las de <strong>${UI.esc(v ? v.nombre.toLowerCase() : '')}</strong>. La app lo elige por tu plan de entreno; tócalo para cambiarlo.</p>` : ''}
       ${cuerpo || '<div class="empty-state"><p class="dim">Tu pauta está vacía.</p></div>'}
       <button class="btn ghost block" id="nutAddToma">${UI.icon('plus', 15)} Añadir toma (desayuno, cena…)</button>
       ${reglas}${sup}${dudas}
@@ -152,6 +155,60 @@ const VNutrition = (() => {
         <button class="btn ghost" id="nutImport">${UI.icon('chat', 15)} Reimportar <span class="beta-tag">beta</span></button>
         <button class="btn ghost" id="nutShare">${UI.icon('upload', 15)} Compartir</button>
         <button class="btn ghost danger" id="nutDel">${UI.icon('trash', 15)} Borrar pauta</button>
+      </div>
+    </div>`;
+  }
+
+  function tomaHTML(t, vId, vs) {
+    const ops = t.opciones || [];
+    const cabecera = `<div class="nut-toma-lbl">${UI.esc(t.nombre)}<button class="nut-x" data-rm-toma="${UI.esc(t.id)}" title="Borrar toma">×</button></div>`;
+    if (!ops.length) {
+      return `<div class="nut-toma">${cabecera}
+        <p class="dim" style="font-size:13px;margin-bottom:10px">Todavía no has puesto qué puedes comer aquí.</p>
+        <button class="btn ghost small" data-add-op="${UI.esc(t.id)}">+ Añadir comida</button>
+      </div>`;
+    }
+    // La abierta: la elegida, o la primera que aplique al día de hoy
+    const conDatos = ops.filter(o => comidaAplica(o, vId));
+    const op = ops.find(o => o.id === _abierta[t.id]) || conDatos[0] || ops[0];
+
+    const pestañas = `<div class="meal-tabs">${ops.map(o => {
+      const aplica = comidaAplica(o, vId);
+      return `<button class="meal-tab${o.id === op.id ? ' sel' : ''}${aplica ? '' : ' off'}" data-tab="${UI.esc(t.id)}|${UI.esc(o.id)}"${aplica ? '' : ' title="No aplica a este día"'}>${UI.esc(o.nombre || 'Comida')}</button>`;
+    }).join('')}<button class="meal-tab add" data-add-op="${UI.esc(t.id)}">+</button></div>`;
+
+    const filas = (op.grupos || []).map(g => {
+      const alts = g.alternativas || [];
+      if (!alts.length) return '';
+      const key = `${op.id}|${g.id}`;
+      const conCant = alts.filter(a => (a.cantidades || {})[vId]);
+      const lista = conCant.length ? conCant : alts;
+      const el = lista.find(a => a.alimento === _elegido[key]) || lista[0];
+      const otras = lista.filter(a => a !== el);
+      const c = cantidadDe(el, vId) || {};
+      const txt = (el.cantidades || {})[vId] ? cantidadTexto(el, vId) : '—';
+      return `<div class="nut-row">
+        <div class="nut-line">
+          <span class="nut-food">${UI.esc(el.alimento)}</span>
+          <span class="nut-dots"></span>
+          <span class="nut-qty">${UI.esc(txt || '—')}</span>
+        </div>
+        ${c.equivale ? `<div class="nut-eq">≡ ${UI.esc(c.equivale)}</div>` : ''}
+        ${otras.length ? `<div class="nut-swap"><span class="nut-swap-lbl">o</span>${otras.map(a => `<button class="nut-alt" data-key="${UI.esc(key)}" data-alt="${UI.esc(a.alimento)}">${UI.esc(a.alimento)}${(a.cantidades || {})[vId] ? ` <em>${UI.esc(cantidadTexto(a, vId))}</em>` : ''}</button>`).join('')}</div>` : ''}
+      </div>`;
+    }).join('');
+
+    const noAplica = !comidaAplica(op, vId) && vs.length > 1
+      ? `<p class="nut-hint warn">Esta comida no tiene cantidades para hoy. Ábrela para añadirlas.</p>` : '';
+
+    return `<div class="nut-toma">
+      ${cabecera}
+      ${pestañas}
+      ${noAplica}
+      ${filas || '<p class="dim" style="font-size:13px">Esta comida no tiene alimentos todavía.</p>'}
+      <div class="meal-foot">
+        ${op.preparacion ? `<span class="meal-flag">${UI.icon('book', 12)} tiene preparación</span>` : ''}
+        <button class="btn ghost small" data-open-op="${UI.esc(t.id)}|${UI.esc(op.id)}">${UI.icon('edit', 13)} Abrir ${UI.esc(op.nombre || '')}</button>
       </div>
     </div>`;
   }
@@ -458,6 +515,13 @@ const VNutrition = (() => {
     });
 
     const tomaPorId = (id) => (_plan.tomas || []).find(t => t.id === id);
+    root.querySelectorAll('[data-tab]').forEach(b => b.addEventListener('click', () => {
+      const [tid, oid] = b.dataset.tab.split('|');
+      _abierta[tid] = oid; app.render();
+    }));
+    root.querySelectorAll('[data-alt]').forEach(b => b.addEventListener('click', () => {
+      _elegido[b.dataset.key] = b.dataset.alt; app.render();
+    }));
     root.querySelectorAll('[data-open-op]').forEach(b => b.addEventListener('click', () => {
       const [tid, oid] = b.dataset.openOp.split('|');
       abrirComida(app, tid, oid);
@@ -658,7 +722,11 @@ devuelve {"error":"solo-macros"} y nada más.
 1. "Arroz 60 g EN CRUDO o 180 g COCIDO" NO son dos alternativas: es el mismo alimento medido
    de dos formas. Pon 60 g como cantidad, "en crudo" en "nota" y "180 g cocido" en "equivale".
    Solo son alternativas los alimentos DISTINTOS entre sí (arroz vs pasta vs quinoa).
-2. Las frases que aplican a varias tomas ("incluir siempre ensalada en comida y cena",
+2b. Si un alimento solo aparece en uno de los tipos de día, NO crees un grupo aparte:
+   ponlo como alternativa del MISMO grupo (p. ej. pan en descanso y quinoa en entreno
+   son el hidrato de esa comida). Si de verdad es un extra que solo se añade un día,
+   marca ese grupo con "opcional": true.
+3. Las frases que aplican a varias tomas ("incluir siempre ensalada en comida y cena",
    "el pan debe ser integral") NO son alimentos: van en "reglas".
 
 # UNIDADES
