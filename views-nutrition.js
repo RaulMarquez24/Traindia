@@ -272,7 +272,7 @@ const VNutrition = (() => {
         <div class="meal-list">${platos.map(({ op, r }) => `
           <button class="meal-card" data-receta="${UI.esc(t.id)}|${UI.esc(op.id)}|${UI.esc(r.id)}">
             <span class="meal-name">${UI.esc(r.nombre)}</span>
-            <span class="meal-sub">${UI.esc(Object.values(r.elige || {}).join(' · ') || op.nombre || '')}${r.extras ? ` + ${UI.esc(r.extras)}` : ''}</span>
+            <span class="meal-sub">${UI.esc(Object.values(r.elige || {}).join(' · ') || op.nombre || '')}${extrasDe(r).length ? ` + ${UI.esc(extrasDe(r).map(x => x.alimento).join(' · '))}` : ''}</span>
             ${(r.preparacion || r.foto) ? `<span class="meal-flag">${r.foto ? UI.icon('tag', 11) + ' con foto' : ''}${(r.foto && r.preparacion) ? ' · ' : ''}${r.preparacion ? UI.icon('book', 11) + ' con preparación' : ''}</span>` : ''}
             <span class="meal-go">›</span>
           </button>`).join('')}</div>` : ''}
@@ -306,16 +306,25 @@ const VNutrition = (() => {
   }
 
   // ---------- RECETAS: tus platos que cumplen una directriz ----------
-  function verReceta(app, tomaId, opId, recId) {
-    const { toma, opcion } = ref(tomaId, opId);
-    const r = opcion && (opcion.recetas || []).find(x => x.id === recId);
-    if (!r) { app.render(); return; }
-    const vs = _plan.variantes || [];
-    const vId = r.varianteId || _varianteId || (varianteDeHoy(_plan, app) || {}).id || (vs[0] && vs[0].id);
-    const vNombre = (vs.find(x => x.id === vId) || {}).nombre || '';
-    let foto = r.foto || null;
+  // Los extras son ingredientes de verdad: nombre + cantidad, como los de la pauta,
+  // solo que marcados como añadidos por ti. Compat: antes eran una línea de texto.
+  function extrasDe(r) {
+    if (Array.isArray(r.extras)) return r.extras;
+    if (typeof r.extras === 'string' && r.extras.trim()) return [{ alimento: r.extras.trim() }];
+    return [];
+  }
+  function extraTexto(x) {
+    const t = [x.valor, x.unidad].filter(v => v !== '' && v != null).join(' ').trim();
+    return t || x.nota || '';
+  }
+  const extraLineaHTML = (x) => `<div class="nut-row">
+      <div class="nut-line"><span class="nut-food">${UI.esc(x.alimento)}</span><span class="nut-dots"></span><span class="nut-qty extra">${UI.esc(extraTexto(x) || '—')}</span></div>
+      ${(x.nota && extraTexto(x) !== x.nota) ? `<div class="nut-eq">${UI.esc(x.nota)}</div>` : ''}
+    </div>`;
 
-    const filas = (opcion.grupos || []).map(g => {
+  // Alimentos heredados de la pauta, con las cantidades del día del plato.
+  function recetaFilasHTML(opcion, r, vId) {
+    return (opcion.grupos || []).map(g => {
       const alts = g.alternativas || [];
       if (!alts.length) return '';
       const el = alts.find(a => a.alimento === (r.elige || {})[g.id]) || alts[0];
@@ -325,59 +334,156 @@ const VNutrition = (() => {
         ${(notaDe(el, vId) || c.equivale) ? `<div class="nut-eq">${UI.esc([notaDe(el, vId), c.equivale ? `≡ ${c.equivale}` : ''].filter(Boolean).join(' · '))}</div>` : ''}
       </div>`;
     }).join('');
+  }
+
+  // ---------- VER un plato (solo lectura; para cambiarlo, "Editar plato") ----------
+  function verReceta(app, tomaId, opId, recId) {
+    const { toma, opcion } = ref(tomaId, opId);
+    const r = opcion && (opcion.recetas || []).find(x => x.id === recId);
+    if (!r) { app.render(); return; }
+    const vs = _plan.variantes || [];
+    const vId = r.varianteId || _varianteId || (varianteDeHoy(_plan, app) || {}).id || (vs[0] && vs[0].id);
+    const vNombre = (vs.find(x => x.id === vId) || {}).nombre || '';
+    const extras = extrasDe(r);
 
     UI.modal({
       title: r.nombre,
       size: 'wide',
       bodyHTML: `<p class="modal-text dim">${UI.esc(toma.nombre)} · ${UI.esc(opcion.nombre || '')}${vs.length > 1 ? ` · ${UI.esc(vNombre)}` : ''}</p>
         <div class="sec-label">Lo que lleva</div>
-        ${filas || '<p class="modal-text dim">Sin alimentos.</p>'}
-        ${UI.field('Ingredientes extra', UI.input('extras', r.extras || '', { placeholder: 'Cebolla, pimiento, especias…' }), 'Lo que le añades y no viene en la pauta.')}
-        <div class="sec-label">Cómo se hace</div>
-        <textarea class="inp" id="nutRecPrep" rows="5" placeholder="Ej: sofríes la cebolla, añades el arroz…">${UI.esc(r.preparacion || '')}</textarea>
-        <div class="sec-label">Foto</div>
-        <div id="recFotoPrev">${foto ? `<img class="rec-foto" src="${foto}" alt="">` : ''}</div>
-        <div class="pauta-foot" style="border:0;padding:0;margin-top:8px">
-          <button type="button" class="btn ghost small" id="recFoto">${UI.icon('plus', 13)} ${foto ? 'Cambiar foto' : 'Añadir foto'}</button>
-          ${foto ? `<button type="button" class="btn ghost small danger" id="recFotoDel">${UI.icon('trash', 13)} Quitar foto</button>` : ''}
-        </div>`,
+        ${recetaFilasHTML(opcion, r, vId) || '<p class="modal-text dim">Sin alimentos.</p>'}
+        ${extras.length ? `<div class="sec-label">Además le pones</div>${extras.map(extraLineaHTML).join('')}` : ''}
+        ${r.preparacion ? `<div class="sec-label">Cómo se hace</div><p class="modal-text prewrap">${UI.esc(r.preparacion)}</p>` : ''}
+        ${r.foto ? `<img class="rec-foto" src="${r.foto}" alt="">` : ''}`,
       actions: [
         { label: 'Borrar', kind: 'danger', onClick: async () => {
           const i = opcion.recetas.indexOf(r);
           if (i >= 0) opcion.recetas.splice(i, 1);
           await guardar(app); UI.toast('Plato borrado');
         } },
-        { label: 'Usar hoy', kind: 'ghost', onClick: async (root) => {
+        { label: 'Usar hoy', kind: 'ghost', onClick: async () => {
           Object.entries(r.elige || {}).forEach(([gid, ali]) => { _elegido[`${opcion.id}|${gid}`] = ali; });
-          await guardarReceta(app, root, r, () => foto);
+          app.render();
           UI.toast(`${r.nombre} · alimentos ajustados`);
         } },
-        { label: 'Guardar', kind: 'primary', onClick: async (root) => { await guardarReceta(app, root, r, () => foto); } },
+        { label: 'Editar plato', kind: 'primary', onClick: () => { setTimeout(() => editarReceta(app, tomaId, opId, recId), 220); } },
+      ],
+    });
+  }
+
+  // ---------- EDITAR un plato ----------
+  function editarReceta(app, tomaId, opId, recId) {
+    const { toma, opcion } = ref(tomaId, opId);
+    const r = opcion && (opcion.recetas || []).find(x => x.id === recId);
+    if (!r) { app.render(); return; }
+    const vs = _plan.variantes || [];
+    const vId = r.varianteId || (vs[0] && vs[0].id);
+    let foto = r.foto || null;
+    const extras = extrasDe(r).slice();
+
+    const pintarExtras = (root) => {
+      const box = root.querySelector('#recExtras');
+      box.innerHTML = extras.length
+        ? extras.map((x, i) => `<button type="button" class="extra-row" data-ex="${i}">
+             <span class="nut-food">${UI.esc(x.alimento)}</span><span class="nut-dots"></span>
+             <span class="nut-qty extra">${UI.esc(extraTexto(x) || '—')}</span><span class="nut-mini">${UI.icon('edit', 12)}</span>
+           </button>`).join('')
+        : '<p class="field-hint" style="margin:0">Nada añadido todavía.</p>';
+      box.querySelectorAll('[data-ex]').forEach(b => b.addEventListener('click', () => {
+        pedirExtra(extras[+b.dataset.ex], (val) => {
+          if (val === null) extras.splice(+b.dataset.ex, 1); else extras[+b.dataset.ex] = val;
+          pintarExtras(root);
+        });
+      }));
+    };
+
+    UI.modal({
+      title: `Editar ${r.nombre}`,
+      size: 'wide',
+      bodyHTML: `<div id="recEdit">
+        ${UI.field('Nombre del plato', UI.input('nombre', r.nombre || '', { placeholder: 'Risotto, Puchero…' }))}
+        <div class="sec-label">Lo que lleva (de la pauta)</div>
+        ${recetaFilasHTML(opcion, r, vId)}
+        <p class="field-hint">Esto viene de la pauta. Para cambiarlo, edita las cantidades de <strong>${UI.esc(opcion.nombre || '')}</strong>.</p>
+        <div class="sec-label">Además le pones</div>
+        <div id="recExtras"></div>
+        <button type="button" class="btn ghost small block" id="recAddExtra">+ Añadir ingrediente</button>
+        <div class="sec-label">Cómo se hace</div>
+        <textarea class="inp" id="nutRecPrep" rows="5" placeholder="Los pasos, a tu manera…">${UI.esc(r.preparacion || '')}</textarea>
+        <div class="sec-label">Foto</div>
+        <div id="recFotoPrev">${foto ? `<img class="rec-foto" src="${foto}" alt="">` : ''}</div>
+        <div class="pauta-foot" style="border:0;padding:0;margin-top:8px">
+          <button type="button" class="btn ghost small" id="recFoto">${UI.icon('plus', 13)} ${foto ? 'Cambiar foto' : 'Añadir foto'}</button>
+          <button type="button" class="btn ghost small danger" id="recFotoDel"${foto ? '' : ' style="display:none"'}>${UI.icon('trash', 13)} Quitar</button>
+        </div>
+      </div>`,
+      actions: [
+        { label: 'Cancelar', kind: 'ghost' },
+        { label: 'Guardar', kind: 'primary', onClick: async (root) => {
+          const n = (root.querySelector('input[name="nombre"]').value || '').trim();
+          if (!n) { UI.toast('Ponle un nombre', 'err'); return false; }
+          r.nombre = n;
+          r.extras = extras.length ? extras : undefined;
+          r.preparacion = (root.querySelector('#nutRecPrep').value || '').trim() || undefined;
+          if (foto) r.foto = foto; else delete r.foto;
+          await guardar(app);
+          UI.toast('Plato guardado');
+        } },
       ],
       onMount: (root) => {
-        const pintar = () => {
+        pintarExtras(root);
+        root.querySelector('#recAddExtra').addEventListener('click', () => {
+          pedirExtra(null, (val) => { if (val) { extras.push(val); pintarExtras(root); } });
+        });
+        const pintarFoto = () => {
           root.querySelector('#recFotoPrev').innerHTML = foto ? `<img class="rec-foto" src="${foto}" alt="">` : '';
+          root.querySelector('#recFotoDel').style.display = foto ? '' : 'none';
         };
         root.querySelector('#recFoto').addEventListener('click', () => {
           const inp = document.createElement('input');
           inp.type = 'file'; inp.accept = 'image/*';
           inp.addEventListener('change', () => {
             const f = inp.files[0]; if (!f) return;
-            fotoDesdeArchivo(f, (data) => { if (!data) { UI.toast('No se ha podido leer la foto', 'err'); return; } foto = data; pintar(); });
+            fotoDesdeArchivo(f, (data) => { if (!data) { UI.toast('No se ha podido leer la foto', 'err'); return; } foto = data; pintarFoto(); });
           });
           inp.click();
         });
-        const del = root.querySelector('#recFotoDel');
-        if (del) del.addEventListener('click', () => { foto = null; pintar(); UI.toast('Foto quitada al guardar'); });
+        root.querySelector('#recFotoDel').addEventListener('click', () => { foto = null; pintarFoto(); });
       },
     });
   }
-  async function guardarReceta(app, root, r, getFoto) {
-    r.preparacion = (root.querySelector('#nutRecPrep').value || '').trim() || undefined;
-    r.extras = (root.querySelector('input[name="extras"]').value || '').trim() || undefined;
-    const f = getFoto();
-    if (f) r.foto = f; else delete r.foto;
-    await guardar(app);
+
+  // Alta/edición de un ingrediente extra. onDone(valor | null para borrar | undefined si cancela)
+  function pedirExtra(actual, onDone) {
+    UI.modal({
+      title: actual ? 'Ingrediente extra' : 'Añadir ingrediente',
+      bodyHTML: `<div id="exForm">
+        ${UI.field('Ingrediente', UI.input('alimento', actual ? actual.alimento : '', { placeholder: 'Cebolla, pimiento…' }))}
+        <div class="nut-qrow">
+          <span class="nut-qlbl">Cantidad</span>
+          <input class="inp" name="valor" type="number" step="0.01" inputmode="decimal" value="${actual && actual.valor != null ? UI.esc(actual.valor) : ''}" placeholder="cantidad">
+          <input class="inp" name="unidad" list="nutUnidades" value="${UI.esc((actual && actual.unidad) || 'g')}" placeholder="g">
+        </div>
+        <datalist id="nutUnidades">${UNIDADES.map(u => `<option value="${u}">`).join('')}</datalist>
+        ${UI.field('Nota (opcional)', UI.input('nota', (actual && actual.nota) || '', { placeholder: 'al gusto, picada…' }))}
+        <p class="field-hint">Déjalo sin cantidad si va al gusto.</p>
+      </div>`,
+      actions: [
+        actual ? { label: 'Quitar', kind: 'danger', onClick: () => onDone(null) }
+               : { label: 'Cancelar', kind: 'ghost' },
+        { label: 'Guardar', kind: 'primary', onClick: (root) => {
+          const a = (root.querySelector('input[name="alimento"]').value || '').trim();
+          if (!a) { UI.toast('Ponle nombre', 'err'); return false; }
+          const val = root.querySelector('input[name="valor"]').value;
+          const uni = (root.querySelector('input[name="unidad"]').value || '').trim();
+          const nota = (root.querySelector('input[name="nota"]').value || '').trim();
+          const out = { alimento: a };
+          if (val !== '') { out.valor = parseFloat(val); out.unidad = uni; }
+          if (nota) out.nota = nota;
+          onDone(out);
+        } },
+      ],
+    });
   }
 
   function addReceta(app, tomaId, opId) {
@@ -394,17 +500,14 @@ const VNutrition = (() => {
       elige[g.id] = (lista.find(a => a.alimento === _elegido[k]) || lista[0]).alimento;
     });
     const usa = Object.values(elige).join(' · ');
-    let foto = null;
     UI.modal({
       title: 'Guardar un plato',
       bodyHTML: `<p class="modal-text">Le pones nombre a lo que cocinas con estas cantidades, y la próxima vez lo tienes hecho.</p>
         <p class="modal-text dim">Con: ${UI.esc(usa || '—')}</p>
         ${vs.length > 1 ? `<p class="modal-text"><strong>Se guarda para ${UI.esc(v ? v.nombre.toLowerCase() : '')}</strong>, que es el día que tienes seleccionado.</p>` : ''}
         ${UI.field('Nombre del plato', UI.input('nombre', '', { placeholder: 'Ej: Risotto, Puchero, Salteado…' }))}
-        ${UI.field('Ingredientes extra (opcional)', UI.input('extras', '', { placeholder: 'Cebolla, pimiento, especias…' }), 'Lo que le añades y no viene en la pauta.')}
         ${UI.field('Cómo se hace (opcional)', UI.textarea('prep', '', 'Los pasos, a tu manera…', 4))}
-        <button type="button" class="btn ghost block" id="recFoto">${UI.icon('plus', 15)} Añadir una foto</button>
-        <div id="recFotoPrev"></div>`,
+        <p class="field-hint">Los ingredientes extra y la foto se añaden luego, desde <strong>Editar plato</strong>.</p>`,
       actions: [
         { label: 'Cancelar', kind: 'ghost' },
         { label: 'Guardar', kind: 'primary', onClick: async (root) => {
@@ -413,30 +516,13 @@ const VNutrition = (() => {
           opcion.recetas = opcion.recetas || [];
           opcion.recetas.push({
             id: DB.uid('rec'), nombre: n, varianteId: vId, elige,
-            extras: (root.querySelector('input[name="extras"]').value || '').trim() || undefined,
             preparacion: (root.querySelector('textarea[name="prep"]').value || '').trim() || undefined,
-            foto: foto || undefined,
           });
           await guardar(app);
           UI.toast(`"${n}" guardado en tus platos`);
           setTimeout(() => { const el = document.getElementById('nutPlatos'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 250);
         } },
       ],
-      onMount: (root) => {
-        root.querySelector('#recFoto').addEventListener('click', () => {
-          const inp = document.createElement('input');
-          inp.type = 'file'; inp.accept = 'image/*';
-          inp.addEventListener('change', () => {
-            const f = inp.files[0]; if (!f) return;
-            fotoDesdeArchivo(f, (data) => {
-              if (!data) { UI.toast('No se ha podido leer la foto', 'err'); return; }
-              foto = data;
-              root.querySelector('#recFotoPrev').innerHTML = `<img class="rec-foto" src="${data}" alt="">`;
-            });
-          });
-          inp.click();
-        });
-      },
     });
   }
 
