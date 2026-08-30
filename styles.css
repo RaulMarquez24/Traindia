@@ -747,3 +747,7 @@ body.modal-open { overflow: hidden; }
 .elige-opts { display: flex; flex-wrap: wrap; gap: 6px; }
 .nut-alt.on { background: var(--strong); border-color: var(--strong); color: #fff; }
 .nut-alt.on em { color: rgba(255,255,255,.75); }
+.elige-uno { font-size: 14.5px; color: var(--ink); margin-bottom: 2px; }
+.elige-row { padding-bottom: 12px; margin-bottom: 12px; border-bottom: 1px solid var(--line-soft); }
+.elige-row:last-child { border-bottom: 0; margin-bottom: 4px; }
+.nut-qty.tuya { color: var(--moderate); }
