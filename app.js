@@ -448,7 +448,7 @@ const app = {
                 tipo: d.tipo,
                 mensaje: d.mensaje.trim(),
                 contacto: (d.contacto || '').trim() || '(no indicado)',
-                version: 'v2.12.5',
+                version: 'v2.12.6',
                 perfil: (this.mainUser && this.mainUser.name) || '',
                 navegador: navigator.userAgent,
               }),
@@ -483,7 +483,7 @@ const app = {
     return `<div class="section">
       ${rows.map(r => `<button class="big-row" data-link="${r.v}"><span class="big-row-icon tile" style="background:${r.color}">${UI.icon(r.icon, 20)}</span><span class="big-row-text"><strong>${r.label}</strong><span class="dim">${r.sub}</span></span><span class="chev">›</span></button>`).join('')}
       <button class="big-row" data-feedback><span class="big-row-icon tile" style="background:var(--strong)">${UI.icon('chat', 20)}</span><span class="big-row-text"><strong>Sugerencias y reportes</strong><span class="dim">Envíame ideas o fallos</span></span><span class="chev">›</span></button>
-      <p class="version-foot">Traindía · v2.12.5 · ${Object.keys(this.usersById).length} perfil(es)<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
+      <p class="version-foot">Traindía · v2.12.6 · ${Object.keys(this.usersById).length} perfil(es)<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
     </div>`;
   },
   bindMore(root) {
@@ -752,7 +752,7 @@ const app = {
         <button class="btn danger block" id="resetApp">Borrar todos los datos</button>
         <p class="field-hint">Restablece la app al estado inicial (se borran todos los perfiles, sesiones y progreso).</p>
       </div>
-      <p class="version-foot">Traindía · v2.12.5</p>
+      <p class="version-foot">Traindía · v2.12.6</p>
     </div>`;
   },
 
