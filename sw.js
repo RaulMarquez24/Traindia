@@ -1,10 +1,14 @@
 // Service Worker - Traindía
-// La versión visible de la app es v2.6.2 (ver pie en la app).
+// La versión visible de la app es v2.6.3 (ver pie en la app).
 // CACHE_NAME es solo la clave de caché: súbele el número de build en cada deploy
 // (build-6, build-7, …) para que los cambios lleguen a las apps ya instaladas.
 // Los fetch usan {cache:'reload'} para saltarse la caché HTTP del navegador/Pages
 // y traer SIEMPRE la última versión con red (offline tira de CACHE_NAME).
-const CACHE_NAME = 'traindia-build-86';
+const CACHE_NAME = 'traindia-build-87';
+// Buzón temporal para archivos que llegan por "Compartir" desde otra app
+// (WhatsApp, Archivos…). No se borra al activar: lo lee y vacía la app.
+const SHARE_CACHE = 'traindia-share-inbox';
+const SHARE_KEY = './__shared-import';
 const ASSETS = [
   './',
   './index.html',
@@ -43,7 +47,7 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) => {
       return Promise.all(
-        keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k))
+        keys.filter(k => k !== CACHE_NAME && k !== SHARE_CACHE).map(k => caches.delete(k))
       );
     })
   );
@@ -52,8 +56,30 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   const req = event.request;
+  const reqUrl = new URL(req.url);
+
+  // ---- Destino de "Compartir" (share_target del manifest) ----
+  // Llega un POST con el archivo desde WhatsApp/Archivos: lo guardamos en el buzón
+  // y redirigimos a la app, que lo importa al arrancar. Así el usuario NO tiene que
+  // buscar el fichero en el explorador de Android.
+  if (req.method === 'POST' && reqUrl.searchParams.has('share-target')) {
+    event.respondWith((async () => {
+      try {
+        const fd = await req.formData();
+        const file = fd.get('file');
+        const text = file && file.text ? await file.text() : (fd.get('text') || '');
+        if (text) {
+          const cache = await caches.open(SHARE_CACHE);
+          await cache.put(SHARE_KEY, new Response(text, { headers: { 'Content-Type': 'text/plain' } }));
+        }
+      } catch (e) { /* si algo falla, entra igual y avisa la app */ }
+      return Response.redirect(new URL('./?shared=1', self.location).href, 303);
+    })());
+    return;
+  }
+
   if (req.method !== 'GET') return;
-  const url = new URL(req.url);
+  const url = reqUrl;
   const sameOrigin = url.origin === self.location.origin;
 
   if (sameOrigin) {
