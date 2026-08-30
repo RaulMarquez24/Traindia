@@ -13,7 +13,7 @@
 
 const DB = (() => {
   const DB_NAME = 'cnp-db';
-  const DB_VERSION = 2; // v2: store 'files' (documentos adjuntos: PDF del fisio, fotos…)
+  const DB_VERSION = 3; // v2: 'files' (documentos). v3: 'nutrition' (pauta de alimentación)
   const STORES = {
     settings:  { keyPath: 'key', indexes: [] },
     users:     { keyPath: 'id', indexes: [] },
@@ -23,6 +23,7 @@ const DB = (() => {
     progress:  { keyPath: 'id', indexes: ['userId', 'date'] },
     journal:   { keyPath: 'id', indexes: ['userId', 'date'] },
     files:     { keyPath: 'id', indexes: ['userId'] },   // { id, userId, name, type, size, addedAt, data:ArrayBuffer }
+    nutrition: { keyPath: 'id', indexes: ['userId'] },   // pauta de alimentación (ver ESQUEMA en views-nutrition.js)
   };
 
   let dbPromise = null;
@@ -748,6 +749,21 @@ const DB = (() => {
     return byIndex('files', 'userId', userId);
   }
   // Guarda un documento (PDF, imagen…) como ArrayBuffer, para consultarlo sin conexión.
+  // ---- Nutrición: una pauta activa por usuario (se guardan varias, manda isPrimary) ----
+  async function nutritionOf(userId) {
+    if (!(await hasStore('nutrition'))) return [];
+    return byIndex('nutrition', 'userId', userId);
+  }
+  async function primaryNutritionOf(userId) {
+    const all = await nutritionOf(userId);
+    if (!all.length) return null;
+    return all.find(p => p.isPrimary) || all.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))[0];
+  }
+  async function saveNutrition(plan) {
+    if (!(await hasStore('nutrition'))) throw new Error('NO_STORE:nutrition');
+    return put('nutrition', plan);
+  }
+
   async function addFile(userId, { name, type, size, data }) {
     if (!(await hasStore('files'))) throw new Error('Cierra las demás copias de Traindía y recarga para poder guardar documentos.');
     const rec = { id: uid('file'), userId, name, type: type || '', size: size || 0, addedAt: Date.now(), data };
@@ -775,6 +791,7 @@ const DB = (() => {
     seedForUser, createPlan, setActivePlan, deletePlan, restoreDefaultExercises, restoreDefaultRoutine, restoreDefaultDay, updateExercise, migrate, runCardioUnify, cardioUnifyPending, classifyType,
     saveInternalBackup, listInternalBackups, deleteInternalBackup, restoreInternalBackup,
     filesOf, addFile, hasStore, isFallback, upgradeNow,
+    nutritionOf, primaryNutritionOf, saveNutrition,
     exercisesOf, routinesOf, sessionsOf, progressOf, journalOf, primaryRoutineOf,
     STORES,
   };
