@@ -123,9 +123,27 @@ const VNutrition = (() => {
   // ¿Esta opción se puede hacer hoy? Solo si CADA línea no opcional tiene al menos
   // un alimento con cantidad para esta variante.
   function comidaAplica(op, vId) {
+    if (Array.isArray(op.variantes) && op.variantes.length) return op.variantes.includes(vId);
     const gs = (op.grupos || []).filter(g => (g.alternativas || []).length && !g.opcional);
     if (!gs.length) return (op.grupos || []).length > 0;
     return gs.every(g => g.alternativas.some(a => (a.cantidades || {})[vId]));
+  }
+  // Los días para los que sirve una opción (todos, si no lo dice).
+  const variantesDeOpcion = (op, vs) => {
+    const ids = Array.isArray(op.variantes) && op.variantes.length ? op.variantes : vs.map(v => v.id);
+    return vs.filter(v => ids.includes(v.id));
+  };
+  const selectorDiasHTML = (vs, elegidas) => `<span class="field-label">¿Qué días vale?</span>
+    <div class="dias-pick">${vs.map(v => `<button type="button" class="nut-alt${elegidas.includes(v.id) ? ' on' : ''}" data-dia="${UI.esc(v.id)}">${UI.esc(v.nombre)}</button>`).join('')}</div>
+    <p class="field-hint">Marca los dos si la comes igual siempre.</p>`;
+  function bindDias(root, elegidas) {
+    root.querySelectorAll('[data-dia]').forEach(b => b.addEventListener('click', () => {
+      const id = b.dataset.dia;
+      const i = elegidas.indexOf(id);
+      if (i >= 0) { if (elegidas.length === 1) return; elegidas.splice(i, 1); }
+      else elegidas.push(id);
+      b.classList.toggle('on');
+    }));
   }
   function variantesDe(app) {
     const vs = _plan.variantes || [];
@@ -710,10 +728,13 @@ const VNutrition = (() => {
     const { toma, opcion: real } = ref(tomaId, opId);
     if (!toma || !real) { app.render(); return; }
     const vs = _plan.variantes || [];
-    const vId = _varianteId || (varianteDeHoy(_plan, app) || {}).id || (vs[0] && vs[0].id);
+    const vIdHoy = _varianteId || (varianteDeHoy(_plan, app) || {}).id || (vs[0] && vs[0].id);
+    const vId = vIdHoy;
     // Se trabaja sobre una copia: nada se guarda hasta pulsar Guardar.
     const op = JSON.parse(JSON.stringify(real));
     op.grupos = op.grupos || [];
+    const dias = variantesDeOpcion(op, vs).map(v => v.id);
+    const vsOp = () => vs.filter(v => dias.includes(v.id));
     let abierta = null;   // "gi|ai" de la fila que se está editando
 
     const altVacio = () => ({ alimento: '', cantidades: {} });
@@ -724,6 +745,7 @@ const VNutrition = (() => {
 
     // ---- pintar ----
     const filaVistaHTML = (a, gi, ai) => {
+      const vId = dias.includes(vIdHoy) ? vIdHoy : dias[0];
       const c = cantidadDe(a, vId) || {};
       const pie = [notaDe(a, vId), c.equivale ? `≡ ${c.equivale}` : ''].filter(Boolean).join(' · ');
       return `<div class="nut-line igual">
@@ -736,9 +758,10 @@ const VNutrition = (() => {
     };
 
     const filaEditHTML = (a, gi, ai) => {
-      const cants = vs.map(v => cantidadDe(a, v.id) || {});
+      const dvs = vsOp();
+      const cants = dvs.map(v => cantidadDe(a, v.id) || {});
       const puestas = cants.filter(c => c.valor != null || c.unidad);
-      const mismo = !puestas.length || (puestas.length === vs.length &&
+      const mismo = !puestas.length || (puestas.length === dvs.length &&
         cants.every(c => c.valor === cants[0].valor && (c.unidad || '') === (cants[0].unidad || '')));
       const c0 = puestas[0] || {};
       const fila = (id, etiqueta, c) => `<div class="nut-qrow">
@@ -748,10 +771,10 @@ const VNutrition = (() => {
       </div>`;
       return `<div class="fila-ed">
         <input class="inp" data-nombre value="${UI.esc(a.alimento || '')}" placeholder="Alimento. Ej: Arroz integral" autocomplete="off">
-        ${vs.length > 1 ? `<label class="metric-opt"><input type="checkbox" data-mismo${mismo ? ' checked' : ''}><span>La misma cantidad todos los días</span></label>` : ''}
-        <div data-uni${vs.length > 1 && !mismo ? ' hidden' : ''}>${fila('__uni', 'Cantidad', c0)}</div>
-        ${vs.length > 1 ? `<div data-dias${mismo ? ' hidden' : ''}>
-          ${vs.map((v, i) => fila(v.id, v.nombre, cants[i])).join('')}
+        ${dvs.length > 1 ? `<label class="metric-opt"><input type="checkbox" data-mismo${mismo ? ' checked' : ''}><span>La misma cantidad todos los días</span></label>` : ''}
+        <div data-uni${dvs.length > 1 && !mismo ? ' hidden' : ''}>${fila('__uni', 'Cantidad', c0)}</div>
+        ${dvs.length > 1 ? `<div data-dias${mismo ? ' hidden' : ''}>
+          ${dvs.map((v, i) => fila(v.id, v.nombre, cants[i])).join('')}
           <p class="field-hint" style="margin-top:-2px">Deja en blanco el día en que <strong>no</strong> lo tomes.</p>
         </div>` : ''}
         <details class="det"${(c0.nota || c0.equivale) ? ' open' : ''}>
@@ -794,9 +817,10 @@ const VNutrition = (() => {
       const nota = (ed.querySelector('[data-nota]').value || '').trim();
       const equivale = (ed.querySelector('[data-equivale]').value || '').trim();
       const dato = (id) => {
-        const val = ed.querySelector(`[data-q="${id}"][data-f="valor"]`).value;
-        const uni = (ed.querySelector(`[data-q="${id}"][data-f="unidad"]`).value || '').trim();
-        return { val, uni };
+        const v = ed.querySelector(`[data-q="${id}"][data-f="valor"]`);
+        const u = ed.querySelector(`[data-q="${id}"][data-f="unidad"]`);
+        if (!v) return { val: '', uni: '' };
+        return { val: v.value, uni: (u.value || '').trim() };
       };
       const chk = ed.querySelector('[data-mismo]');
       const unico = !chk || chk.checked;
@@ -811,9 +835,9 @@ const VNutrition = (() => {
       if (unico) {
         const { val, uni } = dato('__uni');
         // Sin número es "al gusto"; se guarda igual para que el alimento cuente.
-        vs.forEach(v => meter(v.id, val, val === '' ? '' : uni, true));
+        vsOp().forEach(v => meter(v.id, val, val === '' ? '' : uni, true));
       }
-      else vs.forEach(v => { const { val, uni } = dato(v.id); meter(v.id, val, uni); });
+      else vsOp().forEach(v => { const { val, uni } = dato(v.id); meter(v.id, val, uni); });
       a.cantidades = cantidades;
     };
 
@@ -824,7 +848,10 @@ const VNutrition = (() => {
       op.grupos.forEach(g => { if (!g.nombre) g.nombre = g.alternativas[0].alimento; });
     };
 
-    const volcar = () => { real.nombre = op.nombre; real.grupos = op.grupos; };
+    const volcar = () => {
+      real.nombre = op.nombre; real.grupos = op.grupos;
+      if (vs.length > 1) real.variantes = dias.slice();
+    };
 
     UI.modal({
       title: real.nombre || 'Opción',
@@ -832,6 +859,7 @@ const VNutrition = (() => {
       bodyHTML: `
         <p class="modal-text dim">${UI.esc(toma.nombre)}${vs.length > 1 ? ` · ${UI.esc((vs.find(x => x.id === vId) || {}).nombre || '')}` : ''}</p>
         ${UI.field('Cómo la llamas', UI.input('opNombre', op.nombre || '', { placeholder: 'Arroz o pasta, Legumbres…' }), 'La etiqueta que ves al elegir. No es el nombre de un plato.')}
+        ${vs.length > 1 ? selectorDiasHTML(vs, dias) : ''}
         <div class="sec-label">Lo que lleva</div>
         <div id="opBody">${cuerpoHTML()}</div>
         <button class="btn ghost block" id="nutAddAli">${UI.icon('plus', 15)} Añadir tipo de alimento</button>
@@ -898,6 +926,9 @@ const VNutrition = (() => {
           });
         };
         enganchar();
+        // Cambiar de días repinta: las filas abiertas preguntan por los nuevos.
+        bindDias(root, dias);
+        root.querySelectorAll('[data-dia]').forEach(b => b.addEventListener('click', () => { leer(root); pintar(); }));
         root.querySelector('#nutAddAli').addEventListener('click', () => {
           leer(root);
           op.grupos.push({ id: DB.uid('g'), nombre: '', alternativas: [altVacio()] });
@@ -993,9 +1024,12 @@ const VNutrition = (() => {
   const irAToma = (app, tomaId) => app.go('nutrition', { planId: _planId, tomaId });
 
   function addOpcion(app, toma) {
+    const vs = _plan.variantes || [];
+    const elegidas = vs.map(v => v.id);
     UI.modal({
       title: `Nueva opción · ${UI.esc(toma.nombre)}`,
       bodyHTML: `${UI.field('Cómo la llamas', UI.input('nombre', '', { placeholder: 'Ej: Arroz o pasta, Legumbres, Tortitas…' }))}
+        ${vs.length > 1 ? selectorDiasHTML(vs, elegidas) : ''}
         <p class="field-hint">Es una de las <strong>opciones que te marcó tu nutricionista</strong> para esta comida, no un plato: después le pones los alimentos y sus cantidades. Los platos que cocines con ella se guardan aparte.</p>`,
       actions: [
         { label: 'Cancelar', kind: 'ghost' },
@@ -1003,12 +1037,14 @@ const VNutrition = (() => {
           const n = (root.querySelector('input[name="nombre"]').value || '').trim();
           if (!n) { UI.toast('Ponle un nombre', 'err'); return false; }
           const op = { id: DB.uid('o'), nombre: n, grupos: [] };
+          if (vs.length > 1) op.variantes = elegidas.slice();
           toma.opciones.push(op);
           const tid = toma.id, oid = op.id;
           await guardar(app);
           setTimeout(() => abrirComida(app, tid, oid, { nuevo: true }), 300);
         } },
       ],
+      onMount: (root) => bindDias(root, elegidas),
     });
   }
 
