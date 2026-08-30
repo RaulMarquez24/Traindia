@@ -54,6 +54,20 @@ const VNutrition = (() => {
     if (!c || !c.nota) return '';
     return cantidadTexto(alt, vId) === c.nota ? '' : c.nota;   // si la nota ES la cantidad, no repetir
   };
+  // Al principio los días "light" se emparejaron con descanso, y un día ligero
+  // (movilidad, brazo suelto) es un día que entrenas. Se corrige al abrir el
+  // plan; es idempotente, porque después ya no cumple la condición.
+  function arreglarDiaLigero(plan) {
+    const vs = plan.variantes || [];
+    const tipos = v => (v.match && Array.isArray(v.match.porTipoDia)) ? v.match.porTipoDia : null;
+    const desc = vs.find(v => { const t = tipos(v); return t && t.includes('rest') && t.includes('light'); });
+    const ent = vs.find(v => { const t = tipos(v); return t && !t.includes('rest') && (t.includes('strong') || t.includes('moderate')); });
+    if (!desc || !ent) return false;
+    desc.match.porTipoDia = tipos(desc).filter(t => t !== 'light');
+    if (!tipos(ent).includes('light')) ent.match.porTipoDia = tipos(ent).concat('light');
+    return true;
+  }
+
   function varianteDeHoy(plan, app) {
     const vs = plan.variantes || [];
     if (!vs.length) return null;
@@ -128,6 +142,10 @@ const VNutrition = (() => {
     if (!(await DB.hasStore('nutrition'))) return prepararHTML();
     const planes = await DB.nutritionOf(app.activeUser.id);
     if (!planes.length) { _plan = null; return vacioHTML(); }
+
+    for (const pl of planes) {
+      if (arreglarDiaLigero(pl)) await DB.saveNutrition(pl);
+    }
 
     const planId = params && params.planId;
     if (planId) {
@@ -747,8 +765,8 @@ const VNutrition = (() => {
           const nombre = (root.querySelector('input[name="nombre"]').value || '').trim() || 'Mi plan';
           const dos = root.querySelector('#nutDias').checked;
           const variantes = dos
-            ? [{ id: 'v_desc', nombre: 'Día de descanso', match: { porTipoDia: ['rest', 'light'] } },
-               { id: 'v_ent', nombre: 'Día de entrenamiento', match: { porTipoDia: ['strong', 'moderate'] } }]
+            ? [{ id: 'v_desc', nombre: 'Día de descanso', match: { porTipoDia: ['rest'] } },
+               { id: 'v_ent', nombre: 'Día de entrenamiento', match: { porTipoDia: ['strong', 'moderate', 'light'] } }]
             : [{ id: 'v_uni', nombre: 'Todos los días', match: null }];
           for (const x of await DB.nutritionOf(app.activeUser.id)) { x.isPrimary = false; await DB.saveNutrition(x); }
           _plan = { id: DB.uid('nut'), userId: app.activeUser.id, isPrimary: true, createdAt: Date.now(),
@@ -1286,8 +1304,8 @@ o "sin especificar". Nunca frases largas como "cantidad no especificada en el do
       "nombre": "Plan de alimentación",
       "tipoDetectado": "intercambios",
       "variantes": [
-        { "id": "v_desc", "nombre": "Día de descanso", "match": { "porTipoDia": ["rest", "light"] } },
-        { "id": "v_ent", "nombre": "Día de entrenamiento", "match": { "porTipoDia": ["strong", "moderate"] } }
+        { "id": "v_desc", "nombre": "Día de descanso", "match": { "porTipoDia": ["rest"] } },
+        { "id": "v_ent", "nombre": "Día de entrenamiento", "match": { "porTipoDia": ["strong", "moderate", "light"] } }
       ],
       "tomas": [
         {
@@ -1329,6 +1347,9 @@ o "sin especificar". Nunca frases largas como "cantidad no especificada en el do
 # REGLAS DE FORMATO
 - Los "id" los inventas tú, en minúsculas y sin espacios; solo tienen que ser únicos y coherentes.
 - "orden" numera las tomas a lo largo del día empezando en 1.
+- Copia las "variantes" tal cual del ejemplo si la dieta distingue entreno y descanso.
+  Los tipos válidos son "strong", "moderate", "light" y "rest"; los tres primeros son
+  días en los que se entrena (un día ligero también se entrena) y solo "rest" es descanso.
 - Toda alternativa debe traer una cantidad por CADA variante que declares.
 - Si una toma tiene varias opciones, créalas todas: son alternativas de toma completa.
 - Deja "dudas" como array vacío solo si de verdad no hay ninguna.
