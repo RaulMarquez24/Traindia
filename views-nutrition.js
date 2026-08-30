@@ -1,54 +1,45 @@
 // ============================================================
 // VISTA: Nutrición — qué te toca comer hoy y qué puedes cocinar
 // ============================================================
-// PRINCIPIO: la PAUTA manda (te la da tu nutricionista) y las recetas cuelgan
-// de ella. Un risotto y un puchero no son dos dietas: son dos maneras de
-// comerte los mismos 75 g de arroz.
+// PRINCIPIO: la PAUTA manda (te la da tu nutricionista) y cada COMIDA es una
+// tarjeta en la que entras: sus alimentos con sus gramos, por qué puedes
+// cambiarlos y cómo se prepara.
 //
-// ESQUEMA DE LA PAUTA (schemaVersion 1) — es a la vez el formato interno, el de
-// compartir entre perfiles y el que devuelve la IA al importar un documento.
-// Diseñado para cubrir 5 arquetipos: intercambios, menú semanal, raciones,
-// recetario y (fuera de alcance) macros.
+// En la interfaz NO aparecen las palabras "opción", "grupo" ni "alternativa":
+// se habla de COMIDAS, ALIMENTOS y "puedes cambiarlo por". Los nombres técnicos
+// se quedan en el esquema, que es lo que viaja entre perfiles y por la IA.
 //
+// ESQUEMA (schemaVersion 1)
 // {
-//   id, userId, isPrimary, createdAt,
-//   schemaVersion: 1,
-//   nombre: 'Plan de …',
-//   tipoDetectado: 'intercambios' | 'menu-semanal' | 'raciones' | 'recetario' | 'otro',
-//   variantes: [                       // cómo cambian las cantidades según el día
-//     { id, nombre: 'Día de entreno',
-//       match: { porTipoDia: ['strong','moderate'] }   // tipos del plan de entreno
-//            | { porDiaSemana: [1,2] }                 // 1 = lunes … 7 = domingo
-//            | null }                                  // solo manual
-//   ],
-//   tomas: [                           // desayuno, media mañana, almuerzo…
-//     { id, nombre, orden,
-//       opciones: [                    // alternativas de toma completa: eliges UNA
-//         { id, nombre,
-//           grupos: [                  // las "ranuras" del plato
-//             { id, nombre: 'Hidrato',
-//               alternativas: [        // alimentos intercambiables entre sí
-//                 { alimento: 'Arroz integral',
-//                   cantidades: {      // por id de variante
-//                     v_ent: { valor: 75, unidad: 'g', nota: 'en crudo',
-//                              equivale: '225 g cocido' } } } ] } ] } ] }
-//   ],
-//   reglas: [ { texto, aplicaA: [idToma] } ],   // "ensalada en comida y cena"
+//   id, userId, isPrimary, createdAt, schemaVersion, nombre, tipoDetectado,
+//   variantes: [ { id, nombre, match: { porTipoDia:[...] } | { porDiaSemana:[1..7] } | null } ],
+//   tomas: [ { id, nombre, orden,
+//     opciones: [                       // en la interfaz: COMIDAS
+//       { id, nombre, preparacion?,     // preparacion = cómo se hace (opcional)
+//         grupos: [                     // en la interfaz: cada línea de la comida
+//           { id, nombre,
+//             alternativas: [           // intercambiables entre sí
+//               { alimento,
+//                 cantidades: { [varianteId]: { valor, unidad, nota?, equivale? } } } ] } ] } ] } ],
+//   reglas: [ { texto, aplicaA?: [idToma] } ],
 //   suplementos: [ { nombre, cantidad, nota } ],
-//   dudas: [ 'texto' ],                          // lo que la IA no vio claro
+//   dudas: [ 'texto' ],
 // }
-//
-// Una receta corriente es una opción donde cada grupo tiene UNA alternativa:
-// no se paga complejidad por adelantado.
 
 const VNutrition = (() => {
 
   const SCHEMA_VERSION = 1;
   const DIAS = ['', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo'];
+  const UNIDADES = ['g', 'ml', 'unidad', 'pieza', 'ración', 'cucharada', 'puñado', 'lata', 'onza'];
+  const TOMAS_SUGERIDAS = ['Desayuno', 'Media mañana', 'Almuerzo', 'Merienda', 'Cena'];
 
-  // ---------- utilidades de lectura ----------
+  // ---------- lectura ----------
+  function cantidadDe(alt, varianteId) {
+    const cs = alt.cantidades || {};
+    return cs[varianteId] || cs[Object.keys(cs)[0]] || null;
+  }
   function cantidadTexto(alt, varianteId) {
-    const c = (alt.cantidades || {})[varianteId] || (alt.cantidades || {})[Object.keys(alt.cantidades || {})[0]];
+    const c = cantidadDe(alt, varianteId);
     if (!c) return '';
     const val = (c.valor === null || c.valor === undefined || c.valor === '') ? '' : c.valor;
     let t = [val, c.unidad].filter(x => x !== '' && x != null).join(' ').trim();
@@ -56,32 +47,39 @@ const VNutrition = (() => {
     if (c.nota) t += ` ${c.nota}`;
     return t.trim();
   }
-  // ¿Qué variante toca hoy? Se mira el plan de entreno; si no encaja, la primera.
   function varianteDeHoy(plan, app) {
     const vs = plan.variantes || [];
     if (!vs.length) return null;
-    const hoyIdx = ((new Date().getDay() + 6) % 7) + 1; // 1 = lunes
+    const hoyIdx = ((new Date().getDay() + 6) % 7) + 1;
     const dia = diaDelPlan(app, hoyIdx);
     const porTipo = dia && vs.find(v => v.match && Array.isArray(v.match.porTipoDia) && v.match.porTipoDia.includes(dia.type));
     if (porTipo) return porTipo;
     const porDia = vs.find(v => v.match && Array.isArray(v.match.porDiaSemana) && v.match.porDiaSemana.includes(hoyIdx));
-    if (porDia) return porDia;
-    return vs[0];
+    return porDia || vs[0];
   }
   function diaDelPlan(app, hoyIdx) {
     const days = (app.routine && app.routine.days) || [];
-    if (!days.length) return null;
     const nombre = DIAS[hoyIdx];
     return days.find(d => (d.name || '').trim().toLowerCase() === nombre) || null;
   }
+  const resumenComida = (op) => (op.grupos || [])
+    .map(g => (g.alternativas || [])[0]).filter(Boolean).map(a => a.alimento).join(' · ');
 
-  // ---------- estado de la vista ----------
+  // Tras render(), _plan se relee de la base y los objetos anteriores quedan
+  // huérfanos. Por eso todo se mueve por ID y se resuelve en el momento de usarlo.
+  function ref(tomaId, opId, grupoId, altNombre) {
+    const toma = (_plan.tomas || []).find(t => t.id === tomaId) || null;
+    const opcion = toma && (toma.opciones || []).find(o => o.id === opId) || null;
+    const grupo = opcion && grupoId ? (opcion.grupos || []).find(g => g.id === grupoId) || null : null;
+    const alt = grupo && altNombre ? (grupo.alternativas || []).find(a => a.alimento === altNombre) || null : null;
+    return { toma, opcion, grupo, alt };
+  }
+
+  // ---------- estado ----------
   let _plan = null;
-  let _varianteId = null;   // variante elegida a mano (manda sobre la automática)
-  let _abierta = {};        // idToma -> idOpcion elegida
-  let _elegido = {};        // `${idToma}|${idGrupo}` -> nombre de alimento
-  let _editando = false;    // modo edicion: muestra los + para construir la pauta
-  let _pidioPrompt = false; // ya copio el prompt: ofrecemos pegar el resultado
+  let _varianteId = null;
+  let _elegido = {};        // `${opId}|${grupoId}` -> alimento elegido
+  let _pidioPrompt = false;
 
   async function render(app) {
     if (!(await DB.hasStore('nutrition'))) return prepararHTML();
@@ -90,7 +88,6 @@ const VNutrition = (() => {
     return planHTML(app);
   }
 
-  // La ampliación del almacén se hace a propósito (ver db.js: nunca en el arranque).
   function prepararHTML() {
     return `<div class="section">
       <p class="section-intro">Para usar Nutrición hay que ampliar el almacén de la app. Solo puede hacerse si <strong>Traindía no está abierta en ningún otro sitio</strong>: cierra las demás pestañas y la app de la pantalla de inicio.</p>
@@ -101,43 +98,57 @@ const VNutrition = (() => {
 
   function vacioHTML() {
     return `<div class="section">
-      <p class="section-intro">Aquí verás <strong>lo que te toca comer hoy</strong>, con las cantidades del día que sea, y los platos que hayas ido guardando para esas medidas.</p>
-      <button class="btn primary block" id="nutImport">${UI.icon('chat', 15)} Crear desde un documento <span class="beta-tag">beta</span></button>
-      <p class="field-hint">Con el PDF o las fotos de tu dieta y la ayuda de una IA. Tú hablas con la IA; Traindía no envía nada por su cuenta.</p>
-      <button class="btn ${_pidioPrompt ? 'primary' : 'ghost'} block" id="nutPaste">${UI.icon('upload', 15)} Ya tengo el resultado: pegarlo</button>
-      <div class="nut-or"><span>o</span></div>
-      <button class="btn ghost block" id="nutManual">${UI.icon('plus', 15)} Empezar a mano</button>
-      <p class="field-hint">No hace falta meterla entera: con una sola toma ya te sirve, y vas añadiendo el resto cuando quieras.</p>
+      <div class="nut-intro">
+        <h3>Tu dieta, sin pensar qué cocinar</h3>
+        <p>Guardas las cantidades que te marcó tu nutricionista y las comidas que haces con ellas. Al abrir, ves <strong>lo que te toca hoy</strong> — la app ya sabe si entrenas o descansas.</p>
+      </div>
+      <button class="btn primary block" id="nutWizard">${UI.icon('plus', 15)} Empezar paso a paso</button>
+      <p class="field-hint">Te voy guiando. En dos minutos tienes tu primera comida y ya te sirve.</p>
+      <div class="nut-or"><span>o si tienes el plan en un PDF</span></div>
+      <button class="btn ghost block" id="nutImport">${UI.icon('chat', 15)} Crear desde un documento <span class="beta-tag">beta</span></button>
+      <button class="btn ${_pidioPrompt ? 'primary' : 'ghost'} block" id="nutPaste">${UI.icon('upload', 15)} Pegar el resultado de la IA</button>
     </div>`;
   }
 
+  // ---------- PANTALLA DE HOY: tomas con tarjetas de comida ----------
   function planHTML(app) {
     const vs = _plan.variantes || [];
     const auto = varianteDeHoy(_plan, app);
     const vId = _varianteId || (auto && auto.id) || (vs[0] && vs[0].id);
     const v = vs.find(x => x.id === vId) || vs[0];
-
     const tomas = (_plan.tomas || []).slice().sort((a, b) => (a.orden || 0) - (b.orden || 0));
-    const cuerpo = tomas.map(t => tomaHTML(t, vId)).join('');
+
+    const cuerpo = tomas.map(t => {
+      const cards = (t.opciones || []).map(op => `
+        <button class="meal-card" data-open-op="${UI.esc(t.id)}|${UI.esc(op.id)}">
+          <span class="meal-name">${UI.esc(op.nombre || 'Comida')}</span>
+          <span class="meal-sub">${UI.esc(resumenComida(op) || 'Sin alimentos todavía')}</span>
+          ${op.preparacion ? `<span class="meal-flag">${UI.icon('book', 11)} con preparación</span>` : ''}
+          <span class="meal-go">›</span>
+        </button>`).join('');
+      return `<div class="nut-toma">
+        <div class="nut-toma-lbl">${UI.esc(t.nombre)}<button class="nut-x" data-rm-toma="${UI.esc(t.id)}" title="Borrar toma">×</button></div>
+        <div class="meal-list">${cards || '<p class="dim" style="font-size:13px">Todavía no hay comidas aquí.</p>'}</div>
+        <button class="btn ghost small" data-add-op="${UI.esc(t.id)}">+ Añadir comida</button>
+      </div>`;
+    }).join('');
 
     const reglas = (_plan.reglas || []).length
       ? `<div class="nut-reglas"><div class="card-label">A tener en cuenta</div><ul>${_plan.reglas.map(r => `<li>${UI.esc(r.texto)}</li>`).join('')}</ul></div>` : '';
     const sup = (_plan.suplementos || []).length
       ? `<div class="nut-reglas"><div class="card-label">Suplementación</div><ul>${_plan.suplementos.map(x => `<li><strong>${UI.esc(x.nombre)}</strong>${x.cantidad ? ` · ${UI.esc(x.cantidad)}` : ''}${x.nota ? ` <span class="dim">${UI.esc(x.nota)}</span>` : ''}</li>`).join('')}</ul></div>` : '';
     const dudas = (_plan.dudas || []).length
-      ? `<div class="nut-dudas"><div class="card-label">Dudas al importar</div><ul>${_plan.dudas.map(d => `<li>${UI.esc(d)}</li>`).join('')}</ul><p class="field-hint">Revísalo con tu documento delante y corrígelo si hace falta.</p></div>` : '';
+      ? `<div class="nut-dudas"><div class="card-label">Dudas al importar</div><ul>${_plan.dudas.map(d => `<li>${UI.esc(d)}</li>`).join('')}</ul></div>` : '';
 
     return `<div class="section">
       <div class="nut-head">
         <div class="nut-head-txt"><strong>${UI.esc(_plan.nombre || 'Mi pauta')}</strong><span class="dim">${UI.esc(UI.fmtDate(DB.todayISO()))}</span></div>
         ${vs.length > 1 ? `<button class="nut-variant" id="nutVariant">${UI.esc(v ? v.nombre : '')} ▾</button>` : (v ? `<span class="nut-variant static">${UI.esc(v.nombre)}</span>` : '')}
       </div>
-      ${cuerpo || '<div class="empty-state"><p class="dim">La pauta no tiene tomas.</p></div>'}
+      ${cuerpo || '<div class="empty-state"><p class="dim">Tu pauta está vacía.</p></div>'}
+      <button class="btn ghost block" id="nutAddToma">${UI.icon('plus', 15)} Añadir toma (desayuno, cena…)</button>
       ${reglas}${sup}${dudas}
-      ${_pidioPrompt ? `<button class="btn primary block" id="nutPaste">${UI.icon('upload', 15)} Pegar el resultado de la IA</button>` : ''}
-      ${_editando ? `<button class="btn ghost block" id="nutAddToma">${UI.icon('plus', 15)} Añadir toma</button>` : ''}
       <div class="detail-toolbar">
-        <button class="btn ${_editando ? 'primary' : 'ghost'}" id="nutEdit">${UI.icon('edit', 15)} ${_editando ? 'Terminar' : 'Editar'}</button>
         <button class="btn ghost" id="nutImport">${UI.icon('chat', 15)} Reimportar <span class="beta-tag">beta</span></button>
         <button class="btn ghost" id="nutShare">${UI.icon('upload', 15)} Compartir</button>
         <button class="btn ghost danger" id="nutDel">${UI.icon('trash', 15)} Borrar pauta</button>
@@ -145,85 +156,223 @@ const VNutrition = (() => {
     </div>`;
   }
 
-  function tomaHTML(t, vId) {
-    const ops = t.opciones || [];
-    if (!ops.length && !_editando) return '';
-    if (!ops.length) {
-      return `<div class="nut-toma">
-        <div class="nut-toma-lbl">${UI.esc(t.nombre)}<button class="nut-x" data-rm-toma="${UI.esc(t.id)}">×</button></div>
-        <button class="btn ghost small" data-add-op="${UI.esc(t.id)}">+ Añadir opción</button>
-      </div>`;
-    }
-    const opId = _abierta[t.id] || ops[0].id;
-    const op = ops.find(o => o.id === opId) || ops[0];
-    const tabs = ops.length > 1
-      ? `<div class="nut-ops">${ops.map(o => `<button class="nut-op${o.id === op.id ? ' sel' : ''}" data-toma="${UI.esc(t.id)}" data-op="${UI.esc(o.id)}">${UI.esc(o.nombre || 'Opción')}</button>`).join('')}</div>`
-      : '';
+  // ---------- DETALLE DE UNA COMIDA (la tarjeta abierta) ----------
+  function abrirComida(app, tomaId, opId) {
+    const { toma, opcion: op } = ref(tomaId, opId);
+    if (!toma || !op) { app.render(); return; }
+    const vs = _plan.variantes || [];
+    const vId = _varianteId || (varianteDeHoy(_plan, app) || {}).id || (vs[0] && vs[0].id);
     const filas = (op.grupos || []).map(g => {
       const alts = g.alternativas || [];
       if (!alts.length) return '';
-      const key = `${t.id}|${g.id}`;
-      const elegido = alts.find(a => a.alimento === _elegido[key]) || alts[0];
-      const otras = alts.filter(a => a !== elegido);
-      const ed = _editando
-        ? `<button class="nut-alt" data-ed-ali="${UI.esc(t.id)}|${UI.esc(op.id)}|${UI.esc(g.id)}|${UI.esc(elegido.alimento)}">${UI.icon('edit', 12)} editar</button>
-           <button class="nut-alt" data-add-alt="${UI.esc(t.id)}|${UI.esc(op.id)}|${UI.esc(g.id)}">+ equivalente</button>` : '';
+      const key = `${op.id}|${g.id}`;
+      const el = alts.find(a => a.alimento === _elegido[key]) || alts[0];
+      const otras = alts.filter(a => a !== el);
+      const c = cantidadDe(el, vId) || {};
       return `<div class="nut-row">
         <div class="nut-line">
-          <span class="nut-food">${UI.esc(elegido.alimento)}</span>
+          <span class="nut-food">${UI.esc(el.alimento)}</span>
           <span class="nut-dots"></span>
-          <span class="nut-qty">${UI.esc(cantidadTexto(elegido, vId) || '—')}</span>
+          <span class="nut-qty">${UI.esc(cantidadTexto(el, vId) || '—')}</span>
+          <button class="nut-mini" data-ed-ali="${UI.esc(g.id)}|${UI.esc(el.alimento)}" title="Editar">${UI.icon('edit', 13)}</button>
         </div>
-        ${(elegido.cantidades && elegido.cantidades[vId] && elegido.cantidades[vId].equivale) ? `<div class="nut-eq">≡ ${UI.esc(elegido.cantidades[vId].equivale)}</div>` : ''}
-        ${(otras.length || ed) ? `<div class="nut-swap">${otras.length ? '⇄ ' : ''}${otras.map(a => `<button class="nut-alt" data-key="${UI.esc(key)}" data-alt="${UI.esc(a.alimento)}">${UI.esc(a.alimento)}</button>`).join('')}${ed}</div>` : ''}
+        ${c.equivale ? `<div class="nut-eq">≡ ${UI.esc(c.equivale)}</div>` : ''}
+        <div class="nut-swap">
+          ${otras.length ? `<span class="nut-swap-lbl">Puedes cambiarlo por:</span>${otras.map(a => `<button class="nut-alt" data-key="${UI.esc(key)}" data-alt="${UI.esc(a.alimento)}">${UI.esc(a.alimento)}</button>`).join('')}` : ''}
+          <button class="nut-alt add" data-add-alt="${UI.esc(g.id)}">+ cambio posible</button>
+        </div>
       </div>`;
     }).join('');
-    return `<div class="nut-toma">
-      <div class="nut-toma-lbl">${UI.esc(t.nombre)}${_editando ? `<button class="nut-x" data-rm-toma="${UI.esc(t.id)}">×</button>` : ''}</div>
-      ${tabs}
-      ${filas}
-      ${_editando ? `<div class="nut-edit-row">
-        <button class="btn ghost small" data-add-ali="${UI.esc(t.id)}|${UI.esc(op.id)}">+ Alimento</button>
-        <button class="btn ghost small" data-add-op="${UI.esc(t.id)}">+ Opción</button>
-      </div>` : ''}
-    </div>`;
-  }
 
-  // ---------- EDICIÓN MANUAL ----------
-  const UNIDADES = ['g', 'ml', 'unidad', 'pieza', 'ración', 'cucharada', 'puñado', 'lata', 'onza'];
-  const TOMAS_SUGERIDAS = ['Desayuno', 'Media mañana', 'Almuerzo', 'Merienda', 'Cena', 'Recena'];
-
-  async function guardar(app) {
-    _plan.userId = app.activeUser.id;
-    await DB.saveNutrition(_plan);
-    app.render();
-  }
-
-  function crearManual(app) {
     UI.modal({
-      title: 'Empezar a mano',
-      bodyHTML: `<div id="nutNew">
-        ${UI.field('Nombre de la pauta', UI.input('nombre', '', { placeholder: 'Ej: Mi plan de alimentación' }))}
-        <label class="metric-opt"><input type="checkbox" id="nutDias" checked><span>Como distinto los días de entreno y los de descanso</span></label>
-        <p class="field-hint">Si lo marcas, cada alimento guardará dos cantidades y la app elegirá sola según tu plan de entreno.</p>
-      </div>`,
+      title: op.nombre || 'Comida',
+      size: 'wide',
+      bodyHTML: `
+        <p class="modal-text dim">${UI.esc(toma.nombre)}${vs.length > 1 ? ` · ${UI.esc((vs.find(x => x.id === vId) || {}).nombre || '')}` : ''}</p>
+        ${filas || '<p class="modal-text dim">Esta comida todavía no tiene alimentos.</p>'}
+        <button class="btn ghost small block" id="nutAddAli">+ Añadir alimento</button>
+        <div class="card-label" style="margin-top:16px">Cómo se hace</div>
+        <textarea class="inp" id="nutPrep2" rows="4" placeholder="Ej: sofríes la cebolla, añades el arroz…">${UI.esc(op.preparacion || '')}</textarea>
+        <p class="field-hint">Opcional. Es lo que te evita pensar qué cocinar cuando la abras.</p>`,
+      actions: [
+        { label: 'Borrar comida', kind: 'danger', onClick: async () => {
+          const i = toma.opciones.indexOf(op);
+          if (i >= 0) toma.opciones.splice(i, 1);
+          await guardar(app); UI.toast('Comida borrada');
+        } },
+        { label: 'Duplicar', kind: 'ghost', onClick: async (root) => {
+          const copia = JSON.parse(JSON.stringify(op));
+          copia.id = DB.uid('o'); copia.nombre = `${op.nombre} (copia)`;
+          copia.preparacion = (root.querySelector('#nutPrep2').value || '').trim() || undefined;
+          toma.opciones.push(copia);
+          await guardar(app);
+          UI.toast('Duplicada · cámbiale el nombre y la preparación');
+        } },
+        { label: 'Guardar', kind: 'primary', onClick: async (root) => {
+          op.preparacion = (root.querySelector('#nutPrep2').value || '').trim() || undefined;
+          await guardar(app);
+        } },
+      ],
+      onMount: (root) => {
+        root.querySelectorAll('[data-alt]').forEach(b => b.addEventListener('click', () => {
+          _elegido[b.dataset.key] = b.dataset.alt;
+          UI.closeModal(root); abrirComida(app, tomaId, opId);
+        }));
+        root.querySelector('#nutAddAli').addEventListener('click', () => {
+          UI.closeModal(root); editAlimento(app, { tomaId, opId });
+        });
+        root.querySelectorAll('[data-add-alt]').forEach(b => b.addEventListener('click', () => {
+          UI.closeModal(root); editAlimento(app, { tomaId, opId, grupoId: b.dataset.addAlt });
+        }));
+        root.querySelectorAll('[data-ed-ali]').forEach(b => b.addEventListener('click', () => {
+          const [gid, nombre] = b.dataset.edAli.split('|');
+          UI.closeModal(root); editAlimento(app, { tomaId, opId, grupoId: gid, altNombre: nombre });
+        }));
+      },
+    });
+  }
+
+  // ---------- ASISTENTE DE PRIMEROS PASOS ----------
+  // En vez de soltar al usuario en un editor vacío, se le lleva de la mano hasta
+  // tener UNA comida completa, que es cuando la sección ya sirve para algo.
+  function wizard(app) {
+    UI.modal({
+      title: 'Paso 1 de 3 · Tu pauta',
+      bodyHTML: `<p class="modal-text">Vamos a montar tu primera comida. Son tres pasos y luego puedes seguir añadiendo cuando quieras.</p>
+        ${UI.field('¿Cómo la llamamos?', UI.input('nombre', 'Mi pauta', { placeholder: 'Mi pauta' }))}
+        <label class="metric-opt"><input type="checkbox" id="nutDias" checked><span>Como distinto los días que entreno</span></label>
+        <p class="field-hint">Si lo marcas, cada alimento guardará dos cantidades y la app enseñará la que toque mirando tu plan de entreno.</p>`,
       actions: [
         { label: 'Cancelar', kind: 'ghost' },
-        { label: 'Crear', kind: 'primary', onClick: async (root) => {
+        { label: 'Siguiente', kind: 'primary', onClick: async (root) => {
           const nombre = (root.querySelector('input[name="nombre"]').value || '').trim() || 'Mi pauta';
           const dos = root.querySelector('#nutDias').checked;
           const variantes = dos
             ? [{ id: 'v_desc', nombre: 'Día de descanso', match: { porTipoDia: ['rest', 'light'] } },
                { id: 'v_ent', nombre: 'Día de entrenamiento', match: { porTipoDia: ['strong', 'moderate'] } }]
             : [{ id: 'v_uni', nombre: 'Todos los días', match: null }];
-          const previas = await DB.nutritionOf(app.activeUser.id);
-          for (const x of previas) { x.isPrimary = false; await DB.saveNutrition(x); }
+          for (const x of await DB.nutritionOf(app.activeUser.id)) { x.isPrimary = false; await DB.saveNutrition(x); }
           _plan = { id: DB.uid('nut'), userId: app.activeUser.id, isPrimary: true, createdAt: Date.now(),
                     schemaVersion: SCHEMA_VERSION, nombre, tipoDetectado: 'intercambios',
                     variantes, tomas: [], reglas: [], suplementos: [], dudas: [] };
-          _editando = true; _abierta = {}; _elegido = {}; _varianteId = null;
+          await DB.saveNutrition(_plan);
+          setTimeout(() => wizardToma(app), 250);
+        } },
+      ],
+    });
+  }
+
+  function wizardToma(app) {
+    UI.modal({
+      title: 'Paso 2 de 3 · ¿Qué comida?',
+      bodyHTML: `<p class="modal-text">Elige por cuál empezamos. Da igual el orden: puedes añadir el resto después.</p>
+        <div class="effort-pick">${TOMAS_SUGERIDAS.map(t => `<button type="button" class="effort-opt" data-sug="${UI.esc(t)}">${UI.esc(t)}</button>`).join('')}</div>
+        ${UI.field('O escríbela', UI.input('nombre', '', { placeholder: 'Recena, pre-entreno…' }))}`,
+      actions: [{ label: 'Cancelar', kind: 'ghost' }],
+      onMount: (root) => {
+        const ir = async (n) => {
+          if (!n) { UI.toast('Elige una', 'err'); return; }
+          const t = { id: DB.uid('t'), nombre: n, orden: (_plan.tomas.length + 1), opciones: [] };
+          _plan.tomas.push(t);
+          await DB.saveNutrition(_plan);
+          UI.closeModal(root);
+          setTimeout(() => wizardComida(app, t), 250);
+        };
+        root.querySelectorAll('[data-sug]').forEach(b => b.addEventListener('click', () => ir(b.dataset.sug)));
+        const inp = root.querySelector('input[name="nombre"]');
+        inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') ir(inp.value.trim()); });
+      },
+    });
+  }
+
+  function wizardComida(app, toma) {
+    UI.modal({
+      title: `Paso 3 de 3 · ${UI.esc(toma.nombre)}`,
+      bodyHTML: `<p class="modal-text">Ponle nombre a un plato que hagas para esta comida. Luego le añadirás los alimentos con sus gramos.</p>
+        ${UI.field('Nombre del plato', UI.input('nombre', '', { placeholder: 'Ej: Arroz con pollo, Tostada con pavo…' }))}`,
+      actions: [
+        { label: 'Cancelar', kind: 'ghost' },
+        { label: 'Crear', kind: 'primary', onClick: async (root) => {
+          const n = (root.querySelector('input[name="nombre"]').value || '').trim();
+          if (!n) { UI.toast('Ponle un nombre', 'err'); return false; }
+          const op = { id: DB.uid('o'), nombre: n, grupos: [] };
+          toma.opciones.push(op);
+          await DB.saveNutrition(_plan);
+          app.render();
+          setTimeout(() => editAlimento(app, { tomaId: toma.id, opId: op.id, primero: true }), 300);
+        } },
+      ],
+    });
+  }
+
+  // ---------- ALTA / EDICIÓN DE UN ALIMENTO ----------
+  async function guardar(app) {
+    _plan.userId = app.activeUser.id;
+    await DB.saveNutrition(_plan);
+    app.render();
+  }
+
+  function editAlimento(app, { tomaId, opId, grupoId, altNombre, primero }) {
+    const { toma, opcion, grupo, alt } = ref(tomaId, opId, grupoId, altNombre);
+    if (!toma || !opcion) { app.render(); return; }
+    const vs = _plan.variantes || [];
+    const esNuevo = !alt;
+    const campos = vs.map(v => {
+      const c = (alt && cantidadDe(alt, v.id)) || {};
+      return `<div class="nut-qrow">
+        <span class="nut-qlbl">${UI.esc(v.nombre)}</span>
+        <input class="inp" data-q="${UI.esc(v.id)}" data-f="valor" type="number" step="0.01" inputmode="decimal" value="${c.valor == null ? '' : UI.esc(c.valor)}" placeholder="cantidad">
+        <input class="inp" data-q="${UI.esc(v.id)}" data-f="unidad" list="nutUnidades" value="${UI.esc(c.unidad || 'g')}" placeholder="g">
+      </div>`;
+    }).join('');
+    const c0 = (alt && cantidadDe(alt, vs[0] && vs[0].id)) || {};
+    UI.modal({
+      title: esNuevo ? (grupo ? 'Un cambio posible' : 'Añadir alimento') : 'Editar alimento',
+      bodyHTML: `<div id="nutAli">
+        ${primero ? `<p class="modal-text">Ya casi. Añade el primer alimento de <strong>${UI.esc(opcion.nombre)}</strong> con la cantidad que te marcó tu nutricionista.</p>` : ''}
+        ${grupo && esNuevo ? `<p class="modal-text">Un alimento que puedes poner <strong>en lugar de ${UI.esc((grupo.alternativas[0] || {}).alimento || '')}</strong> cuando no lo tengas. Pon su cantidad equivalente.</p>` : ''}
+        ${UI.field('Alimento', UI.input('alimento', alt ? alt.alimento : '', { placeholder: 'Ej: Arroz integral' }))}
+        <span class="field-label">Cantidad</span>
+        ${campos}
+        <datalist id="nutUnidades">${UNIDADES.map(u => `<option value="${u}">`).join('')}</datalist>
+        ${UI.field('Nota (opcional)', UI.input('nota', c0.nota || '', { placeholder: 'en crudo, al gusto…' }))}
+        ${UI.field('Equivalencia (opcional)', UI.input('equivale', c0.equivale || '', { placeholder: '180 g cocido' }), 'La MISMA cantidad medida de otra forma. No es otro alimento.')}
+      </div>`,
+      actions: [
+        alt ? { label: 'Borrar', kind: 'danger', onClick: async () => {
+          const i = grupo.alternativas.indexOf(alt);
+          if (i >= 0) grupo.alternativas.splice(i, 1);
+          if (!grupo.alternativas.length) {
+            const gi = opcion.grupos.indexOf(grupo);
+            if (gi >= 0) opcion.grupos.splice(gi, 1);
+          }
+          await guardar(app); UI.toast('Alimento borrado');
+          setTimeout(() => abrirComida(app, tomaId, opId), 250);
+        } } : { label: 'Cancelar', kind: 'ghost' },
+        { label: primero ? 'Listo' : 'Guardar', kind: 'primary', onClick: async (root) => {
+          const nombre = (root.querySelector('input[name="alimento"]').value || '').trim();
+          if (!nombre) { UI.toast('Ponle nombre al alimento', 'err'); return false; }
+          const nota = (root.querySelector('input[name="nota"]').value || '').trim();
+          const equivale = (root.querySelector('input[name="equivale"]').value || '').trim();
+          const cantidades = {};
+          vs.forEach(v => {
+            const val = root.querySelector(`[data-q="${v.id}"][data-f="valor"]`).value;
+            const uni = (root.querySelector(`[data-q="${v.id}"][data-f="unidad"]`).value || '').trim();
+            if (val === '' && !nota) return;
+            const c = { valor: val === '' ? null : parseFloat(val), unidad: uni };
+            if (nota) c.nota = nota;
+            if (equivale) c.equivale = equivale;
+            cantidades[v.id] = c;
+          });
+          if (alt) { alt.alimento = nombre; alt.cantidades = cantidades; }
+          else {
+            const nuevo = { alimento: nombre, cantidades };
+            if (grupo) grupo.alternativas.push(nuevo);
+            else opcion.grupos.push({ id: DB.uid('g'), nombre, alternativas: [nuevo] });
+          }
           await guardar(app);
-          UI.toast('Pauta creada · añade tu primera toma');
+          if (primero) UI.toast('¡Listo! Ya tienes tu primera comida');
+          setTimeout(() => abrirComida(app, tomaId, opId), primero ? 350 : 250);
         } },
       ],
     });
@@ -233,7 +382,7 @@ const VNutrition = (() => {
     UI.modal({
       title: 'Nueva toma',
       bodyHTML: `<div class="effort-pick">${TOMAS_SUGERIDAS.map(t => `<button type="button" class="effort-opt" data-sug="${UI.esc(t)}">${UI.esc(t)}</button>`).join('')}</div>
-        ${UI.field('Nombre', UI.input('nombre', '', { placeholder: 'Desayuno, Almuerzo…' }))}`,
+        ${UI.field('Nombre', UI.input('nombre', '', { placeholder: 'Desayuno, Cena…' }))}`,
       actions: [
         { label: 'Cancelar', kind: 'ghost' },
         { label: 'Añadir', kind: 'primary', onClick: async (root) => {
@@ -249,92 +398,28 @@ const VNutrition = (() => {
     });
   }
 
-  function addOpcion(app, toma) {
+  function addComida(app, toma) {
     UI.modal({
-      title: `Nueva opción · ${UI.esc(toma.nombre)}`,
-      bodyHTML: `${UI.field('Nombre', UI.input('nombre', '', { placeholder: 'Ej: Arroz con pollo' }))}
-        <p class="field-hint">Una opción es una comida completa entre las que eliges ese día.</p>`,
+      title: `Nueva comida · ${UI.esc(toma.nombre)}`,
+      bodyHTML: `${UI.field('Nombre del plato', UI.input('nombre', '', { placeholder: 'Ej: Lentejas con arroz' }))}
+        <p class="field-hint">Es una de las cosas que puedes comer en esta toma. Después le añades los alimentos.</p>`,
       actions: [
         { label: 'Cancelar', kind: 'ghost' },
-        { label: 'Añadir', kind: 'primary', onClick: async (root) => {
-          const n = (root.querySelector('input[name="nombre"]').value || '').trim() || `Opción ${toma.opciones.length + 1}`;
-          const id = DB.uid('o');
-          toma.opciones.push({ id, nombre: n, grupos: [] });
-          _abierta[toma.id] = id;
+        { label: 'Crear', kind: 'primary', onClick: async (root) => {
+          const n = (root.querySelector('input[name="nombre"]').value || '').trim();
+          if (!n) { UI.toast('Ponle un nombre', 'err'); return false; }
+          const op = { id: DB.uid('o'), nombre: n, grupos: [] };
+          toma.opciones.push(op);
+          const tid = toma.id, oid = op.id;
           await guardar(app);
-        } },
-      ],
-    });
-  }
-
-  // Alta y edición de un alimento. Con `grupo` se añade como ALTERNATIVA
-  // intercambiable; sin él crea un grupo nuevo. Con `alt`, se edita.
-  function editAlimento(app, { toma, opcion, grupo, alt }) {
-    const vs = _plan.variantes || [];
-    const esNuevo = !alt;
-    const campos = vs.map(v => {
-      const c = (alt && alt.cantidades && alt.cantidades[v.id]) || {};
-      return `<div class="nut-qrow">
-        <span class="nut-qlbl">${UI.esc(v.nombre)}</span>
-        <input class="inp" data-q="${UI.esc(v.id)}" data-f="valor" type="number" step="0.01" value="${c.valor == null ? '' : UI.esc(c.valor)}" placeholder="cantidad">
-        <input class="inp" data-q="${UI.esc(v.id)}" data-f="unidad" list="nutUnidades" value="${UI.esc(c.unidad || '')}" placeholder="g">
-      </div>`;
-    }).join('');
-    const c0 = (alt && alt.cantidades && alt.cantidades[vs[0] && vs[0].id]) || {};
-    UI.modal({
-      title: esNuevo ? (grupo ? 'Alternativa equivalente' : 'Nuevo alimento') : 'Editar alimento',
-      bodyHTML: `<div id="nutAli">
-        ${grupo && esNuevo ? `<p class="modal-text dim">Se añade a <strong>${UI.esc(grupo.nombre || 'el grupo')}</strong>: podrás cambiar entre ellos según lo que tengas.</p>` : ''}
-        ${UI.field('Alimento', UI.input('alimento', alt ? alt.alimento : '', { placeholder: 'Ej: Arroz integral' }))}
-        ${(esNuevo && !grupo) ? UI.field('Grupo (opcional)', UI.input('grupo', '', { placeholder: 'Hidrato, Proteína…' }), 'Sirve para agrupar alimentos intercambiables entre sí.') : ''}
-        <span class="field-label">Cantidad</span>
-        ${campos}
-        <datalist id="nutUnidades">${UNIDADES.map(u => `<option value="${u}">`).join('')}</datalist>
-        ${UI.field('Nota (opcional)', UI.input('nota', c0.nota || '', { placeholder: 'en crudo, al gusto…' }))}
-        ${UI.field('Equivalencia (opcional)', UI.input('equivale', c0.equivale || '', { placeholder: '180 g cocido' }), 'La MISMA cantidad medida de otra forma, no otro alimento.')}
-      </div>`,
-      actions: [
-        alt ? { label: 'Borrar', kind: 'danger', onClick: async () => {
-          const i = grupo.alternativas.indexOf(alt);
-          if (i >= 0) grupo.alternativas.splice(i, 1);
-          if (!grupo.alternativas.length) {
-            const gi = opcion.grupos.indexOf(grupo);
-            if (gi >= 0) opcion.grupos.splice(gi, 1);
-          }
-          await guardar(app); UI.toast('Alimento borrado');
-        } } : { label: 'Cancelar', kind: 'ghost' },
-        { label: 'Guardar', kind: 'primary', onClick: async (root) => {
-          const nombre = (root.querySelector('input[name="alimento"]').value || '').trim();
-          if (!nombre) { UI.toast('Ponle nombre al alimento', 'err'); return false; }
-          const nota = (root.querySelector('input[name="nota"]').value || '').trim();
-          const equivale = (root.querySelector('input[name="equivale"]').value || '').trim();
-          const cantidades = {};
-          vs.forEach(v => {
-            const val = root.querySelector(`[data-q="${v.id}"][data-f="valor"]`).value;
-            const uni = (root.querySelector(`[data-q="${v.id}"][data-f="unidad"]`).value || '').trim();
-            if (val === '' && !uni && !nota) return;   // esa variante no lleva este alimento
-            const c = { valor: val === '' ? null : parseFloat(val), unidad: uni };
-            if (nota) c.nota = nota;
-            if (equivale) c.equivale = equivale;
-            cantidades[v.id] = c;
-          });
-          if (alt) { alt.alimento = nombre; alt.cantidades = cantidades; }
-          else {
-            const nuevo = { alimento: nombre, cantidades };
-            if (grupo) grupo.alternativas.push(nuevo);
-            else {
-              const gn = (root.querySelector('input[name="grupo"]') || {}).value || '';
-              opcion.grupos.push({ id: DB.uid('g'), nombre: gn.trim() || nombre, alternativas: [nuevo] });
-            }
-          }
-          await guardar(app);
+          setTimeout(() => editAlimento(app, { tomaId: tid, opId: oid, primero: true }), 300);
         } },
       ],
     });
   }
 
   async function borrarToma(app, toma) {
-    const ok = await UI.confirm({ title: 'Borrar toma', message: `Se borrará "${toma.nombre}" con todas sus opciones.`, confirmLabel: 'Borrar', danger: true });
+    const ok = await UI.confirm({ title: 'Borrar toma', message: `Se borrará "${toma.nombre}" con todas sus comidas.`, confirmLabel: 'Borrar', danger: true });
     if (!ok) return;
     const i = _plan.tomas.indexOf(toma);
     if (i >= 0) _plan.tomas.splice(i, 1);
@@ -351,49 +436,16 @@ const VNutrition = (() => {
       UI.modal({
         title: 'Sigue abierta en otro sitio',
         bodyHTML: `<p class="modal-text">No se ha podido ampliar el almacén porque Traindía sigue abierta en otro lado.</p>
-          <p class="modal-text dim">Cierra las demás pestañas y la app de la pantalla de inicio, y vuelve a intentarlo. Tus datos no corren ningún riesgo.</p>`,
+          <p class="modal-text dim">Cierra las demás pestañas y la app de la pantalla de inicio, y vuelve a intentarlo.</p>`,
         actions: [{ label: 'Entendido', kind: 'primary', onClick: () => location.reload() }],
       });
     });
 
+    const wiz = root.querySelector('#nutWizard');
+    if (wiz) wiz.addEventListener('click', () => wizard(app));
     root.querySelectorAll('#nutImport').forEach(b => b.addEventListener('click', () => importarFlow(app)));
-
     const paste = root.querySelector('#nutPaste');
     if (paste) paste.addEventListener('click', () => pegarFlow(app));
-    const manual = root.querySelector('#nutManual');
-    if (manual) manual.addEventListener('click', () => crearManual(app));
-
-    // ---- edición ----
-    const edit = root.querySelector('#nutEdit');
-    if (edit) edit.addEventListener('click', () => { _editando = !_editando; app.render(); });
-    const addT = root.querySelector('#nutAddToma');
-    if (addT) addT.addEventListener('click', () => addToma(app));
-
-    const tomaPorId = (id) => (_plan.tomas || []).find(t => t.id === id);
-    root.querySelectorAll('[data-add-op]').forEach(b => b.addEventListener('click', () => {
-      const t = tomaPorId(b.dataset.addOp); if (t) addOpcion(app, t);
-    }));
-    root.querySelectorAll('[data-rm-toma]').forEach(b => b.addEventListener('click', () => {
-      const t = tomaPorId(b.dataset.rmToma); if (t) borrarToma(app, t);
-    }));
-    root.querySelectorAll('[data-add-ali]').forEach(b => b.addEventListener('click', () => {
-      const [tid, oid] = b.dataset.addAli.split('|');
-      const t = tomaPorId(tid); const o = t && (t.opciones || []).find(x => x.id === oid);
-      if (o) editAlimento(app, { toma: t, opcion: o });
-    }));
-    root.querySelectorAll('[data-add-alt]').forEach(b => b.addEventListener('click', () => {
-      const [tid, oid, gid] = b.dataset.addAlt.split('|');
-      const t = tomaPorId(tid); const o = t && (t.opciones || []).find(x => x.id === oid);
-      const g = o && (o.grupos || []).find(x => x.id === gid);
-      if (g) editAlimento(app, { toma: t, opcion: o, grupo: g });
-    }));
-    root.querySelectorAll('[data-ed-ali]').forEach(b => b.addEventListener('click', () => {
-      const [tid, oid, gid, nombre] = b.dataset.edAli.split('|');
-      const t = tomaPorId(tid); const o = t && (t.opciones || []).find(x => x.id === oid);
-      const g = o && (o.grupos || []).find(x => x.id === gid);
-      const a = g && (g.alternativas || []).find(x => x.alimento === nombre);
-      if (a) editAlimento(app, { toma: t, opcion: o, grupo: g, alt: a });
-    }));
 
     const variant = root.querySelector('#nutVariant');
     if (variant) variant.addEventListener('click', () => {
@@ -405,19 +457,26 @@ const VNutrition = (() => {
       });
     });
 
-    root.querySelectorAll('[data-op]').forEach(b => b.addEventListener('click', () => {
-      _abierta[b.dataset.toma] = b.dataset.op; app.render();
+    const tomaPorId = (id) => (_plan.tomas || []).find(t => t.id === id);
+    root.querySelectorAll('[data-open-op]').forEach(b => b.addEventListener('click', () => {
+      const [tid, oid] = b.dataset.openOp.split('|');
+      abrirComida(app, tid, oid);
     }));
-    root.querySelectorAll('[data-alt]').forEach(b => b.addEventListener('click', () => {
-      _elegido[b.dataset.key] = b.dataset.alt; app.render();
+    root.querySelectorAll('[data-add-op]').forEach(b => b.addEventListener('click', () => {
+      const t = tomaPorId(b.dataset.addOp); if (t) addComida(app, t);
     }));
+    root.querySelectorAll('[data-rm-toma]').forEach(b => b.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const t = tomaPorId(b.dataset.rmToma); if (t) borrarToma(app, t);
+    }));
+    const addT = root.querySelector('#nutAddToma');
+    if (addT) addT.addEventListener('click', () => addToma(app));
 
     const share = root.querySelector('#nutShare');
     if (share) share.addEventListener('click', () => VData.exportNutrition(app, _plan));
-
     const del = root.querySelector('#nutDel');
     if (del) del.addEventListener('click', async () => {
-      const ok = await UI.confirm({ title: 'Borrar pauta', message: 'Se borrará tu pauta de alimentación. Las recetas que dependan de ella también.', confirmLabel: 'Borrar', danger: true });
+      const ok = await UI.confirm({ title: 'Borrar pauta', message: 'Se borrará tu pauta de alimentación entera.', confirmLabel: 'Borrar', danger: true });
       if (!ok) return;
       await DB.del('nutrition', _plan.id);
       _plan = null; app.render(); UI.toast('Pauta borrada');
