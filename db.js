@@ -40,9 +40,20 @@ const DB = (() => {
           }
         }
       };
-      req.onsuccess = () => resolve(req.result);
+      // Si otra pestaña/ventana tiene la base abierta con una versión anterior, la
+      // subida de versión se queda BLOQUEADA y sin esto la promesa no se resolvía
+      // nunca: la app se quedaba en blanco para siempre. Ahora falla con mensaje.
+      req.onblocked = () => reject(new Error('BLOCKED'));
+      req.onsuccess = () => {
+        const db = req.result;
+        // Clave para que esto no vuelva a pasar: si OTRA instancia pide subir de
+        // versión, esta cierra su conexión en vez de bloquearla.
+        db.onversionchange = () => { try { db.close(); } catch (e) {} dbPromise = null; };
+        resolve(db);
+      };
       req.onerror = () => reject(req.error);
     });
+    dbPromise.catch(() => { dbPromise = null; }); // permite reintentar tras un fallo
     return dbPromise;
   }
 
