@@ -228,17 +228,41 @@ const VNutrition = (() => {
         if (!alts.length) return '';
         const conCant = alts.filter(a => (a.cantidades || {})[vId]);
         const lista = conCant.length ? conCant : alts;
-        const el = lista[0];
-        const otras = lista.slice(1);
-        const c = cantidadDe(el, vId) || {};
+
+        // Una sola posibilidad: línea normal.
+        if (lista.length === 1) {
+          const el = lista[0];
+          const c = cantidadDe(el, vId) || {};
+          const pie = [notaDe(el, vId), c.equivale ? `≡ ${c.equivale}` : ''].filter(Boolean).join(' · ');
+          return `<div class="nut-row">
+            <div class="nut-line"><span class="nut-food">${UI.esc(el.alimento)}</span><span class="nut-dots"></span><span class="nut-qty">${UI.esc(cantidadTexto(el, vId) || '—')}</span></div>
+            ${pie ? `<div class="nut-eq">${UI.esc(pie)}</div>` : ''}
+          </div>`;
+        }
+
+        // Varias: son EQUIVALENTES, ninguna manda. Si comparten cantidad, se
+        // enseña una vez arriba; si no, cada una lleva la suya.
+        const textos = lista.map(a => cantidadTexto(a, vId));
+        const mismaCantidad = textos.every(t => t === textos[0]);
+        const nombreGrupo = g.nombre || 'Elige uno';
+        if (mismaCantidad) {
+          const c = cantidadDe(lista[0], vId) || {};
+          const pie = [notaDe(lista[0], vId), c.equivale ? `≡ ${c.equivale}` : ''].filter(Boolean).join(' · ');
+          return `<div class="nut-row">
+            <div class="nut-line"><span class="nut-food grupo">${UI.esc(nombreGrupo)}</span><span class="nut-dots"></span><span class="nut-qty">${UI.esc(textos[0] || '—')}</span></div>
+            ${pie ? `<div class="nut-eq">${UI.esc(pie)}</div>` : ''}
+            <div class="nut-opts">${lista.map(a => `<span class="nut-opt">${UI.esc(a.alimento)}</span>`).join('')}</div>
+            <div class="nut-opts-hint">cualquiera de estos</div>
+          </div>`;
+        }
         return `<div class="nut-row">
-          <div class="nut-line">
-            <span class="nut-food">${UI.esc(el.alimento)}</span>
-            <span class="nut-dots"></span>
-            <span class="nut-qty">${UI.esc(((el.cantidades || {})[vId] ? cantidadTexto(el, vId) : '') || '—')}</span>
-          </div>
-          ${(notaDe(el, vId) || c.equivale) ? `<div class="nut-eq">${UI.esc([notaDe(el, vId), c.equivale ? `≡ ${c.equivale}` : ''].filter(Boolean).join(' · '))}</div>` : ''}
-          ${otras.length ? `<div class="nut-swap"><span class="nut-swap-lbl">o</span>${otras.map(a => `<span class="nut-alt static">${UI.esc(a.alimento)}${(a.cantidades || {})[vId] ? ` <em>${UI.esc(cantidadTexto(a, vId))}</em>` : ''}</span>`).join('')}</div>` : ''}
+          <div class="nut-grupo-lbl">${UI.esc(nombreGrupo)} · cualquiera de estos</div>
+          ${lista.map(a => {
+            const c = cantidadDe(a, vId) || {};
+            const pie = [notaDe(a, vId), c.equivale ? `≡ ${c.equivale}` : ''].filter(Boolean).join(' · ');
+            return `<div class="nut-line igual"><span class="nut-food">${UI.esc(a.alimento)}</span><span class="nut-dots"></span><span class="nut-qty">${UI.esc(cantidadTexto(a, vId) || '—')}</span></div>
+              ${pie ? `<div class="nut-eq">${UI.esc(pie)}</div>` : ''}`;
+          }).join('')}
         </div>`;
       }).join('');
       return `<div class="pauta-card${aplica ? '' : ' off'}">
@@ -254,7 +278,6 @@ const VNutrition = (() => {
       </div>`;
     }).join('');
 
-    // todos los platos de esta comida, vengan de la opción que vengan
     // Un plato pertenece al tipo de día con el que se creó: en descanso no se ven
     // los de entreno y al revés. Los antiguos (sin tipo) se ven siempre.
     const platos = [];
