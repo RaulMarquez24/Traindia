@@ -179,7 +179,7 @@ const VNutrition = (() => {
     const conDatos = ops.filter(o => comidaAplica(o, vId));
     const op = ops.find(o => o.id === _abierta[t.id]) || conDatos[0] || ops[0];
 
-    const pestañas = `<div class="meal-tabs">${ops.map(o => {
+    const pestañas = `${ops.length > 1 ? '<div class="nut-choose">Elige una</div>' : ''}<div class="meal-tabs">${ops.map(o => {
       const aplica = comidaAplica(o, vId);
       return `<button class="meal-tab${o.id === op.id ? ' sel' : ''}${aplica ? '' : ' off'}" data-tab="${UI.esc(t.id)}|${UI.esc(o.id)}"${aplica ? '' : ' title="No aplica a este día"'}>${UI.esc(o.nombre || 'Comida')}</button>`;
     }).join('')}<button class="meal-tab add" data-add-op="${UI.esc(t.id)}">+</button></div>`;
@@ -339,6 +339,7 @@ const VNutrition = (() => {
       size: 'wide',
       bodyHTML: `
         <p class="modal-text dim">${UI.esc(toma.nombre)}${vs.length > 1 ? ` · ${UI.esc((vs.find(x => x.id === vId) || {}).nombre || '')}` : ''}</p>
+        ${UI.field('Nombre corto', UI.input('opNombre', op.nombre || '', { placeholder: 'Yogur, Pan, Legumbres…' }), 'Es la etiqueta para elegir, no el nombre de un plato.')}
         ${filas || '<p class="modal-text dim">Esta comida todavía no tiene alimentos.</p>'}
         <button class="btn ghost small block" id="nutAddAli">+ Añadir alimento</button>
         <p class="field-hint">Esto son las <strong>cantidades que te marcó tu nutricionista</strong>. Los platos que cocinas con ellas se guardan aparte, en «Con esto puedes hacerte».</p>`,
@@ -355,7 +356,11 @@ const VNutrition = (() => {
           await guardar(app);
           UI.toast('Duplicada · cámbiale el nombre');
         } },
-        { label: 'Cerrar', kind: 'primary' },
+        { label: 'Guardar', kind: 'primary', onClick: async (root) => {
+          const n = (root.querySelector('input[name="opNombre"]').value || '').trim();
+          if (n) op.nombre = n;
+          await guardar(app);
+        } },
       ],
       onMount: (root) => {
         root.querySelectorAll('[data-alt]').forEach(b => b.addEventListener('click', () => {
@@ -845,6 +850,15 @@ Si una cantidad, un alimento o una toma no está clara, NO la rellenes con lo qu
 razonable: déjala vacía y describe el problema en el array "dudas". Es una dieta real de una
 persona; un gramaje inventado puede hacer daño.
 
+# QUÉ *NO* ES UNA DUDA (muy importante: no llenes "dudas" de ruido)
+Es COMPLETAMENTE NORMAL que una opción o un alimento exista solo en uno de los tipos de día.
+Simplemente NO pongas cantidad para el día en que no figura, y NO lo menciones en "dudas".
+La app ya lo entiende y lo muestra bien. Tampoco es una duda que dos días tengan distinto
+número de opciones, ni que una opción tenga más alimentos que otra.
+Reserva "dudas" para lo que de verdad no se puede resolver leyendo el documento: texto
+ilegible, cantidades contradictorias, o una cantidad que falta donde claramente debería estar.
+Si no hay nada así, devuelve "dudas": [].
+
 # NO COPIES DATOS PERSONALES
 No incluyas nombres de pacientes, teléfonos, correos, direcciones ni el nombre del profesional.
 La app no los necesita.
@@ -871,9 +885,18 @@ devuelve {"error":"solo-macros"} y nada más.
 3. Las frases que aplican a varias tomas ("incluir siempre ensalada en comida y cena",
    "el pan debe ser integral") NO son alimentos: van en "reglas".
 
+# CÓMO NOMBRAR LAS OPCIONES (importante)
+El "nombre" de cada opción es una ETIQUETA CORTA para elegir de un vistazo, no la descripción
+de un plato. Usa el alimento principal, de una a tres palabras:
+  BIEN: "Yogur" · "Pan" · "Tortitas" · "Arroz o pasta" · "Legumbres" · "Patata"
+  MAL:  "Lácteo o bebida vegetal con café o infusión" · "Pan con grasa, proteína y fruta"
+El usuario creará después SUS PROPIOS PLATOS a partir de estas opciones (p. ej. "Yogur con
+granola" o "Risotto"), así que las opciones no deben parecer ya un plato terminado.
+
 # UNIDADES
-Usa "g", "ml", "unidad", "pieza", "ración", "cucharada" o "puñado". Si el documento dice algo
-como "al gusto" o "libre", pon valor null y ese texto en "nota".
+Usa "g", "ml", "unidad", "pieza", "ración", "cucharada" o "puñado". Si el documento no da
+cantidad (café, infusión, ensalada…), pon valor null, unidad "" y una nota BREVE: "al gusto"
+o "sin especificar". Nunca frases largas como "cantidad no especificada en el documento".
 
 # FORMATO EXACTO
 {
