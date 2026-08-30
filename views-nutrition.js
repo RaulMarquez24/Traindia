@@ -702,92 +702,199 @@ const VNutrition = (() => {
     });
   }
 
-  // El editor de una opción enseña lo que de verdad es: una lista de líneas, y
-  // cada línea uno o varios alimentos que valen lo mismo. El nombre de la línea
-  // se escribe aquí mismo (antes obligaba a abrir otro modal para ponerlo).
-  function abrirComida(app, tomaId, opId) {
-    const { toma, opcion: op } = ref(tomaId, opId);
-    if (!toma || !op) { app.render(); return; }
+  // El editor de una opción es UN SOLO modal: los alimentos se añaden y se editan
+  // aquí dentro, en la propia lista. Antes cada "+" cerraba este modal y abría
+  // otro, y se perdía el hilo de lo que estabas montando.
+  function abrirComida(app, tomaId, opId, opts) {
+    const { toma, opcion: real } = ref(tomaId, opId);
+    if (!toma || !real) { app.render(); return; }
     const vs = _plan.variantes || [];
     const vId = _varianteId || (varianteDeHoy(_plan, app) || {}).id || (vs[0] && vs[0].id);
+    // Se trabaja sobre una copia: nada se guarda hasta pulsar Guardar.
+    const op = JSON.parse(JSON.stringify(real));
+    op.grupos = op.grupos || [];
+    let abierta = null;   // "gi|ai" de la fila que se está editando
 
-    const lineas = (op.grupos || []).map(g => {
-      const alts = g.alternativas || [];
-      if (!alts.length) return '';
-      const varias = alts.length > 1;
-      const filas = alts.map(a => {
-        const c = cantidadDe(a, vId) || {};
-        return `<div class="nut-line igual">
-            <span class="nut-food">${UI.esc(a.alimento)}</span>
-            <span class="nut-dots"></span>
-            <span class="nut-qty">${UI.esc(cantidadTexto(a, vId) || '—')}</span>
-            <button class="nut-mini" data-ed-ali="${UI.esc(g.id)}|${UI.esc(a.alimento)}" title="Editar ${UI.esc(a.alimento)}">${UI.icon('edit', 13)}</button>
+    const altVacio = () => ({ alimento: '', cantidades: {} });
+    if (opts && opts.nuevo && !op.grupos.length) {
+      op.grupos.push({ id: DB.uid('g'), nombre: '', alternativas: [altVacio()] });
+      abierta = '0|0';
+    }
+
+    // ---- pintar ----
+    const filaVistaHTML = (a, gi, ai) => {
+      const c = cantidadDe(a, vId) || {};
+      const pie = [notaDe(a, vId), c.equivale ? `≡ ${c.equivale}` : ''].filter(Boolean).join(' · ');
+      return `<div class="nut-line igual">
+          <span class="nut-food">${UI.esc(a.alimento || 'Sin nombre')}</span>
+          <span class="nut-dots"></span>
+          <span class="nut-qty">${UI.esc(cantidadTexto(a, vId) || '—')}</span>
+          <button class="nut-mini" data-ed="${gi}|${ai}" title="Editar ${UI.esc(a.alimento)}">${UI.icon('edit', 13)}</button>
+        </div>
+        ${pie ? `<div class="nut-eq">${UI.esc(pie)}</div>` : ''}`;
+    };
+
+    const filaEditHTML = (a, gi, ai) => {
+      const cants = vs.map(v => cantidadDe(a, v.id) || {});
+      const puestas = cants.filter(c => c.valor != null || c.unidad);
+      const mismo = !puestas.length || (puestas.length === vs.length &&
+        cants.every(c => c.valor === cants[0].valor && (c.unidad || '') === (cants[0].unidad || '')));
+      const c0 = puestas[0] || {};
+      const fila = (id, etiqueta, c) => `<div class="nut-qrow">
+        <span class="nut-qlbl">${UI.esc(etiqueta)}</span>
+        <input class="inp" data-q="${UI.esc(id)}" data-f="valor" type="number" step="0.01" inputmode="decimal" value="${c.valor == null ? '' : UI.esc(c.valor)}" placeholder="60">
+        <input class="inp" data-q="${UI.esc(id)}" data-f="unidad" list="nutUnidades" value="${UI.esc(c.unidad || 'g')}" placeholder="g">
+      </div>`;
+      return `<div class="fila-ed">
+        <input class="inp" data-nombre value="${UI.esc(a.alimento || '')}" placeholder="Alimento. Ej: Arroz integral" autocomplete="off">
+        ${vs.length > 1 ? `<label class="metric-opt"><input type="checkbox" data-mismo${mismo ? ' checked' : ''}><span>La misma cantidad todos los días</span></label>` : ''}
+        <div data-uni${vs.length > 1 && !mismo ? ' hidden' : ''}>${fila('__uni', 'Cantidad', c0)}</div>
+        ${vs.length > 1 ? `<div data-dias${mismo ? ' hidden' : ''}>
+          ${vs.map((v, i) => fila(v.id, v.nombre, cants[i])).join('')}
+          <p class="field-hint" style="margin-top:-2px">Deja en blanco el día en que <strong>no</strong> lo tomes.</p>
+        </div>` : ''}
+        <details class="det"${(c0.nota || c0.equivale) ? ' open' : ''}>
+          <summary>Nota y equivalencia</summary>
+          <div class="det-body">
+            ${UI.field('Nota', `<input class="inp" data-nota value="${UI.esc(c0.nota || '')}" placeholder="en crudo, al gusto…">`)}
+            ${UI.field('Equivalencia', `<input class="inp" data-equivale value="${UI.esc(c0.equivale || '')}" placeholder="180 g cocido">`, 'La MISMA cantidad medida de otra forma. No es otro alimento.')}
           </div>
-          ${c.equivale || notaDe(a, vId) ? `<div class="nut-eq">${UI.esc([notaDe(a, vId), c.equivale ? `≡ ${c.equivale}` : ''].filter(Boolean).join(' · '))}</div>` : ''}`;
-      }).join('');
-      return `<div class="grp-card">
-        ${varias
-          ? `<div class="grp-head">
-               <input class="inp grp-name" data-gname="${UI.esc(g.id)}" value="${UI.esc(g.nombre || '')}" placeholder="Ponle nombre: Hidrato, Proteína…">
-             </div>
+        </details>
+        <div class="fila-ed-foot">
+          <button class="btn ghost small danger" data-quitar="${gi}|${ai}">${UI.icon('trash', 13)} Quitar</button>
+          <button class="btn primary small" data-hecho>${UI.icon('check', 13)} Hecho</button>
+        </div>
+      </div>`;
+    };
+
+    const cuerpoHTML = () => op.grupos.map((g, gi) => `<div class="grp-card">
+        ${(g.alternativas || []).length > 1
+          ? `<input class="inp grp-name" data-gname="${gi}" value="${UI.esc(g.nombre || '')}" placeholder="Ponle nombre: Hidrato, Proteína…">
              <p class="grp-hint">Cualquiera de estos, nunca los dos a la vez.</p>`
           : ''}
-        ${filas}
-        <button class="btn ghost small" data-add-alt="${UI.esc(g.id)}">${UI.icon('plus', 13)} Otro que valga lo mismo</button>
-      </div>`;
-    }).join('');
+        ${(g.alternativas || []).map((a, ai) => abierta === `${gi}|${ai}` ? filaEditHTML(a, gi, ai) : filaVistaHTML(a, gi, ai)).join('')}
+        <button class="btn ghost small" data-add-alt="${gi}">${UI.icon('plus', 13)} Otro que valga lo mismo</button>
+      </div>`).join('') || '<p class="modal-text dim">Todavía no tiene alimentos. Empieza por el primero.</p>';
+
+    // ---- leer lo que hay escrito antes de repintar o guardar ----
+    const leer = (root) => {
+      const n = (root.querySelector('input[name="opNombre"]').value || '').trim();
+      if (n) op.nombre = n;
+      root.querySelectorAll('[data-gname]').forEach(inp => {
+        const g = op.grupos[+inp.dataset.gname];
+        const v = (inp.value || '').trim();
+        if (g && v) g.nombre = v;
+      });
+      const ed = root.querySelector('.fila-ed');
+      if (!ed || !abierta) return;
+      const [gi, ai] = abierta.split('|').map(Number);
+      const a = (op.grupos[gi] || { alternativas: [] }).alternativas[ai];
+      if (!a) return;
+      a.alimento = (ed.querySelector('[data-nombre]').value || '').trim();
+      const nota = (ed.querySelector('[data-nota]').value || '').trim();
+      const equivale = (ed.querySelector('[data-equivale]').value || '').trim();
+      const dato = (id) => {
+        const val = ed.querySelector(`[data-q="${id}"][data-f="valor"]`).value;
+        const uni = (ed.querySelector(`[data-q="${id}"][data-f="unidad"]`).value || '').trim();
+        return { val, uni };
+      };
+      const chk = ed.querySelector('[data-mismo]');
+      const unico = !chk || chk.checked;
+      const cantidades = {};
+      const meter = (vid, val, uni) => {
+        if (val === '' && !uni) return;   // en blanco = ese día no se toma
+        const c = { valor: val === '' ? null : parseFloat(val), unidad: uni };
+        if (nota) c.nota = nota;
+        if (equivale) c.equivale = equivale;
+        cantidades[vid] = c;
+      };
+      if (unico) { const { val, uni } = dato('__uni'); vs.forEach(v => meter(v.id, val, uni)); }
+      else vs.forEach(v => { const { val, uni } = dato(v.id); meter(v.id, val, uni); });
+      a.cantidades = cantidades;
+    };
+
+    // Fuera lo que se quedó a medias y nombres de línea coherentes.
+    const limpiar = () => {
+      op.grupos.forEach(g => { g.alternativas = (g.alternativas || []).filter(a => a.alimento); });
+      op.grupos = op.grupos.filter(g => g.alternativas.length);
+      op.grupos.forEach(g => { if (g.alternativas.length === 1 || !g.nombre) g.nombre = g.alternativas[0].alimento; });
+    };
+
+    const volcar = () => { real.nombre = op.nombre; real.grupos = op.grupos; };
 
     UI.modal({
-      title: op.nombre || 'Opción',
+      title: real.nombre || 'Opción',
       size: 'wide',
       bodyHTML: `
         <p class="modal-text dim">${UI.esc(toma.nombre)}${vs.length > 1 ? ` · ${UI.esc((vs.find(x => x.id === vId) || {}).nombre || '')}` : ''}</p>
         ${UI.field('Cómo la llamas', UI.input('opNombre', op.nombre || '', { placeholder: 'Arroz o pasta, Legumbres…' }), 'La etiqueta que ves al elegir. No es el nombre de un plato.')}
         <div class="sec-label">Lo que lleva</div>
-        ${lineas || '<p class="modal-text dim">Todavía no tiene alimentos. Empieza por el primero.</p>'}
+        <div id="opBody">${cuerpoHTML()}</div>
         <button class="btn ghost block" id="nutAddAli">${UI.icon('plus', 15)} Añadir otro alimento</button>
+        <datalist id="nutUnidades">${UNIDADES.map(u => `<option value="${u}">`).join('')}</datalist>
         <p class="field-hint">Cada línea es una cosa que lleva la opción. Si un alimento se puede cambiar por otro —arroz o pasta—, va <strong>dentro de la misma línea</strong>.</p>`,
       actions: [
         { label: 'Borrar', kind: 'danger', onClick: async () => {
-          const i = toma.opciones.indexOf(op);
+          const i = toma.opciones.indexOf(real);
           if (i >= 0) toma.opciones.splice(i, 1);
           await guardar(app); UI.toast('Opción borrada');
         } },
         { label: 'Duplicar', kind: 'ghost', onClick: async (root) => {
-          leerNombres(root, op);
-          const copia = JSON.parse(JSON.stringify(op));
-          copia.id = DB.uid('o'); copia.nombre = `${op.nombre} (copia)`;
+          leer(root); limpiar(); volcar();
+          const copia = JSON.parse(JSON.stringify(real));
+          copia.id = DB.uid('o'); copia.nombre = `${real.nombre} (copia)`;
           toma.opciones.push(copia);
           await guardar(app);
           UI.toast('Duplicada · cámbiale el nombre');
         } },
         { label: 'Guardar', kind: 'primary', onClick: async (root) => {
-          leerNombres(root, op);
+          leer(root); limpiar();
+          if (!op.grupos.length) { UI.toast('Ponle al menos un alimento', 'err'); return false; }
+          volcar();
           await guardar(app);
         } },
       ],
       onMount: (root) => {
-        // Lo que se escribe no se pierde al saltar al modal de un alimento.
-        const saltar = (dest) => { leerNombres(root, op); UI.closeModal(root); dest(); };
-        root.querySelector('#nutAddAli').addEventListener('click', () =>
-          saltar(() => editAlimento(app, { tomaId, opId })));
-        root.querySelectorAll('[data-add-alt]').forEach(b => b.addEventListener('click', () =>
-          saltar(() => editAlimento(app, { tomaId, opId, grupoId: b.dataset.addAlt }))));
-        root.querySelectorAll('[data-ed-ali]').forEach(b => b.addEventListener('click', () => {
-          const [gid, nombre] = b.dataset.edAli.split('|');
-          saltar(() => editAlimento(app, { tomaId, opId, grupoId: gid, altNombre: nombre }));
-        }));
+        const pintar = () => {
+          root.querySelector('#opBody').innerHTML = cuerpoHTML();
+          enganchar();
+          const ed = root.querySelector('.fila-ed');
+          if (ed) { ed.scrollIntoView({ block: 'nearest' }); const i = ed.querySelector('[data-nombre]'); if (i && !i.value) i.focus(); }
+        };
+        const enganchar = () => {
+          root.querySelectorAll('[data-ed]').forEach(b => b.addEventListener('click', () => {
+            leer(root); abierta = b.dataset.ed; pintar();
+          }));
+          root.querySelectorAll('[data-add-alt]').forEach(b => b.addEventListener('click', () => {
+            leer(root);
+            const g = op.grupos[+b.dataset.addAlt];
+            g.alternativas.push(altVacio());
+            abierta = `${b.dataset.addAlt}|${g.alternativas.length - 1}`;
+            pintar();
+          }));
+          const hecho = root.querySelector('[data-hecho]');
+          if (hecho) hecho.addEventListener('click', () => { leer(root); abierta = null; pintar(); });
+          const quitar = root.querySelector('[data-quitar]');
+          if (quitar) quitar.addEventListener('click', () => {
+            const [gi, ai] = quitar.dataset.quitar.split('|').map(Number);
+            op.grupos[gi].alternativas.splice(ai, 1);
+            if (!op.grupos[gi].alternativas.length) op.grupos.splice(gi, 1);
+            abierta = null; pintar();
+          });
+          const chk = root.querySelector('[data-mismo]');
+          if (chk) chk.addEventListener('change', () => {
+            root.querySelector('[data-uni]').hidden = !chk.checked;
+            root.querySelector('[data-dias]').hidden = chk.checked;
+          });
+        };
+        enganchar();
+        root.querySelector('#nutAddAli').addEventListener('click', () => {
+          leer(root);
+          op.grupos.push({ id: DB.uid('g'), nombre: '', alternativas: [altVacio()] });
+          abierta = `${op.grupos.length - 1}|0`;
+          pintar();
+        });
       },
-    });
-  }
-
-  function leerNombres(root, op) {
-    const n = (root.querySelector('input[name="opNombre"]').value || '').trim();
-    if (n) op.nombre = n;
-    root.querySelectorAll('[data-gname]').forEach(inp => {
-      const g = (op.grupos || []).find(x => x.id === inp.dataset.gname);
-      const v = (inp.value || '').trim();
-      if (g && v) g.nombre = v;
     });
   }
 
@@ -860,7 +967,7 @@ const VNutrition = (() => {
           toma.opciones.push(op);
           await DB.saveNutrition(_plan);
           irAToma(app, toma.id);
-          setTimeout(() => editAlimento(app, { tomaId: toma.id, opId: op.id, primero: true }), 300);
+          setTimeout(() => abrirComida(app, toma.id, op.id, { nuevo: true }), 300);
         } },
       ],
     });
@@ -874,116 +981,6 @@ const VNutrition = (() => {
   }
   // Volver a la pantalla de una comida concreta (tras crearla en el asistente).
   const irAToma = (app, tomaId) => app.go('nutrition', { planId: _planId, tomaId });
-
-  const listaAlimentos = (g) => {
-    const n = (g.alternativas || []).map(a => a.alimento);
-    if (n.length <= 1) return n[0] || '';
-    return `${n.slice(0, -1).join(', ')} o ${n[n.length - 1]}`;
-  };
-
-  // Pedir dos cantidades y dos campos raros (nota, equivalencia) de golpe asusta.
-  // Por defecto: un alimento, una cantidad. Lo demás se abre si hace falta.
-  function editAlimento(app, { tomaId, opId, grupoId, altNombre, primero }) {
-    const { toma, opcion, grupo, alt } = ref(tomaId, opId, grupoId, altNombre);
-    if (!toma || !opcion) { app.render(); return; }
-    const vs = _plan.variantes || [];
-    const esNuevo = !alt;
-    const cants = vs.map(v => (alt && cantidadDe(alt, v.id)) || {});
-    const puestas = cants.filter(c => c.valor != null || c.unidad);
-    // Si ya tiene cantidades y son todas iguales, se sigue editando como una sola.
-    const mismo = esNuevo || (puestas.length === vs.length &&
-      cants.every(c => c.valor === cants[0].valor && (c.unidad || '') === (cants[0].unidad || '')));
-    const c0 = puestas[0] || {};
-    const detalles = !!(c0.nota || c0.equivale);
-
-    const filaCant = (id, etiqueta, c) => `<div class="nut-qrow">
-      <span class="nut-qlbl">${UI.esc(etiqueta || 'Cantidad')}</span>
-      <input class="inp" data-q="${UI.esc(id)}" data-f="valor" type="number" step="0.01" inputmode="decimal" value="${c.valor == null ? '' : UI.esc(c.valor)}" placeholder="60">
-      <input class="inp" data-q="${UI.esc(id)}" data-f="unidad" list="nutUnidades" value="${UI.esc(c.unidad || 'g')}" placeholder="g">
-    </div>`;
-
-    UI.modal({
-      title: esNuevo ? (grupo ? 'Otro que vale lo mismo' : 'Añadir alimento') : 'Editar alimento',
-      bodyHTML: `<div id="nutAli">
-        ${primero ? `<p class="modal-text">Ya casi. Añade el primer alimento de <strong>${UI.esc(opcion.nombre)}</strong> con la cantidad que te marcó tu nutricionista.</p>` : ''}
-        ${grupo && esNuevo ? `<p class="modal-text">Se pone <strong>en la misma línea</strong> que ${UI.esc(listaAlimentos(grupo))}: unos días tomas uno y otros días otro, nunca los dos.</p>` : ''}
-        ${UI.field('¿Qué alimento?', UI.input('alimento', alt ? alt.alimento : '', { placeholder: 'Ej: Arroz integral' }))}
-
-        <span class="field-label">¿Cuánto?</span>
-        ${vs.length > 1 ? `<label class="metric-opt"><input type="checkbox" id="nutMismo"${mismo ? ' checked' : ''}><span>La misma cantidad todos los días</span></label>` : ''}
-        <div id="nutCantUni"${vs.length > 1 && !mismo ? ' hidden' : ''}>${filaCant('__uni', '', c0)}</div>
-        ${vs.length > 1 ? `<div id="nutCantDias"${mismo ? ' hidden' : ''}>
-          ${vs.map((v, i) => filaCant(v.id, v.nombre, cants[i])).join('')}
-          <p class="field-hint" style="margin-top:-2px">Deja en blanco el día en que <strong>no</strong> tomes este alimento.</p>
-        </div>` : ''}
-        <datalist id="nutUnidades">${UNIDADES.map(u => `<option value="${u}">`).join('')}</datalist>
-
-        <button type="button" class="btn ghost small block" id="nutMasDet"${detalles ? ' hidden' : ''} style="margin-top:6px">Añadir una nota o una equivalencia</button>
-        <div id="nutDet"${detalles ? '' : ' hidden'}>
-          ${UI.field('Nota', UI.input('nota', c0.nota || '', { placeholder: 'en crudo, al gusto…' }))}
-          ${UI.field('Equivalencia', UI.input('equivale', c0.equivale || '', { placeholder: '180 g cocido' }), 'La MISMA cantidad medida de otra forma. No es otro alimento.')}
-        </div>
-      </div>`,
-      actions: [
-        alt ? { label: 'Borrar', kind: 'danger', onClick: async () => {
-          const i = grupo.alternativas.indexOf(alt);
-          if (i >= 0) grupo.alternativas.splice(i, 1);
-          if (!grupo.alternativas.length) {
-            const gi = opcion.grupos.indexOf(grupo);
-            if (gi >= 0) opcion.grupos.splice(gi, 1);
-          } else if (grupo.alternativas.length === 1) {
-            grupo.nombre = grupo.alternativas[0].alimento;   // vuelve a ser una línea simple
-          }
-          await guardar(app); UI.toast('Alimento borrado');
-          setTimeout(() => abrirComida(app, tomaId, opId), 250);
-        } } : { label: 'Cancelar', kind: 'ghost' },
-        { label: primero ? 'Listo' : 'Guardar', kind: 'primary', onClick: async (root) => {
-          const nombre = (root.querySelector('input[name="alimento"]').value || '').trim();
-          if (!nombre) { UI.toast('Ponle nombre al alimento', 'err'); return false; }
-          const nota = (root.querySelector('input[name="nota"]').value || '').trim();
-          const equivale = (root.querySelector('input[name="equivale"]').value || '').trim();
-          const leer = (id) => ({
-            val: root.querySelector(`[data-q="${id}"][data-f="valor"]`).value,
-            uni: (root.querySelector(`[data-q="${id}"][data-f="unidad"]`).value || '').trim(),
-          });
-          const unico = !root.querySelector('#nutMismo') || root.querySelector('#nutMismo').checked;
-          const cantidades = {};
-          const meter = (vid, val, uni) => {
-            if (val === '' && !uni) return;      // en blanco = ese día no se toma
-            const c = { valor: val === '' ? null : parseFloat(val), unidad: uni };
-            if (nota) c.nota = nota;
-            if (equivale) c.equivale = equivale;
-            cantidades[vid] = c;
-          };
-          if (unico) { const { val, uni } = leer('__uni'); vs.forEach(v => meter(v.id, val, uni)); }
-          else vs.forEach(v => { const { val, uni } = leer(v.id); meter(v.id, val, uni); });
-          if (!Object.keys(cantidades).length) { UI.toast('Ponle una cantidad', 'err'); return false; }
-
-          if (alt) { alt.alimento = nombre; alt.cantidades = cantidades; }
-          else {
-            const nuevo = { alimento: nombre, cantidades };
-            if (grupo) grupo.alternativas.push(nuevo);
-            else opcion.grupos.push({ id: DB.uid('g'), nombre, alternativas: [nuevo] });
-          }
-          // Una línea con un solo alimento se llama como él; en cuanto tiene varios,
-          // el nombre se cambia en el editor de la opción.
-          if (grupo && grupo.alternativas.length === 1) grupo.nombre = grupo.alternativas[0].alimento;
-          await guardar(app);
-          if (primero) UI.toast('¡Listo! Ya tienes tu primera comida');
-          setTimeout(() => abrirComida(app, tomaId, opId), primero ? 350 : 250);
-        } },
-      ],
-      onMount: (root) => {
-        const mas = root.querySelector('#nutMasDet');
-        mas.addEventListener('click', () => { mas.hidden = true; root.querySelector('#nutDet').hidden = false; });
-        const chk = root.querySelector('#nutMismo');
-        if (chk) chk.addEventListener('change', () => {
-          root.querySelector('#nutCantUni').hidden = !chk.checked;
-          root.querySelector('#nutCantDias').hidden = chk.checked;
-        });
-      },
-    });
-  }
 
   function addOpcion(app, toma) {
     UI.modal({
@@ -999,7 +996,7 @@ const VNutrition = (() => {
           toma.opciones.push(op);
           const tid = toma.id, oid = op.id;
           await guardar(app);
-          setTimeout(() => editAlimento(app, { tomaId: tid, opId: oid, primero: true }), 300);
+          setTimeout(() => abrirComida(app, tid, oid, { nuevo: true }), 300);
         } },
       ],
     });

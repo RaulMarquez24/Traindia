@@ -773,3 +773,15 @@ body.modal-open { overflow: hidden; }
 .inp.grp-name { font-weight: 600; padding: 7px 10px; font-size: 14px; }
 .grp-hint { font-size: 11.5px; color: var(--ink-dim); margin: 0 0 8px; }
 .grp-card .btn.small { margin-top: 8px; }
+/* Edición de un alimento dentro de la propia lista */
+.fila-ed { border: 1px solid var(--strong); border-radius: 10px; padding: 11px 12px; margin: 6px 0 8px; background: var(--bg); }
+.fila-ed > .inp { margin-bottom: 9px; }
+.fila-ed .metric-opt { margin-bottom: 8px; }
+.fila-ed-foot { display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px; }
+.fila-ed-foot .btn { margin-top: 0; }
+details.det { margin: 4px 0 6px; }
+details.det > summary { cursor: pointer; font-size: 12.5px; color: var(--strong); padding: 5px 0; list-style: none; }
+details.det > summary::-webkit-details-marker { display: none; }
+details.det > summary::before { content: '▸ '; }
+details.det[open] > summary::before { content: '▾ '; }
+.det-body { padding-top: 4px; }
