@@ -644,3 +644,46 @@ body.modal-open { overflow: hidden; }
 .resp-opt strong { font-size: 15px; font-weight: 600; }
 .resp-opt em { font-style: normal; font-size: 12px; color: var(--ink-dim); }
 .resp-opt.go i { background: #2f9c6a; } .resp-opt.wait i { background: #c08a12; } .resp-opt.stop i { background: #c4503f; }
+
+/* ============ NUTRICIÓN ============ */
+.beta-tag { font-family: 'IBM Plex Mono', monospace; font-size: 9px; font-weight: 600; letter-spacing: .1em;
+  text-transform: uppercase; padding: 2px 6px; border-radius: 4px; background: var(--moderate-bg); color: var(--moderate); margin-left: 6px; vertical-align: 1px; }
+.nut-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  padding: 14px 16px; background: var(--strong-bg); border-radius: 12px; margin-bottom: 16px; }
+.nut-head-txt { display: flex; flex-direction: column; gap: 2px; }
+.nut-head-txt strong { font-size: 16px; color: var(--strong); }
+.nut-head-txt .dim { font-size: 12px; }
+.nut-variant { font-family: 'IBM Plex Mono', monospace; font-size: 11px; font-weight: 600; letter-spacing: .06em;
+  text-transform: uppercase; padding: 7px 12px; border-radius: 999px; cursor: pointer;
+  background: var(--bg-card); border: 1px solid var(--line); color: var(--ink); }
+.nut-variant.static { cursor: default; }
+.nut-toma { background: var(--bg-card); border: 1px solid var(--line); border-radius: 14px; padding: 16px; margin-bottom: 12px; }
+.nut-toma-lbl { font-family: 'IBM Plex Mono', monospace; font-size: 10px; font-weight: 600; letter-spacing: .12em;
+  text-transform: uppercase; color: var(--ink-dim); margin-bottom: 12px; }
+.nut-ops { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+.nut-op { font-size: 12.5px; font-weight: 600; padding: 6px 11px; border-radius: 8px; cursor: pointer;
+  background: var(--bg); border: 1px solid var(--line); color: var(--ink-soft); font-family: inherit; }
+.nut-op.sel { background: var(--strong); border-color: var(--strong); color: #fff; }
+.nut-row { margin-bottom: 12px; }
+.nut-row:last-child { margin-bottom: 0; }
+.nut-line { display: flex; align-items: baseline; gap: 8px; }
+.nut-food { font-size: 15px; color: var(--ink); }
+.nut-dots { flex: 1; border-bottom: 1px dotted var(--line); transform: translateY(-3px); min-width: 12px; }
+.nut-qty { font-family: 'IBM Plex Mono', monospace; font-size: 14px; font-weight: 600; color: var(--strong);
+  font-variant-numeric: tabular-nums; white-space: nowrap; }
+.nut-eq { font-size: 11.5px; color: var(--ink-dim); margin-top: 2px; }
+.nut-swap { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 6px; font-size: 12px; color: var(--ink-dim); }
+.nut-alt { font-size: 12px; padding: 4px 9px; border-radius: 7px; cursor: pointer; font-family: inherit;
+  background: var(--bg); border: 1px dashed var(--line); color: var(--ink-soft); }
+.nut-alt:active { background: var(--line-soft); }
+.nut-reglas, .nut-dudas { background: var(--bg-card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; margin-bottom: 12px; }
+.nut-dudas { border-color: var(--moderate); }
+.nut-reglas ul, .nut-dudas ul { margin: 0; padding-left: 18px; }
+.nut-reglas li, .nut-dudas li { font-size: 13.5px; color: var(--ink-soft); line-height: 1.5; margin-bottom: 5px; }
+.nut-sum { display: flex; flex-wrap: wrap; gap: 14px; padding: 12px 14px; background: var(--bg); border-radius: 10px; margin: 10px 0; font-size: 13px; color: var(--ink-soft); }
+.nut-sum b { font-family: 'IBM Plex Mono', monospace; color: var(--strong); font-size: 15px; }
+.nut-sum .warn b { color: var(--moderate); }
+.nut-check { margin: 8px 0 0; padding-left: 18px; }
+.nut-check li { font-size: 13.5px; color: var(--ink-soft); line-height: 1.5; margin-bottom: 4px; }
+.nut-check.warn li { color: var(--moderate); }
+.nut-check.err li { color: var(--priority); }

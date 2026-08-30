@@ -17,7 +17,8 @@ const VData = (() => {
         routines: await DB.routinesOf(userId),
         sessions: (await DB.sessionsOf(userId)).filter(s => !s.draft),
         progress: await DB.progressOf(userId),
-        journal: await DB.journalOf(userId),
+        journal: await DB.journalOf(userId),   // sección retirada, pero sus datos se conservan
+        nutrition: await DB.nutritionOf(userId),
       },
     };
   }
@@ -176,7 +177,8 @@ const VData = (() => {
 
   function routeImport(app, payload) {
     if (!payload || payload.format !== FORMAT || !payload.data) { UI.toast('No es un export de Traindía', 'err'); return; }
-    if (payload.kind === 'day' && payload.data.day) importDay(app, payload);
+    if (payload.kind === 'nutrition' && payload.data.plan) importNutrition(app, payload);
+    else if (payload.kind === 'day' && payload.data.day) importDay(app, payload);
     else if (payload.kind === 'plan' && payload.data.routine) importPlan(app, payload);
     else importFlow(app, payload);
   }
@@ -233,6 +235,24 @@ const VData = (() => {
   // Lista de casillas de días de un plan (marcados por defecto).
   function dayChecksHTML(days) {
     return (days || []).map(d => `<label class="check-row"><input type="checkbox" data-day="${UI.esc(d.id)}" checked><span>${UI.esc(d.name)}${d.isRest ? ' (descanso)' : ` — ${(d.blocks || []).reduce((a, b) => a + (b.exercises || []).length, 0)} ej`}</span></label>`).join('');
+  }
+
+  // ---------- Pauta de alimentación ----------
+  function exportNutrition(app, plan) {
+    if (!plan) { UI.toast('No hay pauta que compartir', 'err'); return; }
+    const limpio = { ...plan };
+    delete limpio.id; delete limpio.userId; delete limpio.isPrimary; delete limpio.createdAt;
+    download({
+      format: FORMAT, version: 2, kind: 'nutrition', exportedAt: new Date().toISOString(),
+      user: { name: app.activeUser.name, color: app.activeUser.color },
+      data: { plan: limpio },
+    }, `traindia-nutricion-${stamp()}.json`);
+    UI.toast('Pauta exportada');
+  }
+  function importNutrition(app, payload) {
+    if (typeof VNutrition === 'undefined') { UI.toast('Nutrición no disponible', 'err'); return; }
+    app.go('nutrition', {}, true);
+    setTimeout(() => VNutrition.previewImport(app, payload), 300);
   }
 
   // ---------- IMPORTAR PLAN: se añade como un plan NUEVO (no activo) ----------
@@ -398,7 +418,6 @@ const VData = (() => {
       { key: 'exercises', label: 'Ejercicios' },
       { key: 'sessions', label: 'Sesiones' },
       { key: 'progress', label: 'Progreso' },
-      { key: 'journal', label: 'Diario' },
     ].filter(s => (counts[s.key] || []).length);
     const hasData = DATA_SECTIONS.length > 0;
 
@@ -588,6 +607,9 @@ const VData = (() => {
     }
 
     // 5) Diario
+    for (const n of (data.nutrition || [])) {   // pauta de alimentación
+      try { await DB.saveNutrition({ ...n, id: duplicate ? DB.uid('nut') : n.id, userId: targetUserId }); } catch (e) {}
+    }
     if (want.has('journal')) for (const j of (data.journal || [])) {
       await DB.put('journal', { ...j, id: duplicate ? DB.uid('jrn') : j.id, userId: targetUserId });
     }
@@ -749,5 +771,5 @@ const VData = (() => {
     return added;
   }
 
-  return { render, bind, openMenu, exportDay, importDay, exportSession, exportProgressEntry, routeImport, checkBackupReminder, backupProfile };
+  return { render, bind, openMenu, exportDay, importDay, exportNutrition, exportSession, exportProgressEntry, routeImport, checkBackupReminder, backupProfile };
 })();

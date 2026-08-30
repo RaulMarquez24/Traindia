@@ -183,7 +183,7 @@ const app = {
       live:     { render: (a, p) => VSessions.live(a, p),   bind: (a, r, p) => VSessions.liveBind(a, r, p) },
 
       progress: { render: (a, p) => VProgress.render(a, p), bind: (a, r, p) => VProgress.bind(a, r, p) },
-      journal:  { render: (a, p) => VJournal.render(a, p),  bind: (a, r, p) => VJournal.bind(a, r, p) },
+      nutrition:{ render: (a, p) => VNutrition.render(a, p), bind: (a, r, p) => VNutrition.bind(a, r, p) },
 
       more:     { render: (a, p) => this.renderMore(),      bind: (a, r) => this.bindMore(r) },
       profiles: { render: (a, p) => this.renderProfiles(),  bind: (a, r) => this.bindProfiles(r) },
@@ -287,7 +287,7 @@ const app = {
     const titles = {
       week: 'Traindía', exercises: 'Ejercicios', places: 'Lugares', guides: 'Guías', info: 'El plan',
       sessions: 'Sesiones', live: 'Entreno', session: 'Sesión',
-      progress: 'Progreso', journal: 'Diario',
+      progress: 'Progreso', nutrition: 'Nutrición',
       more: 'Más', profiles: 'Perfiles', data: 'Datos', settings: 'Ajustes', backups: 'Copias internas', docs: 'Documentos',
     };
     let label = titles[this.currentView] || 'Traindía';
@@ -305,7 +305,7 @@ const app = {
     const map = {
       week: 'week', day: 'week', exercises: 'week',
       sessions: 'sessions', session: 'sessions', live: 'sessions',
-      progress: 'progress', journal: 'journal',
+      progress: 'progress', nutrition: 'nutrition',
       more: 'more', profiles: 'more', data: 'more', settings: 'more', guides: 'more', guide: 'more', info: 'more', places: 'more', backups: 'more', docs: 'more',
     };
     const active = map[this.currentView] || 'week';
@@ -410,14 +410,16 @@ const app = {
   },
 
   // ---- Sugerencias / reportes (formulario → email vía Web3Forms) ----
-  openFeedback() {
+  openFeedback(pre) {
     const ACCESS_KEY = '1ba5f2b9-bc2f-4d16-b0d7-6fcdf7f4639e';
+    const preTipo = (pre && pre.tipo) || '';
+    const preMsg = (pre && pre.mensaje) || '';
     UI.modal({
       title: 'Sugerencias y reportes',
       bodyHTML: `<div id="fbForm">
         <p class="modal-text dim">¿Una idea para mejorar o algo que no va bien? Cuéntamelo y me llega directo. Deja un contacto solo si quieres respuesta.</p>
-        ${UI.field('Tipo', UI.select('tipo', [{ value: 'Sugerencia', label: '💡 Sugerencia' }, { value: 'Error', label: '🐞 Error / fallo' }, { value: 'Otro', label: 'Otro' }], 'Sugerencia'))}
-        ${UI.field('Mensaje', UI.textarea('mensaje', '', 'Describe tu idea o el problema con detalle…', 5))}
+        ${UI.field('Tipo', UI.select('tipo', [{ value: 'Sugerencia', label: '💡 Sugerencia' }, { value: 'Error', label: '🐞 Error / fallo' }, { value: 'Otro', label: 'Otro' }].concat(preTipo ? [{ value: preTipo, label: preTipo }] : []), preTipo || 'Sugerencia'))}
+        ${UI.field('Mensaje', UI.textarea('mensaje', preMsg, 'Describe tu idea o el problema con detalle…', 6))}
         ${UI.field('Tu contacto (opcional)', UI.input('contacto', '', { placeholder: 'Email o nombre, por si quiero responderte' }))}
         <input type="text" name="botcheck" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px">
         <p class="field-hint">Se envía a través de un servicio externo (Web3Forms) para que me llegue por correo. No se envía ningún dato de tus entrenos.</p>
@@ -443,7 +445,7 @@ const app = {
                 tipo: d.tipo,
                 mensaje: d.mensaje.trim(),
                 contacto: (d.contacto || '').trim() || '(no indicado)',
-                version: 'v2.7.1',
+                version: 'v2.8.0',
                 perfil: (this.mainUser && this.mainUser.name) || '',
                 navegador: navigator.userAgent,
               }),
@@ -478,7 +480,7 @@ const app = {
     return `<div class="section">
       ${rows.map(r => `<button class="big-row" data-link="${r.v}"><span class="big-row-icon tile" style="background:${r.color}">${UI.icon(r.icon, 20)}</span><span class="big-row-text"><strong>${r.label}</strong><span class="dim">${r.sub}</span></span><span class="chev">›</span></button>`).join('')}
       <button class="big-row" data-feedback><span class="big-row-icon tile" style="background:var(--strong)">${UI.icon('chat', 20)}</span><span class="big-row-text"><strong>Sugerencias y reportes</strong><span class="dim">Envíame ideas o fallos</span></span><span class="chev">›</span></button>
-      <p class="version-foot">Traindía · v2.7.1 · ${Object.keys(this.usersById).length} perfil(es)<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
+      <p class="version-foot">Traindía · v2.8.0 · ${Object.keys(this.usersById).length} perfil(es)<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
     </div>`;
   },
   bindMore(root) {
@@ -747,7 +749,7 @@ const app = {
         <button class="btn danger block" id="resetApp">Borrar todos los datos</button>
         <p class="field-hint">Restablece la app al estado inicial (se borran todos los perfiles, sesiones y progreso).</p>
       </div>
-      <p class="version-foot">Traindía · v2.7.1</p>
+      <p class="version-foot">Traindía · v2.8.0</p>
     </div>`;
   },
 
