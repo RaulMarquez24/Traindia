@@ -79,7 +79,11 @@ const VNutrition = (() => {
   let _plan = null;
   let _varianteId = null;
   let _elegido = {};        // `${opId}|${grupoId}` -> alimento elegido
-  let _pidioPrompt = false;
+  // Se guarda fuera de memoria: el usuario se va a la IA y al volver Android
+  // puede haber recargado la app entera. Si no, el botón de pegar desaparece.
+  const PROMPT_KEY = 'traindia-nut-prompt-pedido';
+  const pidioPrompt = () => { try { return localStorage.getItem(PROMPT_KEY) === '1'; } catch (e) { return false; } };
+  const marcarPrompt = () => { try { localStorage.setItem(PROMPT_KEY, '1'); } catch (e) {} };
 
   async function render(app) {
     if (!(await DB.hasStore('nutrition'))) return prepararHTML();
@@ -106,7 +110,7 @@ const VNutrition = (() => {
       <p class="field-hint">Te voy guiando. En dos minutos tienes tu primera comida y ya te sirve.</p>
       <div class="nut-or"><span>o si tienes el plan en un PDF</span></div>
       <button class="btn ghost block" id="nutImport">${UI.icon('chat', 15)} Crear desde un documento <span class="beta-tag">beta</span></button>
-      <button class="btn ${_pidioPrompt ? 'primary' : 'ghost'} block" id="nutPaste">${UI.icon('upload', 15)} Pegar el resultado de la IA</button>
+      <button class="btn ${pidioPrompt() ? 'primary' : 'ghost'} block" id="nutPaste">${UI.icon('upload', 15)} Pegar el resultado de la IA</button>
     </div>`;
   }
 
@@ -148,7 +152,7 @@ const VNutrition = (() => {
         ${vs.length > 1 ? `<button class="nut-variant" id="nutVariant">${UI.esc(v ? v.nombre : '')} ▾</button>` : (v ? `<span class="nut-variant static">${UI.esc(v.nombre)}</span>` : '')}
       </div>
       ${vs.length > 1 ? `<p class="nut-hint">Las cantidades son las de <strong>${UI.esc(v ? v.nombre.toLowerCase() : '')}</strong>. La app lo elige por tu plan de entreno; tócalo para cambiarlo.</p>` : ''}
-      ${_pidioPrompt ? `<button class="btn primary block" id="nutPaste">${UI.icon('upload', 15)} Pegar el resultado de la IA</button>` : ''}
+      ${pidioPrompt() ? `<button class="btn primary block" id="nutPaste">${UI.icon('upload', 15)} Pegar el resultado de la IA</button>` : ''}
       ${cuerpo || '<div class="empty-state"><p class="dim">Tu pauta está vacía.</p></div>'}
       <button class="btn ghost block" id="nutAddToma">${UI.icon('plus', 15)} Añadir toma (desayuno, cena…)</button>
       ${reglas}${sup}${dudas}
@@ -569,7 +573,7 @@ const VNutrition = (() => {
           const op = {};
           root.querySelectorAll('[data-opt]').forEach(c => { op[c.dataset.opt] = c.checked; });
           UI.askAI(buildPrompt(op));
-          _pidioPrompt = true; // al volver, la pantalla ofrece "pegar el resultado"
+          marcarPrompt(); // al volver, la pantalla ofrece "pegar el resultado"
         } },
       ],
     });
@@ -593,11 +597,32 @@ const VNutrition = (() => {
       size: 'wide',
       bodyHTML: `<p class="modal-text">La IA te devuelve un bloque de texto. Tienes dos formas de traerlo:</p>
         <ul class="nut-check">
-          <li><strong>Si te ha dado un archivo</strong> para descargar: ábrelo desde tus descargas y dale a <strong>Compartir → Traindía</strong>. No hace falta nada más.</li>
+          <li><strong>Si te ha dado un archivo</strong>: búscalo con el botón de aquí abajo, o ábrelo desde tus descargas y dale a <strong>Compartir → Traindía</strong>.</li>
           <li><strong>Si te lo ha escrito en el chat</strong>: toca el <strong>botón de copiar</strong> que aparece en la esquina del bloque, vuelve aquí y pega abajo.</li>
         </ul>
+        <button class="btn ghost block" id="nutFile">${UI.icon('upload', 15)} Elegir el archivo</button>
+        <div class="nut-or"><span>o pégalo aquí</span></div>
         <textarea class="inp" id="nutJson" rows="6" placeholder="Pega aquí lo que te haya dado la IA"></textarea>
         <p class="field-hint">Da igual si viene con texto alrededor o con las comillas del bloque: se limpia solo.</p>`,
+      onMount: (root) => {
+        root.querySelector('#nutFile').addEventListener('click', () => {
+          const inp = document.createElement('input');
+          inp.type = 'file';   // sin filtro: en Android los .json llegan como octet-stream
+          inp.addEventListener('change', () => {
+            const f = inp.files[0]; if (!f) return;
+            const rd = new FileReader();
+            rd.onload = () => {
+              let parsed;
+              try { parsed = extraerJSON(rd.result); }
+              catch (e) { UI.toast('Ese archivo no se entiende. ¿Es el que te dio la IA?', 'err'); return; }
+              UI.closeModal(root);
+              previsualizar(app, parsed);
+            };
+            rd.readAsText(f);
+          });
+          inp.click();
+        });
+      },
       actions: [
         { label: 'Cerrar', kind: 'ghost' },
         { label: 'Revisar', kind: 'primary', onClick: (root) => {
