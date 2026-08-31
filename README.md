@@ -6,7 +6,7 @@
 
 ### Tu entrenamiento, de principio a fin — en una PWA instalable que funciona 100 % offline
 
-Planifica tu rutina, registra cada sesión, sigue tu progreso y lleva tu diario.
+Planifica tu rutina, registra cada sesión, sigue tu progreso y consulta qué te toca comer hoy.
 Sin cuentas, sin servidores, sin dependencias. Tus datos viven en tu dispositivo.
 
 <br>
@@ -25,7 +25,7 @@ Sin cuentas, sin servidores, sin dependencias. Tus datos viven en tu dispositivo
 
 ## 📖 Qué es
 
-**Traindía** es una aplicación web progresiva (PWA) para gestionar tu entrenamiento por completo, pensada para usarse en el gimnasio (incluso sin cobertura). Organizas uno o varios **planes** semanales, registras tus **sesiones** (en vivo con cronómetro o a mano), analizas tu **progreso** con gráficas y llevas un **diario**. Todo queda guardado **en local**, sin registro ni backend, y puedes **exportar/importar** para compartir o hacer copias.
+**Traindía** es una aplicación web progresiva (PWA) para gestionar tu entrenamiento por completo, pensada para usarse en el gimnasio (incluso sin cobertura). Organizas uno o varios **planes** semanales, registras tus **sesiones** (en vivo con cronómetro o a mano), analizas tu **progreso** con gráficas y consultas tu **plan de alimentación**. Todo queda guardado **en local**, sin registro ni backend, y puedes **exportar/importar** para compartir o hacer copias.
 
 Nació como un plan de entrenamiento concreto y evolucionó a una herramienta genérica y reutilizable para cualquier rutina.
 
@@ -62,15 +62,25 @@ Nació como un plan de entrenamiento concreto y evolucionó a una herramienta ge
 - Editar un ejercicio **propaga el cambio** (nombre/tipo) a toda la app.
 - Los ejercicios **predefinidos no se borran** (siempre disponibles).
 
-#### 📓 Diario
-- Entradas con **texto y estado de ánimo** (5 emojis), vinculadas a tu perfil.
+#### 🍎 Nutrición
+- **Lo que te toca hoy**: la app mira tu plan de entreno y enseña el gramaje del día que sea (**entrenamiento** o **descanso**).
+- Cada comida tiene sus **opciones** —lo que te marcó tu nutricionista— y dentro, los alimentos por **tipo**: *hidrato 75 g: arroz **o** pasta **o** cuscús*. Los intercambiables se ven como iguales, con su cantidad y su equivalencia en cocido.
+- Una opción declara **para qué días vale**, así que las tortitas del día de entreno no aparecen en descanso.
+- **Tus platos**: guardas lo que cocinas con esas cantidades (*«Risotto»*, *«Puchero»*), con foto, preparación, ingredientes extra y la posibilidad de ajustar los gramos a tu manera.
+- **🤖 Importar con IA** *(beta)*: la app genera un texto largo que le llevas a ChatGPT, Gemini o Claude junto al PDF de tu dieta; te devuelve un archivo que Traindía valida y previsualiza antes de guardar. Las **dudas** que anota la IA se marcan como aclaradas una a una.
+- **Reglas, suplementación y documentos** del plan a mano en la misma pantalla.
+
+#### 📎 Documentos
+- Guarda el **PDF del fisio o del nutricionista**, fotos de una máquina o cualquier apunte, y consúltalos **durante el entreno** o desde el plan de nutrición, sin conexión.
+- En el móvil llegan también con **Compartir → Traindía** (útil para los adjuntos de WhatsApp, imposibles de encontrar en el explorador).
 
 #### 📚 Guías
 - Documentación incluida en el plan CNP (técnica, progresiones, lógica de la semana…), **enlazada desde cada día**.
 
 #### ↕️ Importar / Exportar
-- Granular: **perfil completo, un día, sesiones (rango o concretas), rutinas, progreso** → JSON.
+- Granular: **perfil completo, un día, sesiones (rango o concretas), rutinas, progreso, plan de nutrición** → JSON.
 - Al importar eliges **a qué perfil** se asigna, **qué secciones** traer y cómo resolver conflictos (**reemplazar** o **añadir lo que falte**, con re-mapeo de referencias).
+- Los **documentos no viajan** en el JSON: viven solo en el dispositivo.
 
 #### 📲 PWA
 - Instalable en pantalla de inicio, **100 % offline** tras la primera carga, icono y tema propios.
@@ -91,11 +101,11 @@ flowchart TD
     SHELL --> V_PLAN["views-plan.js"]
     SHELL --> V_SES["views-sessions.js"]
     SHELL --> V_PROG["views-progress.js"]
-    SHELL --> V_JOUR["views-journal.js"]
+    SHELL --> V_NUT["views-nutrition.js"]
     SHELL --> V_DATA["views-data.js"]
 
-    V_PLAN & V_SES & V_PROG & V_JOUR & V_DATA --> UIH
-    V_PLAN & V_SES & V_PROG & V_JOUR & V_DATA --> DB
+    V_PLAN & V_SES & V_PROG & V_NUT & V_DATA --> UIH
+    V_PLAN & V_SES & V_PROG & V_NUT & V_DATA --> DB
     DB --> IDB
     SEED --> DB
     SW -. cachea los assets .-> SHELL
@@ -113,7 +123,9 @@ Todos los registros (salvo `settings`) llevan `userId`, generado en el primer ar
 | `routines` | Planes: días → bloques → ejercicios |
 | `sessions` | Entrenos registrados: ejercicios, series, duración, notas |
 | `progress` | Peso corporal y medidas por fecha |
-| `journal` | Entradas de diario: texto y estado de ánimo |
+| `nutrition` | Planes de alimentación: variantes de día → comidas → opciones → alimentos, y tus platos |
+| `files` | Documentos guardados en el dispositivo (PDF, fotos): nombre, tipo y contenido |
+| `journal` | *(en desuso)* entradas del antiguo diario; se conserva para no perder lo ya escrito |
 
 ### Estructura del proyecto
 
@@ -128,7 +140,7 @@ traindia/
 ├── views-plan.js           · planes, días, lugares, catálogo, guías
 ├── views-sessions.js       · registro en vivo / manual, historial
 ├── views-progress.js       · progreso corporal, por ejercicio, comparativa
-├── views-journal.js        · diario
+├── views-nutrition.js      · nutrición: pauta del día, platos, importador por IA
 ├── views-data.js           · importar / exportar
 ├── manifest.json           · metadatos PWA
 ├── sw.js                   · service worker (offline)
