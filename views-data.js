@@ -41,15 +41,18 @@ const VData = (() => {
     ofrecerCompartir(blob, filename);
   }
 
-  // El archivo a compartir. Algunos navegadores no admiten .json en el menú de
-  // compartir; como texto sí, y Traindía lo importa igual porque al abrirlo mira
-  // el contenido, no la extensión.
+  // Android NO deja compartir .json: el menú responde "Permission denied" aunque
+  // canShare() diga que sí. Como texto plano lo acepta siempre, y Traindía lo
+  // importa igual porque al abrir un archivo mira el contenido, no la extensión.
+  const comoTexto = (blob, filename) => new File([blob], filename.replace(/\.json$/, '.txt'), { type: 'text/plain' });
+  const comoJson = (blob, filename) => new File([blob], filename, { type: 'application/json' });
+
   function ficheroCompartible(blob, filename) {
     if (!navigator.canShare || !navigator.share || typeof File !== 'function') return null;
-    const json = new File([blob], filename, { type: 'application/json' });
-    if (navigator.canShare({ files: [json] })) return json;
-    const txt = new File([blob], filename.replace(/\.json$/, '.txt'), { type: 'text/plain' });
-    return navigator.canShare({ files: [txt] }) ? txt : null;
+    const txt = comoTexto(blob, filename);
+    if (navigator.canShare({ files: [txt] })) return txt;
+    const json = comoJson(blob, filename);
+    return navigator.canShare({ files: [json] }) ? json : null;
   }
 
   function ofrecerCompartir(blob, filename) {
@@ -58,7 +61,8 @@ const VData = (() => {
     UI.modal({
       title: '¿Lo compartes?',
       bodyHTML: `<p class="modal-text"><strong>${UI.esc(filename)}</strong> se ha guardado en tus descargas.</p>
-        <p class="modal-text dim">Si quieres, lo mandas ahora por WhatsApp, Telegram, Gmail, Drive… sin tener que buscarlo en el explorador.</p>`,
+        <p class="modal-text dim">Si quieres, lo mandas ahora por WhatsApp, Telegram, Gmail, Drive… sin tener que buscarlo en el explorador.</p>
+        ${file.name !== filename ? `<p class="field-hint">Se envía como <strong>${UI.esc(file.name)}</strong>: WhatsApp y compañía no admiten archivos .json. Traindía lo importa igual.</p>` : ''}`,
       actions: [
         { label: 'Ahora no', kind: 'ghost' },
         { label: 'Compartir', kind: 'primary', onClick: () => lanzarCompartir(blob, filename, file) },
@@ -70,10 +74,11 @@ const VData = (() => {
   // gesto se gasta al terminar el click. Por eso NO se puede reintentar dentro
   // del mismo toque: si falla, se ofrece un botón nuevo.
   function lanzarCompartir(blob, filename, file) {
+    const marcar = (e) => { try { (e || {})._nombre = file.name; } catch (x) {} return e; };
     let p;
     try { p = navigator.share({ files: [file] }); }
-    catch (e) { fallo(blob, filename, e); return; }
-    if (p && p.catch) p.catch(e => { if (!e || e.name !== 'AbortError') fallo(blob, filename, e); });
+    catch (e) { fallo(blob, filename, marcar(e)); return; }
+    if (p && p.catch) p.catch(e => { if (!e || e.name !== 'AbortError') fallo(blob, filename, marcar(e)); });
   }
 
   function fallo(blob, filename, e) {
@@ -84,8 +89,9 @@ const VData = (() => {
       DataError: 'El archivo no se ha podido preparar para compartir.',
       TypeError: 'Este navegador no admite compartir archivos.',
     }[nombre] || 'Tu navegador ha rechazado el envío.';
-    // El segundo intento va como texto plano: hay móviles que no admiten .json.
-    const alt = new File([blob], filename.replace(/\.json$/, '.txt'), { type: 'text/plain' });
+    // El segundo intento va con el otro formato, por si el móvil solo acepta uno.
+    const yaFueTexto = /\.txt$/.test((e && e._nombre) || '') || !/\.json$/.test(filename);
+    const alt = yaFueTexto ? comoJson(blob, filename) : comoTexto(blob, filename);
     const puedeAlt = navigator.canShare && navigator.canShare({ files: [alt] });
     UI.modal({
       title: 'No se ha podido compartir',
@@ -94,7 +100,7 @@ const VData = (() => {
         <p class="field-hint">Detalle técnico: ${UI.esc(nombre)}${e && e.message ? ` · ${UI.esc(String(e.message).slice(0, 120))}` : ''}</p>`,
       actions: [
         { label: 'Cerrar', kind: 'ghost' },
-        ...(puedeAlt ? [{ label: 'Probar como texto', kind: 'primary', onClick: () => {
+        ...(puedeAlt ? [{ label: `Probar como ${alt.name.endsWith('.txt') ? 'texto' : '.json'}`, kind: 'primary', onClick: () => {
           try { const q = navigator.share({ files: [alt] }); if (q && q.catch) q.catch(() => {}); } catch (x) {}
         } }] : []),
       ],
