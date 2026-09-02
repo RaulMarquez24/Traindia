@@ -277,11 +277,11 @@ textarea.inp { resize: vertical; line-height: 1.4; }
 /* La tarjeta ocupa todo el ancho; el agarrador va dentro de la cabecera (junto
    al título), así las series usan el ancho completo sin canalón en blanco. */
 .ex-card { background: var(--bg-card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; margin-bottom: 10px; }
-/* En vivo: lo que AÚN no has hecho se remarca; lo hecho se queda como está. */
+/* En vivo: la serie sin apuntar se marca en su propia casilla, no en toda la fila. */
 .ex-card.ex-pend { border-left: 3px solid var(--moderate); }
-.set-wrap.pend { background: var(--moderate-bg); border-radius: 10px; padding: 2px 6px; margin-left: -6px; margin-right: -6px; }
-.set-wrap.pend .set-n { color: var(--moderate); font-weight: 700; }
-.set-wrap.pend .inp { background: var(--bg-2); }
+.set-wrap.pend .set-f { background: var(--moderate-bg); border-color: var(--moderate); }
+.set-wrap.pend .set-f::placeholder { color: var(--moderate); opacity: .75; }
+.set-wrap.pend .set-check-txt { color: var(--moderate); font-weight: 600; }
 .ex-prog { flex: none; font-size: 12px; font-weight: 700; color: var(--ink-dim); font-variant-numeric: tabular-nums; }
 .ex-card.ex-pend .ex-prog { color: var(--moderate); }
 .ex-card-body { min-width: 0; }
