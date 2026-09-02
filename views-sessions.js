@@ -233,6 +233,12 @@ const VSessions = (() => {
       (s.drops && s.drops.some(dropHasData));
   }
   function liveHasData(s) { return (s.entries || []).some(e => (e.sets || []).some(setHasData)); }
+  // Series con algo apuntado / series planificadas. Con esto se sabe si un
+  // ejercicio está hecho, a medias o sin empezar.
+  function entryProgreso(entry) {
+    const sets = entry.sets || [];
+    return { hechas: sets.filter(setHasData).length, total: sets.length };
+  }
 
   // sufijo lastre/asistencia para ejercicios de peso corporal
   function loadSuffix(set) {
@@ -792,11 +798,15 @@ const VSessions = (() => {
   }
 
   function entryCardHTML(entry, ei, mode) {
-    return `<div class="ex-card" data-ei="${ei}" data-sort-id="${ei}">
+    const pr = entryProgreso(entry);
+    const hecho = mode === 'live' && pr.total > 0 && pr.hechas === pr.total;
+    const clase = mode === 'live' ? (hecho ? ' ex-done' : (pr.hechas ? ' ex-partial' : '')) : '';
+    return `<div class="ex-card${clase}" data-ei="${ei}" data-sort-id="${ei}">
       <div class="ex-card-body">
         <div class="ex-card-head">
           <button type="button" class="drag-handle" data-drag="card" title="Arrastra para reordenar" aria-label="Arrastrar">${UI.icon('grip', 18)}</button>
           <div class="ex-card-name"><strong>${UI.esc(entry.name)}</strong>${entry.target ? `<span class="ex-target">obj: ${UI.esc(entry.target)}</span>` : ''}${entry.detail ? `<span class="ex-detail">${UI.esc(entry.detail)}</span>` : ''}</div>
+          ${mode === 'live' && pr.total ? `<span class="ex-prog" title="Series apuntadas">${pr.hechas}/${pr.total}</span>` : ''}
           <span class="ex-card-actions">
             ${(entry.exerciseId && _exMeta[entry.exerciseId]) ? `<button class="icon-btn" data-howto data-ei="${ei}" title="Cómo se hace">${UI.icon('info', 17)}</button>` : ''}
             ${mode === 'live' ? `<button class="icon-btn" data-ai-ex data-ei="${ei}" title="Consultar a una IA sobre este ejercicio">${UI.icon('chat', 17)}</button>` : ''}
@@ -815,6 +825,25 @@ const VSessions = (() => {
         </div>
       </div>
     </div>`;
+  }
+
+  // Marca en el DOM lo hecho, lo que va a medias y el ejercicio por el que vas.
+  // No redibuja: solo cambia clases, así se puede llamar en cada tecla.
+  function pintarEstado(root, session) {
+    let siguiente = true;
+    root.querySelectorAll('.ex-card').forEach(card => {
+      const e = (session.entries || [])[+card.dataset.ei];
+      if (!e) return;
+      const { hechas, total } = entryProgreso(e);
+      const hecho = total > 0 && hechas === total;
+      const ahora = !hecho && siguiente;
+      if (!hecho) siguiente = false;
+      card.classList.toggle('ex-done', hecho);
+      card.classList.toggle('ex-partial', !hecho && hechas > 0);
+      card.classList.toggle('ex-now', ahora);
+      const chip = card.querySelector('.ex-prog');
+      if (chip) chip.textContent = `${hechas}/${total}`;
+    });
   }
 
   // Lee inputs del DOM al modelo de sesión (incluye dropsets via data-di)
@@ -1001,12 +1030,14 @@ const VSessions = (() => {
       if (!cont) { app.render(); return; }
       cont.innerHTML = s.entries.map((e, i) => entryCardHTML(e, i, 'live')).join('') || '<div class="empty-state"><p>Añade ejercicios para empezar.</p></div>';
       bindEntries();
+      pintarEstado(root, s);
     };
 
     // Autoguardado inmediato en cada tecla (delegado en root: sobrevive al redibujado).
-    root.addEventListener('input', () => { syncLive(root, s); app.persistLive(); updateTotalTimes(root); });
+    root.addEventListener('input', () => { syncLive(root, s); app.persistLive(); updateTotalTimes(root); pintarEstado(root, s); });
 
     bindEntries();
+    pintarEstado(root, s);
     UI.makeSortable(root.querySelector('.live-entries'), {
       itemSelector: '.ex-card', handleSelector: '[data-drag="card"]',
       onReorder: (order) => { sync(); s.entries = order.map(i => s.entries[+i]); redraw(); },
