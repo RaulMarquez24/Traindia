@@ -28,6 +28,9 @@ const VData = (() => {
     return allExercises.filter(e => set.has(e.id));
   }
 
+  // Todo lo que exporta la app pasa por aquí: se guarda en Descargas y, si el
+  // móvil sabe compartir archivos, se ofrece mandarlo sin tener que ir a buscarlo
+  // al explorador (que en Android es un dolor).
   function download(obj, filename) {
     const blob = new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -35,6 +38,36 @@ const VData = (() => {
     a.href = url; a.download = filename;
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
+    ofrecerCompartir(blob, filename);
+  }
+
+  // El archivo a compartir. Algunos navegadores no admiten .json en el menú de
+  // compartir; como texto sí, y Traindía lo importa igual porque al abrirlo mira
+  // el contenido, no la extensión.
+  function ficheroCompartible(blob, filename) {
+    if (!navigator.canShare || !navigator.share || typeof File !== 'function') return null;
+    const json = new File([blob], filename, { type: 'application/json' });
+    if (navigator.canShare({ files: [json] })) return json;
+    const txt = new File([blob], filename.replace(/\.json$/, '.txt'), { type: 'text/plain' });
+    return navigator.canShare({ files: [txt] }) ? txt : null;
+  }
+
+  function ofrecerCompartir(blob, filename) {
+    const file = ficheroCompartible(blob, filename);
+    if (!file) return;   // escritorio o navegador sin compartir: se queda descargado y ya
+    UI.modal({
+      title: '¿Lo compartes?',
+      bodyHTML: `<p class="modal-text"><strong>${UI.esc(filename)}</strong> se ha guardado en tus descargas.</p>
+        <p class="modal-text dim">Si quieres, lo mandas ahora por WhatsApp, Telegram, Gmail, Drive… sin tener que buscarlo en el explorador.</p>`,
+      actions: [
+        { label: 'Ahora no', kind: 'ghost' },
+        { label: 'Compartir', kind: 'primary', onClick: async () => {
+          // navigator.share exige gesto del usuario: por eso va DENTRO del click.
+          try { await navigator.share({ files: [file], title: 'Traindía' }); }
+          catch (e) { if (e && e.name !== 'AbortError') UI.toast('No se ha podido compartir', 'err'); }
+        } },
+      ],
+    });
   }
 
   function stamp() { return DB.todayISO(); }
