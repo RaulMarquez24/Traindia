@@ -701,7 +701,7 @@ const VSessions = (() => {
 
       if (type === 'check') {
         // Sin números: solo hecho / no hecho (estiramientos, movilidad…).
-        return `<div class="set-wrap${s.done ? ' done' : ''}">
+        return `<div class="set-wrap${s.done ? ' done' : ''}${mode === 'live' && !setHasData(s) ? ' pend' : ''}">
           <div class="set-row set-row-check">
             <span class="set-n">${si + 1}</span>
             <div class="set-vals"><span class="set-check-txt">${s.done ? 'Hecho' : 'Sin hacer'}</span></div>
@@ -714,7 +714,7 @@ const VSessions = (() => {
         const hasT = s.time !== '' && s.time != null && !isNaN(total);
         const mm = hasT ? Math.floor(total / 60) : '';
         const ss = hasT ? total % 60 : '';
-        return `<div class="set-wrap${s.done ? ' done' : ''}">
+        return `<div class="set-wrap${s.done ? ' done' : ''}${mode === 'live' && !setHasData(s) ? ' pend' : ''}">
           <div class="set-row">
             <span class="set-n">${si + 1}</span>
             <div class="set-vals">
@@ -747,7 +747,7 @@ const VSessions = (() => {
         const dropRm = locked ? '' : `<button class="icon-btn danger" data-rm-drop data-ei="${ei}" data-si="${si}" data-di="${di}">×</button>`;
         return `<div class="drop-row"><span class="drop-tag">drop</span>${df}${dropRm}</div>`;
       }).join('');
-      return `<div class="set-wrap${s.done ? ' done' : ''}">
+      return `<div class="set-wrap${s.done ? ' done' : ''}${mode === 'live' && !setHasData(s) ? ' pend' : ''}">
         <div class="set-row">
           <span class="set-n">${si + 1}</span>
           <div class="set-vals">${mainFields}</div>
@@ -799,8 +799,7 @@ const VSessions = (() => {
 
   function entryCardHTML(entry, ei, mode) {
     const pr = entryProgreso(entry);
-    const hecho = mode === 'live' && pr.total > 0 && pr.hechas === pr.total;
-    const clase = mode === 'live' ? (hecho ? ' ex-done' : (pr.hechas ? ' ex-partial' : '')) : '';
+    const clase = (mode === 'live' && pr.hechas < pr.total) ? ' ex-pend' : '';
     return `<div class="ex-card${clase}" data-ei="${ei}" data-sort-id="${ei}">
       <div class="ex-card-body">
         <div class="ex-card-head">
@@ -827,20 +826,19 @@ const VSessions = (() => {
     </div>`;
   }
 
-  // Marca en el DOM lo hecho, lo que va a medias y el ejercicio por el que vas.
-  // No redibuja: solo cambia clases, así se puede llamar en cada tecla.
+  // Remarca en el DOM las series que aún no tienen nada apuntado, y el ejercicio
+  // que las contiene. No redibuja: solo cambia clases, así se llama en cada tecla
+  // sin perder el foco ni el scroll.
   function pintarEstado(root, session) {
-    let siguiente = true;
     root.querySelectorAll('.ex-card').forEach(card => {
       const e = (session.entries || [])[+card.dataset.ei];
       if (!e) return;
+      const sets = e.sets || [];
+      card.querySelectorAll('.set-wrap').forEach((w, si) => {
+        if (sets[si]) w.classList.toggle('pend', !setHasData(sets[si]));
+      });
       const { hechas, total } = entryProgreso(e);
-      const hecho = total > 0 && hechas === total;
-      const ahora = !hecho && siguiente;
-      if (!hecho) siguiente = false;
-      card.classList.toggle('ex-done', hecho);
-      card.classList.toggle('ex-partial', !hecho && hechas > 0);
-      card.classList.toggle('ex-now', ahora);
+      card.classList.toggle('ex-pend', hechas < total);
       const chip = card.querySelector('.ex-prog');
       if (chip) chip.textContent = `${hechas}/${total}`;
     });
