@@ -58,13 +58,20 @@ const VData = (() => {
   function ofrecerCompartir(blob, filename) {
     const file = ficheroCompartible(blob, filename);
     if (!file) return;   // escritorio o navegador sin compartir: se queda descargado y ya
+    const esTexto = file.name !== filename;
+    // Chrome para Android rechaza application/json en el menú de compartir
+    // ("Permission denied") aunque canShare() diga que sí. Por eso el envío
+    // seguro va como .txt y el .json queda a un toque, por si el móvil lo admite.
+    const puedeJson = esTexto && navigator.canShare({ files: [comoJson(blob, filename)] });
     UI.modal({
       title: '¿Lo compartes?',
       bodyHTML: `<p class="modal-text"><strong>${UI.esc(filename)}</strong> se ha guardado en tus descargas.</p>
         <p class="modal-text dim">Si quieres, lo mandas ahora por WhatsApp, Telegram, Gmail, Drive… sin tener que buscarlo en el explorador.</p>
-        ${file.name !== filename ? `<p class="field-hint">Se envía como <strong>${UI.esc(file.name)}</strong>: WhatsApp y compañía no admiten archivos .json. Traindía lo importa igual.</p>` : ''}`,
+        ${esTexto ? `<p class="field-hint">Va como <strong>.txt</strong> con el mismo contenido: Android no deja mandar archivos .json desde el navegador. Traindía lo importa igual.${puedeJson ? ' Si prefieres arriesgarte, prueba «Como .json».' : ''}</p>` : ''}
+        ${esTexto ? '<p class="field-hint">Para mandar el .json tal cual: ábrelo desde <strong>Descargas</strong> y compártelo desde ahí. Esa vía no pasa por el navegador y no lo bloquea.</p>' : ''}`,
       actions: [
         { label: 'Ahora no', kind: 'ghost' },
+        ...(puedeJson ? [{ label: 'Como .json', kind: 'ghost', onClick: () => lanzarCompartir(blob, filename, comoJson(blob, filename)) }] : []),
         { label: 'Compartir', kind: 'primary', onClick: () => lanzarCompartir(blob, filename, file) },
       ],
     });
