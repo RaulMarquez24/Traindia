@@ -696,8 +696,15 @@ const VSessions = (() => {
       const effortBtn = (mode === 'live' || mode === 'edit')
         ? `<button type="button" class="set-rpe${s.effort ? ' on' : ''}" data-set-effort data-ei="${ei}" data-si="${si}" title="Esfuerzo de la serie">${s.effort ? UI.esc(s.effort) : '%'}</button>`
         : '';
-      // Pie de serie: duplicar (todos) + dropset (peso/reps). Oculto si está bloqueada (en vivo).
-      const footBtns = (locked || type === 'check') ? '' : `<div class="set-foot"><button type="button" class="set-drop-btn" data-dup-set data-ei="${ei}" data-si="${si}">↻ duplicar</button>${type !== 'time' ? ` <button type="button" class="set-drop-btn" data-add-drop data-ei="${ei}" data-si="${si}">↧ dropset</button>` : ''}</div>`;
+      // Pie de serie: duplicar (todos) + dropset (peso/reps). Al confirmar una serie
+      // se ocultan… salvo el duplicar de la ÚLTIMA: es la forma de encadenar otra
+      // serie con los mismos kilos sin volver a teclearlos.
+      const esUltima = si === (entry.sets || []).length - 1;
+      const dupBtn = `<button type="button" class="set-drop-btn" data-dup-set data-ei="${ei}" data-si="${si}">↻ duplicar</button>`;
+      const dropBtn = type !== 'time' ? ` <button type="button" class="set-drop-btn" data-add-drop data-ei="${ei}" data-si="${si}">↧ dropset</button>` : '';
+      const footBtns = type === 'check' ? ''
+        : locked ? (esUltima ? `<div class="set-foot">${dupBtn}</div>` : '')
+        : `<div class="set-foot">${dupBtn}${dropBtn}</div>`;
 
       if (type === 'check') {
         // Sin números: solo hecho / no hecho (estiramientos, movilidad…).
