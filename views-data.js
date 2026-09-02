@@ -61,11 +61,42 @@ const VData = (() => {
         <p class="modal-text dim">Si quieres, lo mandas ahora por WhatsApp, Telegram, Gmail, Drive… sin tener que buscarlo en el explorador.</p>`,
       actions: [
         { label: 'Ahora no', kind: 'ghost' },
-        { label: 'Compartir', kind: 'primary', onClick: async () => {
-          // navigator.share exige gesto del usuario: por eso va DENTRO del click.
-          try { await navigator.share({ files: [file], title: 'Traindía' }); }
-          catch (e) { if (e && e.name !== 'AbortError') UI.toast('No se ha podido compartir', 'err'); }
-        } },
+        { label: 'Compartir', kind: 'primary', onClick: () => lanzarCompartir(blob, filename, file) },
+      ],
+    });
+  }
+
+  // OJO: navigator.share solo funciona con un gesto reciente del usuario, y ese
+  // gesto se gasta al terminar el click. Por eso NO se puede reintentar dentro
+  // del mismo toque: si falla, se ofrece un botón nuevo.
+  function lanzarCompartir(blob, filename, file) {
+    let p;
+    try { p = navigator.share({ files: [file] }); }
+    catch (e) { fallo(blob, filename, e); return; }
+    if (p && p.catch) p.catch(e => { if (!e || e.name !== 'AbortError') fallo(blob, filename, e); });
+  }
+
+  function fallo(blob, filename, e) {
+    const nombre = (e && e.name) || 'Error';
+    const motivo = {
+      NotAllowedError: 'El móvil ha bloqueado el envío. Suele pasar si se ha tardado en pulsar o si el menú de compartir ya estaba abierto.',
+      NotSupportedError: 'Este navegador no sabe compartir este tipo de archivo.',
+      DataError: 'El archivo no se ha podido preparar para compartir.',
+      TypeError: 'Este navegador no admite compartir archivos.',
+    }[nombre] || 'Tu navegador ha rechazado el envío.';
+    // El segundo intento va como texto plano: hay móviles que no admiten .json.
+    const alt = new File([blob], filename.replace(/\.json$/, '.txt'), { type: 'text/plain' });
+    const puedeAlt = navigator.canShare && navigator.canShare({ files: [alt] });
+    UI.modal({
+      title: 'No se ha podido compartir',
+      bodyHTML: `<p class="modal-text">${UI.esc(motivo)}</p>
+        <p class="modal-text dim">El archivo <strong>${UI.esc(filename)}</strong> está guardado en tus descargas, así que no has perdido nada.</p>
+        <p class="field-hint">Detalle técnico: ${UI.esc(nombre)}${e && e.message ? ` · ${UI.esc(String(e.message).slice(0, 120))}` : ''}</p>`,
+      actions: [
+        { label: 'Cerrar', kind: 'ghost' },
+        ...(puedeAlt ? [{ label: 'Probar como texto', kind: 'primary', onClick: () => {
+          try { const q = navigator.share({ files: [alt] }); if (q && q.catch) q.catch(() => {}); } catch (x) {}
+        } }] : []),
       ],
     });
   }
