@@ -7,7 +7,42 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Traindía">
-<title>Traindía</title>
+<title>Traindía — planifica y registra tus entrenamientos</title>
+<meta name="description" content="Traindía es tu app de entrenamiento: planifica la semana, registra las sesiones en vivo y sigue tu progreso y tus récords. Gratis, sin cuentas y funciona sin conexión.">
+<meta name="author" content="Raúl Márquez">
+<meta name="application-name" content="Traindía">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://traindia.raulmarquez.dev/">
+<!-- Open Graph (al compartir en redes/WhatsApp) -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Traindía">
+<meta property="og:title" content="Traindía — tu entrenamiento, de principio a fin">
+<meta property="og:description" content="Planifica la semana, registra sesiones en vivo y sigue tu progreso y récords. PWA instalable que funciona 100% offline, sin cuentas ni anuncios.">
+<meta property="og:url" content="https://traindia.raulmarquez.dev/">
+<meta property="og:image" content="https://traindia.raulmarquez.dev/icon-512.png">
+<meta property="og:locale" content="es_ES">
+<!-- Twitter -->
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Traindía — tu entrenamiento, de principio a fin">
+<meta name="twitter:description" content="Planifica, registra y sigue tu progreso. Funciona offline, sin cuentas ni anuncios.">
+<meta name="twitter:image" content="https://traindia.raulmarquez.dev/icon-512.png">
+<!-- Datos estructurados: ayuda a Google a entender qué es Traindía -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebApplication",
+  "name": "Traindía",
+  "alternateName": "Traindia",
+  "url": "https://traindia.raulmarquez.dev/",
+  "description": "App de entrenamiento personal: planifica la semana, registra sesiones en vivo y sigue tu progreso y récords. Funciona sin conexión, sin cuentas ni anuncios.",
+  "applicationCategory": "HealthApplication",
+  "operatingSystem": "Web, Android, iOS",
+  "inLanguage": "es",
+  "browserRequirements": "Requiere JavaScript.",
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "EUR" },
+  "author": { "@type": "Person", "name": "Raúl Márquez" }
+}
+</script>
 <link rel="manifest" href="manifest.json">
 <link rel="icon" type="image/svg+xml" href="icon.svg">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -640,7 +675,16 @@
 </header>
 
 <main id="mainContent">
-  <!-- Las vistas se cargan aquí dinámicamente -->
+  <!-- Las vistas se cargan aquí dinámicamente. El texto de abajo es para buscadores
+       y usuarios sin JavaScript; la app lo reemplaza al cargar. -->
+  <noscript>
+    <h2>Traindía — tu entrenamiento, de principio a fin</h2>
+    <p>Traindía es una app de entrenamiento personal para planificar tu semana, registrar
+    tus sesiones en vivo (peso, repeticiones, tiempo, cardio y lastre/asistencia), y seguir
+    tu progreso corporal y tus récords por ejercicio. Es una PWA instalable que funciona
+    100% sin conexión, sin cuentas y sin anuncios.</p>
+    <p>Para usar Traindía necesitas activar JavaScript en tu navegador.</p>
+  </noscript>
 </main>
 
 <!-- BARRA DE ENTRENO ACTIVO -->
