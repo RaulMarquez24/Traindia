@@ -622,7 +622,7 @@ body.modal-open { overflow: hidden; }
 .onb-wrap { min-height: 100%; display: flex; align-items: center; justify-content: center; padding: 24px; }
 .onb-card { max-width: 420px; width: 100%; }
 .onb-eyebrow { font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-dim); margin-bottom: 10px; font-weight: 500; }
-.onb-card h1 { font-size: 30px; font-weight: 800; letter-spacing: -0.02em; line-height: 1.1; margin-bottom: 12px; }
+.onb-card h2 { font-size: 30px; font-weight: 800; letter-spacing: -0.02em; line-height: 1.1; margin-bottom: 12px; } /* h2, no h1: el único h1 de la página es el del header (SEO) */
 .onb-sub { font-size: 14px; color: var(--ink-soft); line-height: 1.55; margin-bottom: 24px; }
 .guide-eyebrow { font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 0.18em; color: var(--ink-dim); text-transform: uppercase; margin-bottom: 8px; font-weight: 500; }
 
