@@ -15,7 +15,7 @@ const VProgress = (() => {
   const EX_METRICS = [
     { key: 'maxWeight', label: 'Peso máx (kg)' },
     { key: 'e1rm', label: '1RM est.' },
-    { key: 'volume', label: 'Volumen (kg)' },
+    { key: 'volume', label: 'Peso levantado (kg)' },
     { key: 'maxReps', label: 'Reps máx' },
   ];
   // Cardio (distancia/kcal totales): la métrica de tiempo es el TOTAL de la sesión.
@@ -35,9 +35,28 @@ const VProgress = (() => {
     return ex && ex.type === 'time' && Array.isArray(ex.metrics) && (ex.metrics.includes('distance') || ex.metrics.includes('kcal'));
   }
   const timeMetricsFor = (ex) => (isCardioEx(ex) ? TIME_METRICS_CARDIO : TIME_METRICS_HOLD);
-  const METRIC_UNIT = { maxWeight: ' kg', e1rm: ' kg', volume: ' kg', maxReps: ' reps', distance: ' km', kcal: ' kcal', avgSpeed: ' km/h' };
+  const METRIC_UNIT = { maxWeight: ' kg', e1rm: ' kg', volume: ' kg', maxReps: ' reps', distance: ' km', kcal: ' kcal', avgSpeed: ' km/h', maxLoad: ' kg' };
   const METRIC_LABEL = {};
   EX_METRICS.concat(TIME_METRICS).forEach(m => { METRIC_LABEL[m.key] = m.label; });
+  METRIC_LABEL.maxLoad = 'Peso máx levantado'; // récord: mayor (corporal+lastre) en una serie
+  // Orden de las marcas dentro de la tarjeta de cada ejercicio en "Récords".
+  const METRIC_ORDER = ['maxWeight', 'e1rm', 'maxReps', 'maxLoad', 'volume', 'distance', 'totalTime', 'avgSpeed', 'kcal', 'maxTime'];
+
+  // Peso corporal registrado (Progreso → Corporal), ascendente por fecha, para
+  // cruzarlo con las sesiones y estimar el "peso levantado" a peso corporal.
+  async function loadBodyWeights(userId) {
+    return (await DB.progressOf(userId))
+      .filter(e => e.date && e.weight != null && e.weight !== '')
+      .map(e => ({ date: e.date, kg: parseFloat(e.weight) }))
+      .filter(b => !isNaN(b.kg))
+      .sort((a, b) => a.date.localeCompare(b.date));
+  }
+  // Último peso corporal con fecha <= la dada (null si no hay ninguno anterior).
+  function bwAtDate(bws, date) {
+    let val = null;
+    for (const b of (bws || [])) { if (b.date <= date) val = b.kg; else break; }
+    return val;
+  }
 
   // récord = mejor punto; a igual valor, gana el de mejor condición (más reps / más peso / menos tiempo)
   const better = (p, b) => p.y > b.y || (p.y === b.y && (p.tie || 0) > (b.tie || 0));
@@ -104,6 +123,9 @@ const VProgress = (() => {
     const effortOnly = !!opts.effortOnly;
     const formula = opts.formula || 'epley';
     const labelFilter = opts.label || ''; // filtra cardio por etiqueta/variante
+    // Peso corporal por fecha: para "peso levantado"/"peso máx levantado" a peso corporal.
+    let bodyWeights = opts.bodyWeights;
+    if (bodyWeights === undefined && (metric === 'volume' || metric === 'maxLoad')) bodyWeights = await loadBodyWeights(userId);
     let sessions = (await DB.sessionsOf(userId)).filter(s => !s.draft);
     sessions.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
     const points = [];
@@ -112,6 +134,8 @@ const VProgress = (() => {
       let maxWeight = 0, volume = 0, maxReps = 0, maxTime = 0, distance = 0, kcal = 0, totalTime = 0, found = false;
       let bestW = null, bestR = null; // mejor serie por peso (desempata reps) y por reps (desempata peso)
       let best1rm = 0, best1rmSet = null; // mejor 1RM estimado (Epley) y la serie que lo produce
+      let maxLoad = 0, bestLoad = null;   // mayor (corporal±carga) levantado en una serie
+      const bw = bwAtDate(bodyWeights, s.date); // peso corporal aplicable a esta sesión (o null)
       (s.entries || []).forEach(e => {
         if ((e.name || '').toLowerCase() !== lname) return;
         if (labelFilter && !(e.sets || []).some(st => (st.label || '').trim() === labelFilter)) return; // solo la variante elegida
@@ -124,10 +148,20 @@ const VProgress = (() => {
         if (hasTotalTime) totalTime += parseInt(e.totals.time) || 0; // tiempo total manual (cardio)
         (e.sets || []).forEach(set => {
           const r = parseFloat(set.reps) || 0, w = parseFloat(set.weight) || 0, t = parseFloat(set.time) || 0;
+          // Peso efectivo de la serie: hierro puro (weight) o peso corporal ± lastre/asistencia.
+          let ew;
+          if (e.type === 'weight') ew = w;
+          else {
+            const load = parseFloat(set.load) || 0, base = bw || 0;
+            ew = set.loadMode === 'asist' ? Math.max(0, base - load) : set.loadMode === 'lastre' ? base + load : base;
+          }
+          // ¿cuenta para "peso máx levantado"? repes con reps, o series de tiempo con lastre/asist.
+          const loadCounts = (e.type === 'reps' && r > 0) || (e.type === 'time' && (set.load || set.loadMode));
+          if (loadCounts && ew > maxLoad) { maxLoad = ew; bestLoad = { ew, r, mode: set.loadMode }; }
           if (w > maxWeight) maxWeight = w;
           if (r > maxReps) maxReps = r;
           if (t > maxTime) maxTime = t;
-          volume += r * w;
+          volume += r * ew;
           if (!hasTotalTime) totalTime += t;
           if (!hasTotals) { distance += parseFloat(set.distance) || 0; kcal += parseFloat(set.kcal) || 0; }
           if (w > 0 && (!bestW || w > bestW.w || (w === bestW.w && r > bestW.r))) bestW = { w, r };
@@ -144,7 +178,7 @@ const VProgress = (() => {
       if (!found) return;
       const distR = Math.round(distance * 100) / 100;
       const avgSpeed = totalTime > 0 ? Math.round((distR / (totalTime / 3600)) * 10) / 10 : 0; // km/h media
-      const map = { maxWeight, volume, maxReps, maxTime, totalTime, distance: distR, kcal: Math.round(kcal), avgSpeed, e1rm: Math.round(best1rm) };
+      const map = { maxWeight, volume: Math.round(volume), maxReps, maxTime, totalTime, distance: distR, kcal: Math.round(kcal), avgSpeed, e1rm: Math.round(best1rm), maxLoad: Math.round(maxLoad * 10) / 10 };
       const y = map[metric] || 0;
       if (metric === 'e1rm' && best1rm <= 0) return; // sin series válidas (p.ej. effortOnly y sin esfuerzo)
       // condiciones de la marca + desempate. La "tie" mayor = mejor marca a igual valor.
@@ -157,23 +191,30 @@ const VProgress = (() => {
       else if (metric === 'maxTime' && distR > 0) { detail = `· ${distR} km`; tie = distR; }                      // + distancia a igual tiempo
       else if (metric === 'totalTime' && distR > 0) { detail = `· ${distR} km`; tie = distR; }                    // tiempo total (cardio) + distancia
       else if (metric === 'avgSpeed' && distR > 0) { detail = `· ${distR} km`; }                                  // velocidad media + distancia
+      else if (metric === 'maxLoad' && bestLoad) { // peso máx levantado: reps de la serie + si fue asistido
+        detail = bestLoad.r ? `× ${bestLoad.r}` : (bestLoad.mode === 'asist' ? 'asist' : '');
+        tie = bestLoad.r;
+      }
       points.push({ x: s.date, y, detail, tie });
     });
     return points;
   }
 
   // Métrica representativa de cada ejercicio para "récords" (la primera con datos).
+  // Métricas a guardar como récord de un ejercicio. Un ejercicio puede tener VARIAS
+  // (las que no tengan datos se descartan luego). Así "un ejercicio no es solo de algo".
   function recordMetrics(ex) {
     if (ex.type === 'check') return [];  // hecho / no hecho: no hay métrica que seguir
-    if (ex.type === 'time') return isCardioEx(ex) ? ['distance', 'totalTime', 'kcal'] : ['maxTime'];
-    if (ex.type === 'reps') return ['maxReps'];
-    return ['maxWeight'];
+    if (ex.type === 'time') return isCardioEx(ex) ? ['distance', 'totalTime', 'avgSpeed', 'kcal'] : ['maxTime', 'maxLoad'];
+    if (ex.type === 'reps') return ['maxReps', 'maxLoad', 'volume'];
+    return ['maxWeight', 'e1rm', 'maxReps', 'volume'];
   }
 
   // Récord (PR) de cada ejercicio del catálogo. Cacheado por usuario + nº de sesiones.
   async function computeRecords(app, userId) {
     const sessions = (await DB.sessionsOf(userId)).filter(s => !s.draft);
-    const cacheKey = userId + ':' + sessions.length;
+    const bodyWeights = await loadBodyWeights(userId); // para "peso levantado" a peso corporal
+    const cacheKey = userId + ':' + sessions.length + ':' + bodyWeights.length;
     app._recCache = app._recCache || {};
     if (app._recCache[cacheKey]) return app._recCache[cacheKey];
     // sólo ejercicios realmente entrenados (evita recorrer todo el catálogo)
@@ -186,10 +227,11 @@ const VProgress = (() => {
       const nl = ex.name.toLowerCase();
       if (!trained.has(nl) || seen.has(nl)) continue;
       seen.add(nl);
+      // un ejercicio puede tener VARIAS marcas: guardamos todas las que tengan datos
       for (const metric of recordMetrics(ex)) {
-        const pts = await exerciseSeries(userId, ex.name, metric);
+        const pts = await exerciseSeries(userId, ex.name, metric, { bodyWeights });
         const best = bestPoint(pts);
-        if (best && best.y > 0) { out.push({ ex, metric, point: best }); break; }
+        if (best && best.y > 0) out.push({ ex, metric, point: best });
       }
     }
     out.sort((a, b) => (b.point.x || '').localeCompare(a.point.x || '')); // marca más reciente primero
@@ -249,17 +291,28 @@ const VProgress = (() => {
     const cat = host._recCat || '__all__';
     const search = host._recSearch || '';
     const cats = [...new Set(records.map(r => r.ex.muscleGroup || 'General'))].sort((a, b) => a.localeCompare(b));
-    const list = records.slice();
-    if (sort === 'name') list.sort((a, b) => a.ex.name.localeCompare(b.ex.name));
-    const rows = list.map(r => {
-      const grp = r.ex.muscleGroup || 'General';
-      return `<div class="rec-row" data-search="${UI.esc(UI.norm(r.ex.name + ' ' + grp))}" data-cat="${UI.esc(grp)}">
-        <span class="rec-medal">🏆</span>
-        <div class="rec-main">
-          <div class="rec-name">${UI.esc(r.ex.name)}</div>
-          <div class="rec-meta">${UI.esc(METRIC_LABEL[r.metric] || r.metric)} · ${UI.esc(grp)} · ${UI.fmtDateShort(r.point.x)}</div>
-        </div>
-        <span class="rec-val">${UI.esc(fmtMetricPoint(r.metric, r.point))}</span>
+    // Agrupar por ejercicio: cada uno con TODAS sus marcas (records ya viene por fecha desc).
+    const byEx = new Map();
+    records.forEach(r => {
+      const k = r.ex.name;
+      if (!byEx.has(k)) byEx.set(k, { ex: r.ex, marks: [], recent: '' });
+      const g = byEx.get(k);
+      g.marks.push(r);
+      if ((r.point.x || '') > g.recent) g.recent = r.point.x || '';
+    });
+    const groups = [...byEx.values()];
+    if (sort === 'name') groups.sort((a, b) => a.ex.name.localeCompare(b.ex.name));
+    else groups.sort((a, b) => (b.recent || '').localeCompare(a.recent || '')); // por marca más reciente
+    const rows = groups.map(g => {
+      const grp = g.ex.muscleGroup || 'General';
+      g.marks.sort((a, b) => METRIC_ORDER.indexOf(a.metric) - METRIC_ORDER.indexOf(b.metric));
+      const marks = g.marks.map(r => `<div class="rec-mark">
+          <span class="rm-label">${UI.esc(METRIC_LABEL[r.metric] || r.metric)}</span>
+          <span class="rm-val">${UI.esc(fmtMetricPoint(r.metric, r.point))}<span class="rm-date">${UI.fmtDateShort(r.point.x)}</span></span>
+        </div>`).join('');
+      return `<div class="rec-group" data-search="${UI.esc(UI.norm(g.ex.name + ' ' + grp))}" data-cat="${UI.esc(grp)}">
+        <div class="rec-group-head"><span class="rec-medal">🏆</span><div class="rec-main"><div class="rec-name">${UI.esc(g.ex.name)}</div><div class="rec-meta">${UI.esc(grp)}</div></div></div>
+        <div class="rec-marks">${marks}</div>
       </div>`;
     }).join('');
     host.innerHTML = `
@@ -269,14 +322,14 @@ const VProgress = (() => {
         <button class="chip${sort === 'name' ? ' on' : ''}" data-sort="name">A-Z</button>
       </div>
       ${cats.length > 1 ? `<div class="rec-catsel">${UI.field('Categoría', UI.selectButton('recCatBtn', cat === '__all__' ? 'Todas' : cat))}</div>` : ''}
-      <div class="card" style="padding:0" id="recList">${rows}</div>
+      <div id="recList">${rows}</div>
       <p class="dim" id="recNoRes" style="display:none;padding:12px 2px">Sin resultados.</p>`;
 
     const applyFilter = () => {
       const q = UI.norm(host._recSearch || '');
       const c = host._recCat || '__all__';
       let any = false;
-      host.querySelectorAll('.rec-row').forEach(row => {
+      host.querySelectorAll('.rec-group').forEach(row => {
         const vis = (!q || row.dataset.search.includes(q)) && (c === '__all__' || row.dataset.cat === c);
         row.style.display = vis ? '' : 'none';
         if (vis) any = true;
