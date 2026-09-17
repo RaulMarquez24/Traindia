@@ -11,7 +11,9 @@ Sin cuentas, sin servidores, sin dependencias. Tus datos viven en tu dispositivo
 
 <br>
 
-[![Abrir la app](https://img.shields.io/badge/▶_Abrir_la_app-4f46e5?style=for-the-badge)](https://raulmarquez24.github.io/Traindia/)
+[![Abrir la app](https://img.shields.io/badge/▶_Abrir_la_app-4f46e5?style=for-the-badge)](https://traindia.raulmarquez.dev/)
+
+**[traindia.raulmarquez.dev](https://traindia.raulmarquez.dev/)**
 
 ![PWA](https://img.shields.io/badge/PWA-instalable-4f46e5)
 ![Offline](https://img.shields.io/badge/offline-first-0e9aae)
