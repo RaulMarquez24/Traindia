@@ -18,6 +18,7 @@ const VSessions = (() => {
     { key: 'incline', label: 'Inclinación', unit: '%', ph: 'incl %', step: '0.5', scope: 'set' },
     { key: 'level', label: 'Nivel', unit: '', ph: 'nivel', step: '1', scope: 'set' },
     { key: 'weight', label: 'Peso', unit: 'kg', ph: 'kg', step: '0.5', scope: 'set' },
+    { key: 'load', label: 'Lastre / asistencia', unit: '', ph: '', step: '0.5', scope: 'set' }, // opcional: para suspensiones/colgadas (± kg), como en peso corporal
   ];
   const TIME_FIELD = Object.fromEntries(TIME_FIELDS.map(f => [f.key, f]));
   // Métricas activas de una entry de tiempo: las elegidas (entry.metrics) + las
@@ -30,7 +31,10 @@ const VSessions = (() => {
     const keys = new Set(chosen);
     TIME_FIELDS.forEach(f => {
       if (f.key === 'time') { if (entry.totals && entry.totals.time) keys.add('time'); return; }
-      if ((entry.sets || []).some(s => s[f.key]) || (entry.totals && entry.totals[f.key])) keys.add(f.key);
+      const hasData = f.key === 'load'
+        ? (entry.sets || []).some(s => s.load || s.loadMode) // el lastre/asist va en load + loadMode
+        : (entry.sets || []).some(s => s[f.key]) || (entry.totals && entry.totals[f.key]);
+      if (hasData) keys.add(f.key);
     });
     return TIME_FIELDS.filter(f => keys.has(f.key)).map(f => f.key);
   }
@@ -55,7 +59,11 @@ const VSessions = (() => {
   async function applyMetrics(app, entry, keys) {
     const ordered = TIME_FIELDS.filter(f => keys.includes(f.key)).map(f => f.key);
     const removed = timeActiveMetrics(entry).filter(k => !ordered.includes(k));
-    (entry.sets || []).forEach(s => removed.forEach(k => { if (k !== 'time') delete s[k]; })); // 'time' por serie es la duración: NO borrar
+    (entry.sets || []).forEach(s => removed.forEach(k => {
+      if (k === 'time') return;          // 'time' por serie es la duración: NO borrar
+      delete s[k];
+      if (k === 'load') delete s.loadMode; // el lastre/asist ocupa dos campos
+    }));
     if (entry.totals) removed.forEach(k => { delete entry.totals[k]; }); // quita también los totales descartados (incl. tiempo total)
     entry.metrics = ordered;
     await setExerciseMetrics(app, entry.exerciseId, ordered);
@@ -246,6 +254,13 @@ const VSessions = (() => {
     const sign = set.loadMode === 'asist' ? '−' : '+';
     return ` ${sign}${set.load}kg${set.loadMode === 'asist' ? ' asist' : ''}`;
   }
+  // Chip tocable de carga (peso corporal / +lastre / −asistencia). Compartido por
+  // las series de repes y por las de tiempo con la métrica 'load' activada.
+  function loadChipHTML(s, ei, si, dis) {
+    const lm = s.loadMode;
+    const label = lm ? `${lm === 'asist' ? '−' : '+'} ${UI.esc(String(s.load || 0))} kg` : '+ carga';
+    return `<button type="button" class="load-chip${lm ? ' on' : ''}" data-set-load data-ei="${ei}" data-si="${si}"${dis}>${label}</button>`;
+  }
   // texto de una serie para detalle / contexto IA (incluye dropsets y esfuerzo)
   function setDisplay(type, set) {
     let v;
@@ -260,6 +275,7 @@ const VSessions = (() => {
       if (set.distance) parts.push(`${set.distance} km`); // compat: sesiones viejas con distancia por serie
       if (set.kcal) parts.push(`${set.kcal} kcal`);       // compat
       if (set.weight) parts.push(`${set.weight} kg`);
+      const ls = loadSuffix(set).trim(); if (ls) parts.push(ls); // lastre/asistencia (suspensiones/colgadas)
       const ex = cardioExtra(set); if (ex) parts.push(ex);
       v = parts.join(' · ') || '0s';
       if (set.label) v = `${set.label} · ${v}`;
@@ -729,7 +745,10 @@ const VSessions = (() => {
             </div>
             <div class="set-acts">${effortBtn}${done}${rm}</div>
           </div>
-          ${(() => { const ms = timeSetMetrics(entry); return ms.length ? `<div class="set-extra">${ms.map(k => { const f = TIME_FIELD[k]; return `<input class="inp set-f" data-f="${k}" data-ei="${ei}" data-si="${si}" type="number" min="0" step="${f.step}" value="${UI.esc(s[k] || '')}" placeholder="${f.ph}"${dis}>`; }).join('')}</div>` : ''; })()}
+          ${(() => { const ms = timeSetMetrics(entry); return ms.length ? `<div class="set-extra">${ms.map(k => {
+            if (k === 'load') return loadChipHTML(s, ei, si, dis); // lastre/asistencia = chip tocable (± kg)
+            const f = TIME_FIELD[k]; return `<input class="inp set-f" data-f="${k}" data-ei="${ei}" data-si="${si}" type="number" min="0" step="${f.step}" value="${UI.esc(s[k] || '')}" placeholder="${f.ph}"${dis}>`;
+          }).join('')}</div>` : ''; })()}
           ${footBtns}
         </div>`;
       }
@@ -737,10 +756,7 @@ const VSessions = (() => {
       // weight / reps: fila principal + dropsets opcionales
       let mainFields;
       if (type === 'reps') {
-        const lm = s.loadMode;
-        const loadLabel = lm ? `${lm === 'asist' ? '−' : '+'} ${UI.esc(String(s.load || 0))} kg` : '+ carga';
-        const loadChip = `<button type="button" class="load-chip${lm ? ' on' : ''}" data-set-load data-ei="${ei}" data-si="${si}"${dis}>${loadLabel}</button>`;
-        mainFields = `<input class="inp set-f set-reps" data-f="reps" data-ei="${ei}" data-si="${si}" type="number" min="0" value="${UI.esc(s.reps)}" placeholder="reps"${dis}>${loadChip}`;
+        mainFields = `<input class="inp set-f set-reps" data-f="reps" data-ei="${ei}" data-si="${si}" type="number" min="0" value="${UI.esc(s.reps)}" placeholder="reps"${dis}>${loadChipHTML(s, ei, si, dis)}`;
       } else {
         mainFields = `<input class="inp set-f" data-f="reps" data-ei="${ei}" data-si="${si}" type="number" min="0" value="${UI.esc(s.reps)}" placeholder="reps"${dis}><span class="set-x">×</span><input class="inp set-f" data-f="weight" data-ei="${ei}" data-si="${si}" type="number" min="0" step="0.5" value="${UI.esc(s.weight)}" placeholder="kg"${dis}>`;
       }
