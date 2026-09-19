@@ -676,6 +676,23 @@ body.modal-open { overflow: hidden; }
 .ld-sec h2 { font-size: 22px; font-weight: 800; letter-spacing: -0.02em; margin-bottom: 12px; color: var(--ink); }
 .ld-sec > p { font-size: 15px; line-height: 1.6; color: var(--ink-soft); }
 
+/* Carrusel de pantallas: se desliza con el dedo y encaja una a una.
+   Los márgenes negativos son para que las capturas lleguen al borde del móvil. */
+.ld-sub { font-size: 14px; color: var(--ink-dim); margin: -6px 0 16px; }
+.ld-phones {
+  display: flex; gap: 16px; overflow-x: auto; scroll-snap-type: x mandatory;
+  margin: 0 -18px; padding: 4px 18px 14px; -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.ld-phones::-webkit-scrollbar { display: none; }
+.ld-phone { flex: 0 0 auto; width: 208px; scroll-snap-align: center; text-align: center; }
+.ld-phone img {
+  width: 100%; height: auto; display: block; border-radius: 22px;
+  border: 5px solid #23262f; background: #0f1116;
+  box-shadow: 0 10px 28px rgba(15, 17, 22, .18);
+}
+.ld-phone figcaption { font-size: 12.5px; font-weight: 600; color: var(--ink-soft); margin-top: 10px; }
+
 .ld-grid { display: grid; gap: 12px; }
 .ld-feat { background: var(--bg-card); border: 1px solid var(--line); border-radius: 14px; padding: 16px; }
 .ld-feat h3 { font-size: 15.5px; font-weight: 700; margin-bottom: 6px; color: var(--ink); }
@@ -693,7 +710,12 @@ body.modal-open { overflow: hidden; }
 .ld-foot { text-align: center; padding: 24px 0 0; font-size: 12.5px; color: var(--ink-dim); line-height: 1.6; }
 .ld-foot a { color: var(--strong); text-decoration: none; }
 
-@media (min-width: 620px) { .ld-grid { grid-template-columns: 1fr 1fr; } }
+@media (min-width: 620px) {
+  .ld-grid { grid-template-columns: 1fr 1fr; }
+  /* En pantalla ancha caben las cuatro: ya no hace falta deslizar. */
+  .ld-phones { justify-content: space-between; gap: 12px; overflow-x: visible; margin: 0; padding: 4px 0 6px; }
+  .ld-phone { width: calc((100% - 36px) / 4); }
+}
 
 /* Portada de "Compartir": dos tarjetas grandes Exportar / Importar */
 .share-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
