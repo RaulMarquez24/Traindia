@@ -407,52 +407,33 @@ const app = {
       if (ld) ld.style.display = 'none';
       this.renderOnboarding();
     }));
-    this.initHScroll();
+    this.initScrollFx();
     this.revealLanding();
   },
-  // Bloques que se quedan anclados mientras bajas y van pasando su contenido de
-  // lado. El anclaje lo hace el CSS (position:sticky); aquí solo se traduce
-  // "cuánto has bajado dentro del bloque" en "cuánto se desplaza la tira".
-  // Si esto no llega a ejecutarse, el CSS deja la lista en vertical y se lee igual.
-  initHScroll() {
-    const secs = [...document.querySelectorAll('#landing [data-hs]')];
-    if (!secs.length) return;
+
+  // Movimiento de la presentación. Dos cosas, las dos atadas al scroll normal:
+  //  - paralaje: las imágenes se mueven unos píxeles menos que el texto, lo que
+  //    da profundidad sin frenar la página en ningún momento.
+  //  - barra de progreso arriba, para que se vea que queda contenido por delante.
+  // Todo es transform/width: no toca el flujo, así que no hay saltos ni reflows.
+  initScrollFx() {
     const reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (reduce || !(window.CSS && CSS.supports && CSS.supports('position', 'sticky'))) return;
-    document.documentElement.classList.add('js-hscroll');
-
-    const bloques = secs.map(sec => ({
-      sec,
-      sticky: sec.querySelector('.hs-sticky'),
-      track: sec.querySelector('.hs-track'),
-      panels: [...sec.querySelectorAll('.hs-panel')],
-      dots: [...sec.querySelectorAll('.hs-dots i')],
-    }));
-
-    // Cada panel se queda quieto un rato y luego pasa de lado rápido, en vez de
-    // arrastrarse todo el tiempo: así el texto se lee parado, no a media transición.
-    const deslizar = (f) => {
-      const ini = 0.3, fin = 0.75;
-      if (f <= ini) return 0;
-      if (f >= fin) return 1;
-      const t = (f - ini) / (fin - ini);
-      return t * t * (3 - 2 * t);
-    };
+    const barra = document.querySelector('#landing .ld-bar i');
+    const capas = reduce ? [] : [...document.querySelectorAll('#landing [data-par]')]
+      .map(el => ({ el, amp: parseFloat(el.dataset.par) || 0 }));
+    if (!barra && !capas.length) return;
 
     const pintar = () => {
-      bloques.forEach(b => {
-        const recorrido = b.sec.offsetHeight - b.sticky.offsetHeight;
-        if (recorrido <= 0) return;
-        const avance = Math.min(1, Math.max(0, -b.sec.getBoundingClientRect().top / recorrido));
-        const tramos = b.panels.length - 1;
-        const pos = avance * tramos;
-        const i = Math.min(tramos - 1, Math.floor(pos));
-        const f = deslizar(pos - i);
-        const ancho = b.track.scrollWidth - b.track.clientWidth;
-        b.track.style.transform = `translate3d(${-(((i + f) / tramos) * ancho).toFixed(1)}px,0,0)`;
-        const activo = f >= 0.5 ? i + 1 : i;
-        b.panels.forEach((el, n) => el.classList.toggle('on', n === activo));
-        b.dots.forEach((el, n) => el.classList.toggle('on', n === activo));
+      if (barra) {
+        const alto = document.documentElement.scrollHeight - innerHeight;
+        barra.style.width = (alto > 0 ? Math.min(100, Math.max(0, (scrollY / alto) * 100)) : 0) + '%';
+      }
+      const medio = innerHeight / 2;
+      capas.forEach(c => {
+        const r = c.el.getBoundingClientRect();
+        if (r.bottom < -200 || r.top > innerHeight + 200) return; // fuera de vista: ni se toca
+        const d = ((r.top + r.height / 2) - medio) / innerHeight; // -1 arriba, +1 abajo
+        c.el.style.transform = `translate3d(0, ${(d * c.amp).toFixed(1)}px, 0)`;
       });
     };
 
@@ -466,11 +447,12 @@ const app = {
     window.addEventListener('resize', alMover);
     pintar();
   },
+
   // Va mostrando cada bloque al entrar en pantalla. El estado oculto lo pone el CSS
   // (clase .js-reveal del <html>), así que aquí solo hay que marcar lo que ya se ve.
   revealLanding() {
     if (!document.documentElement.classList.contains('js-reveal')) return;
-    const els = document.querySelectorAll('#landing .ld-sec, #landing .ld-final');
+    const els = document.querySelectorAll('#landing .ld-sec, #landing .ld-step, #landing .ld-final');
     if (!els.length) { document.documentElement.classList.remove('js-reveal'); return; }
     let alguno = false;
     const io = new IntersectionObserver((entries) => {
@@ -558,7 +540,7 @@ const app = {
                 tipo: d.tipo,
                 mensaje: d.mensaje.trim(),
                 contacto: (d.contacto || '').trim() || '(no indicado)',
-                version: 'v2.21.0',
+                version: 'v2.22.0',
                 perfil: (this.mainUser && this.mainUser.name) || '',
                 navegador: navigator.userAgent,
               }),
@@ -593,7 +575,7 @@ const app = {
     return `<div class="section">
       ${rows.map(r => `<button class="big-row" ${r.modal ? 'data-share' : `data-link="${r.v}"`}><span class="big-row-icon tile" style="background:${r.color}">${UI.icon(r.icon, 20)}</span><span class="big-row-text"><strong>${r.label}</strong><span class="dim">${r.sub}</span></span><span class="chev">›</span></button>`).join('')}
       <button class="big-row" data-feedback><span class="big-row-icon tile" style="background:var(--strong)">${UI.icon('chat', 20)}</span><span class="big-row-text"><strong>Sugerencias y reportes</strong><span class="dim">Envíame ideas o fallos</span></span><span class="chev">›</span></button>
-      <p class="version-foot">Traindía · v2.21.0 · ${Object.keys(this.usersById).length} perfil(es)<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
+      <p class="version-foot">Traindía · v2.22.0 · ${Object.keys(this.usersById).length} perfil(es)<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
     </div>`;
   },
   bindMore(root) {
@@ -873,7 +855,7 @@ const app = {
         <button class="btn danger block" id="resetApp">Borrar todos los datos</button>
         <p class="field-hint">Restablece la app al estado inicial (se borran todos los perfiles, sesiones y progreso).</p>
       </div>
-      <p class="version-foot">Traindía · v2.21.0</p>
+      <p class="version-foot">Traindía · v2.22.0</p>
     </div>`;
   },
 
