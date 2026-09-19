@@ -160,11 +160,17 @@ const VData = (() => {
     const part = (id, icon, color, title, sub) =>
       `<button class="big-row" id="${id}"><span class="big-row-icon tile" style="background:${color}">${UI.icon(icon, 18)}</span><span class="big-row-text"><strong>${title}</strong><span class="dim">${sub}</span></span><span class="chev">›</span></button>`;
     return `<div class="section">
-      <div class="card-label">Copia y traspaso</div>
-      ${part('expProfile', 'upload', 'var(--strong)', 'Copia completa', 'Todo tu perfil en un archivo: ejercicios, plan, sesiones, progreso y nutrición')}
+      <!-- Protagonista: copia completa -->
+      <button class="share-hero" id="expProfile">
+        <span class="share-hero-icon">${UI.icon('upload', 26)}</span>
+        <span class="share-hero-txt">
+          <strong>Copia completa</strong>
+          <span>Guarda o comparte TODO tu perfil en un archivo: ejercicios, plan, sesiones, progreso y nutrición.</span>
+        </span>
+      </button>
       ${part('impBtn', 'swap', 'var(--light)', 'Importar', 'Trae un archivo o pega el JSON; detecta solo qué es y lo importa')}
 
-      <div class="card-label" style="margin-top:20px">Exportar por partes</div>
+      <div class="card-label" style="margin-top:22px">Exportar algo concreto</div>
       ${part('expPlan', 'calendar', 'var(--moderate)', 'Plan de la semana', 'Tu rutina activa completa')}
       ${part('expDay', 'calendar', 'var(--moderate)', 'Un día concreto', 'Comparte un solo día con un compañero')}
       ${part('expSessions', 'activity', 'var(--light)', 'Sesiones', 'Todas, por fechas o sueltas')}
