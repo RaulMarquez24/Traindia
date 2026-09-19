@@ -45,6 +45,8 @@ const app = {
   },
 
   async boot() {
+    this.applyTheme(this.getTheme()); // tema antes de nada (sincroniza barra del navegador)
+    if (window.matchMedia) { try { matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { if (this.getTheme() === 'system') this.applyTheme('system'); }); } catch (e) {} }
     await DB.open();
     this.registerViews();
     this.bindShell();
@@ -386,6 +388,18 @@ const app = {
 
   isFullPlan() { return !this.routine || this.routine.planType !== 'custom'; }, // plan con guías/contenido (no personalizado vacío)
 
+  // ---- Tema (sistema / claro / oscuro) ----
+  THEME_KEY: 'traindia-theme',
+  getTheme() { try { return localStorage.getItem(this.THEME_KEY) || 'system'; } catch (e) { return 'system'; } },
+  applyTheme(t) {
+    const root = document.documentElement;
+    if (t === 'light' || t === 'dark') root.setAttribute('data-theme', t); else root.removeAttribute('data-theme'); // 'system' → media query
+    const dark = t === 'dark' || (t !== 'light' && window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches);
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', dark ? '#0f1116' : '#f4f5f8'); // barra del navegador acorde al fondo
+  },
+  setTheme(t) { try { localStorage.setItem(this.THEME_KEY, t); } catch (e) {} this.applyTheme(t); },
+
   // ---- Menú de usuario (desde el chip) ----
   openUserMenu() {
     const others = Object.values(this.usersById).filter(u => !u.isMain);
@@ -444,7 +458,7 @@ const app = {
                 tipo: d.tipo,
                 mensaje: d.mensaje.trim(),
                 contacto: (d.contacto || '').trim() || '(no indicado)',
-                version: 'v2.17.0',
+                version: 'v2.18.0',
                 perfil: (this.mainUser && this.mainUser.name) || '',
                 navegador: navigator.userAgent,
               }),
@@ -479,7 +493,7 @@ const app = {
     return `<div class="section">
       ${rows.map(r => `<button class="big-row" data-link="${r.v}"><span class="big-row-icon tile" style="background:${r.color}">${UI.icon(r.icon, 20)}</span><span class="big-row-text"><strong>${r.label}</strong><span class="dim">${r.sub}</span></span><span class="chev">›</span></button>`).join('')}
       <button class="big-row" data-feedback><span class="big-row-icon tile" style="background:var(--strong)">${UI.icon('chat', 20)}</span><span class="big-row-text"><strong>Sugerencias y reportes</strong><span class="dim">Envíame ideas o fallos</span></span><span class="chev">›</span></button>
-      <p class="version-foot">Traindía · v2.17.0 · ${Object.keys(this.usersById).length} perfil(es)<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
+      <p class="version-foot">Traindía · v2.18.0 · ${Object.keys(this.usersById).length} perfil(es)<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
     </div>`;
   },
   bindMore(root) {
@@ -728,6 +742,8 @@ const app = {
   // ---- Vista AJUSTES ----
   renderSettings() {
     const u = this.mainUser;
+    const theme = this.getTheme();
+    const themeOpts = [['system', 'Sistema'], ['light', 'Claro'], ['dark', 'Oscuro']];
     return `<div class="section">
       <div class="card">
         <div class="card-label">Perfil principal</div>
@@ -736,6 +752,13 @@ const app = {
           ${UI.field('Color', UI.colorPicker('color', u.color))}
         </div>
         <button class="btn primary" id="saveMain">Guardar perfil</button>
+      </div>
+      <div class="card">
+        <div class="card-label">Tema</div>
+        <div class="seg" id="themeChoices">
+          ${themeOpts.map(([v, l]) => `<button type="button" class="seg-opt${theme === v ? ' on' : ''}" data-theme-opt="${v}">${l}</button>`).join('')}
+        </div>
+        <p class="field-hint" style="margin-bottom:0">"Sistema" sigue el modo claro/oscuro de tu teléfono.</p>
       </div>
       ${this.isFullPlan() ? `<div class="card">
         <div class="card-label">Datos predefinidos</div>
@@ -748,12 +771,16 @@ const app = {
         <button class="btn danger block" id="resetApp">Borrar todos los datos</button>
         <p class="field-hint">Restablece la app al estado inicial (se borran todos los perfiles, sesiones y progreso).</p>
       </div>
-      <p class="version-foot">Traindía · v2.17.0</p>
+      <p class="version-foot">Traindía · v2.18.0</p>
     </div>`;
   },
 
   bindSettings(root) {
     UI.bindColorPicker(root);
+    root.querySelectorAll('[data-theme-opt]').forEach(b => b.addEventListener('click', () => {
+      this.setTheme(b.dataset.themeOpt);
+      root.querySelectorAll('[data-theme-opt]').forEach(x => x.classList.toggle('on', x === b));
+    }));
     root.querySelector('#saveMain').addEventListener('click', async () => {
       const data = UI.readForm(root.querySelector('#mainForm'));
       if (!data.name || !data.name.trim()) { UI.toast('Escribe un nombre', 'err'); return; }

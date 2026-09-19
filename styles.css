@@ -661,6 +661,22 @@ body.modal-open { overflow: hidden; }
 .resp-opt em { font-style: normal; font-size: 12px; color: var(--ink-dim); }
 .resp-opt.go i { background: #2f9c6a; } .resp-opt.wait i { background: #c08a12; } .resp-opt.stop i { background: #c4503f; }
 
+/* Selector segmentado (p. ej. tema claro/oscuro en Ajustes) */
+.seg { display: flex; gap: 4px; background: var(--line-soft); border: 1px solid var(--line); border-radius: 10px; padding: 4px; margin-bottom: 10px; }
+.seg-opt { flex: 1; border: none; background: transparent; color: var(--ink-soft); font-family: inherit; font-size: 13px; font-weight: 600; padding: 8px 6px; border-radius: 7px; cursor: pointer; }
+.seg-opt.on { background: var(--bg-card); color: var(--strong); box-shadow: 0 1px 3px rgba(0,0,0,0.12); }
+.seg-opt:active { opacity: .7; }
+
+/* Semáforo "cómo amaneciste" adaptado a oscuro (los chips base son pastel claro) */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .resp-chip.go   { color: #5fd39e; border-color: #2f5f4a; background: #14261e; }
+  :root:not([data-theme="light"]) .resp-chip.wait { color: #e6b84e; border-color: #5a4a1f; background: #2a2413; }
+  :root:not([data-theme="light"]) .resp-chip.stop { color: #f08a7a; border-color: #5f322b; background: #2c1a17; }
+}
+:root[data-theme="dark"] .resp-chip.go   { color: #5fd39e; border-color: #2f5f4a; background: #14261e; }
+:root[data-theme="dark"] .resp-chip.wait { color: #e6b84e; border-color: #5a4a1f; background: #2a2413; }
+:root[data-theme="dark"] .resp-chip.stop { color: #f08a7a; border-color: #5f322b; background: #2c1a17; }
+
 /* ============ NUTRICIÓN ============ */
 .beta-tag { font-family: 'IBM Plex Mono', monospace; font-size: 9px; font-weight: 600; letter-spacing: .08em;
   text-transform: uppercase; padding: 2px 5px; border-radius: 4px; background: var(--moderate-bg); color: var(--moderate); margin-left: 5px; vertical-align: 1px; }
