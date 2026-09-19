@@ -623,6 +623,7 @@ const app = {
         <div class="menu-list">
           <button class="menu-row" data-act="profiles"><span>${UI.icon('users', 18)} Gestionar perfiles</span><span class="chev">›</span></button>
           <button class="menu-row" data-act="settings"><span>${UI.icon('settings', 18)} Editar perfil principal</span><span class="chev">›</span></button>
+          <button class="menu-row" data-act="landing"><span>${UI.icon('info', 18)} Ver la presentación</span><span class="chev">›</span></button>
         </div>
         ${others.length ? `<div class="field-label" style="margin-top:14px">Perfiles invitados</div>${others.map(u => `<div class="user-menu-active small">${UI.avatar(u, 30)}<div><strong>${UI.esc(u.name)}</strong><span class="dim">Invitado</span></div></div>`).join('')}` : ''}
       `,
@@ -630,6 +631,7 @@ const app = {
       onMount: (root) => {
         root.querySelector('[data-act="profiles"]').addEventListener('click', () => { UI.closeModal(); this.go('profiles'); });
         root.querySelector('[data-act="settings"]').addEventListener('click', () => { UI.closeModal(); this.go('settings'); });
+        root.querySelector('[data-act="landing"]').addEventListener('click', () => { UI.closeModal(); this.previewLanding(); });
       },
     });
   },
@@ -670,7 +672,7 @@ const app = {
                 tipo: d.tipo,
                 mensaje: d.mensaje.trim(),
                 contacto: (d.contacto || '').trim() || '(no indicado)',
-                version: 'v2.29.2',
+                version: 'v2.30.0',
                 perfil: (this.mainUser && this.mainUser.name) || '',
                 navegador: navigator.userAgent,
               }),
@@ -705,7 +707,7 @@ const app = {
     return `<div class="section">
       ${rows.map(r => `<button class="big-row" ${r.modal ? 'data-share' : `data-link="${r.v}"`}><span class="big-row-icon tile" style="background:${r.color}">${UI.icon(r.icon, 20)}</span><span class="big-row-text"><strong>${r.label}</strong><span class="dim">${r.sub}</span></span><span class="chev">›</span></button>`).join('')}
       <button class="big-row" data-feedback><span class="big-row-icon tile" style="background:var(--strong)">${UI.icon('chat', 20)}</span><span class="big-row-text"><strong>Sugerencias y reportes</strong><span class="dim">Envíame ideas o fallos</span></span><span class="chev">›</span></button>
-      <p class="version-foot">Traindía · v2.29.2 · ${Object.keys(this.usersById).length} perfil(es)<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
+      <p class="version-foot">Traindía · v2.30.0 · ${Object.keys(this.usersById).length} perfil(es)<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
     </div>`;
   },
   bindMore(root) {
@@ -980,24 +982,17 @@ const app = {
         <button class="btn ghost block" id="restorePlan">Restaurar plan original</button>
       </div>` : ''}
       <div class="card">
-        <div class="card-label">Presentación</div>
-        <button class="btn ghost block" id="viewLanding">Ver la presentación</button>
-        <p class="field-hint" style="margin-bottom:0">La página de bienvenida, por si quieres releerla o enseñarla. No cambia nada de tus datos.</p>
-      </div>
-      <div class="card">
         <div class="card-label">Datos de la app</div>
         <button class="btn ghost block" id="shareData">Compartir datos (exportar / importar)</button>
         <button class="btn danger block" id="resetApp">Borrar todos los datos</button>
         <p class="field-hint">Restablece la app al estado inicial (se borran todos los perfiles, sesiones y progreso).</p>
       </div>
-      <p class="version-foot">Traindía · v2.29.2</p>
+      <p class="version-foot">Traindía · v2.30.0</p>
     </div>`;
   },
 
   bindSettings(root) {
     UI.bindColorPicker(root);
-    const viewLandingBtn = root.querySelector('#viewLanding');
-    if (viewLandingBtn) viewLandingBtn.addEventListener('click', () => this.previewLanding());
     const shareBtn = root.querySelector('#shareData');
     if (shareBtn) shareBtn.addEventListener('click', () => VData.openShare(this));
     root.querySelectorAll('[data-theme-opt]').forEach(b => b.addEventListener('click', () => {
