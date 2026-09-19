@@ -4,7 +4,9 @@
 
 const VData = (() => {
 
-  const FORMAT = 'cnp-export';
+  const FORMAT = 'traindia-export';   // formato actual de los export
+  const OLD_FORMAT = 'cnp-export';    // formato anterior: se sigue ACEPTANDO al importar (copias viejas)
+  const isExportFormat = (f) => f === FORMAT || f === OLD_FORMAT;
 
   // ---- recolección de datos ----
   async function gatherProfile(userId, user) {
@@ -219,7 +221,7 @@ const VData = (() => {
       title: 'Importar datos', size: 'wide',
       bodyHTML: `
         <p class="field-hint" style="margin-top:0">Pega aquí el texto JSON exportado, o elige un archivo. <strong>Desde el móvil</strong>: en WhatsApp o Archivos, dale al documento → <strong>Compartir</strong> → <strong>Traindía</strong> y se importa solo.</p>
-        <textarea class="inp" id="impText" rows="6" placeholder='Pega el JSON aquí… (empieza por {"format":"cnp-export"…})'></textarea>
+        <textarea class="inp" id="impText" rows="6" placeholder='Pega el JSON aquí… (empieza por {"format":"traindia-export"…})'></textarea>
         <button class="btn ghost block" id="impFileBtn" style="margin-top:8px">${UI.icon('upload', 15)} …o elegir un archivo</button>`,
       actions: [
         { label: 'Cancelar', kind: 'ghost' },
@@ -228,7 +230,7 @@ const VData = (() => {
           if (!txt) { UI.toast('Pega el JSON o elige un archivo', 'err'); return false; }
           let parsed;
           try { parsed = JSON.parse(txt); } catch (e) { UI.toast('El texto no es un JSON válido', 'err'); return false; }
-          if (!parsed || parsed.format !== FORMAT || !parsed.data) { UI.toast('No es un export de Traindía', 'err'); return false; }
+          if (!parsed || !isExportFormat(parsed.format) || !parsed.data) { UI.toast('No es un export de Traindía', 'err'); return false; }
           routeImport(app, parsed);
         }},
       ],
@@ -253,7 +255,7 @@ const VData = (() => {
   }
 
   function routeImport(app, payload) {
-    if (!payload || payload.format !== FORMAT || !payload.data) { UI.toast('No es un export de Traindía', 'err'); return; }
+    if (!payload || !isExportFormat(payload.format) || !payload.data) { UI.toast('No es un export de Traindía', 'err'); return; }
     if (payload.kind === 'nutrition' && payload.data.plan) importNutrition(app, payload);
     else if (payload.kind === 'day' && payload.data.day) importDay(app, payload);
     else if (payload.kind === 'plan' && payload.data.routine) importPlan(app, payload);
@@ -291,7 +293,7 @@ const VData = (() => {
       d.id = DB.uid('day'); // id propio para el nuevo plan
       (d.blocks || []).forEach(b => (b.exercises || []).forEach(e => { if (e.exerciseId && idMap[e.exerciseId]) e.exerciseId = idMap[e.exerciseId]; }));
     });
-    await DB.put('routines', { id: DB.uid('rt'), userId: targetUserId, planType: routine.planType || 'cnp', name, days: newDays, order: Date.now(), createdAt: Date.now(), isPrimary: false });
+    await DB.put('routines', { id: DB.uid('rt'), userId: targetUserId, planType: (routine.planType === 'cnp' ? 'guided' : routine.planType) || 'guided', name, days: newDays, order: Date.now(), createdAt: Date.now(), isPrimary: false });
   }
   // Fusiona los días elegidos del plan del archivo DENTRO del plan activo del destino:
   // sustituye el día con el mismo nombre (conserva su id/orden) o lo añade si no existe.

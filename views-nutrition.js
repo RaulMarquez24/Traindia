@@ -1500,7 +1500,7 @@ o "sin especificar". Nunca frases largas como "cantidad no especificada en el do
 
 # FORMATO EXACTO
 {
-  "format": "cnp-export",
+  "format": "traindia-export",
   "version": 2,
   "kind": "nutrition",
   "data": {

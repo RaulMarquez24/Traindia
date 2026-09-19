@@ -1,10 +1,10 @@
 // ============================================================
-// DATOS DEL PLAN CNP - FASE 1
+// DATOS DEL PLAN COMPLETO (plantilla guiada) - FASE 1
 // ============================================================
 
 const PLAN_DATA = {
   meta: {
-    title: "Plan CNP",
+    title: "Plan completo",
     phase: "Fase 1",
     duration: "8-10 semanas",
     sede: "Basic Fit Córdoba",
@@ -213,7 +213,7 @@ const PLAN_DATA = {
           ]
         },
         {
-          label: "Específico CNP",
+          label: "Específico",
           exercises: [
             { name: "Suspensión supina barra parque", sets: "4-5× 80-85%", priority: true }
           ]

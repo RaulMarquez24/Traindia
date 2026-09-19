@@ -12,7 +12,9 @@
 // ============================================================
 
 const DB = (() => {
-  const DB_NAME = 'cnp-db';
+  const DB_NAME = 'traindia-db';
+  const OLD_DB_NAME = 'cnp-db';   // BD anterior (marca antigua). Se copia UNA vez a la nueva y se CONSERVA intacta como respaldo.
+  const MIG_KEY = '__dbmig';      // marcador en 'settings' que confirma que la copia terminó bien
   const DB_VERSION = 3; // v2: 'files' (documentos). v3: 'nutrition' (pauta de alimentación)
   const STORES = {
     settings:  { keyPath: 'key', indexes: [] },
@@ -33,9 +35,9 @@ const DB = (() => {
   // sin resolver para siempre (app en blanco). Ahora hay plan B: si no se puede
   // subir de versión, se abre CON LA QUE HAYA. La app funciona igual; como mucho
   // faltará el almacén de documentos hasta que se pueda actualizar.
-  function openWith(version) {
+  function openWith(version, name = DB_NAME) {
     return new Promise((resolve, reject) => {
-      const req = version ? indexedDB.open(DB_NAME, version) : indexedDB.open(DB_NAME);
+      const req = version ? indexedDB.open(name, version) : indexedDB.open(name);
       req.onupgradeneeded = (e) => {
         const db = e.target.result;
         for (const [name, def] of Object.entries(STORES)) {
@@ -65,9 +67,87 @@ const DB = (() => {
   // arranca igual en modo degradado y la subida se pide aparte, a propósito.
   let dbFallback = false; // true = faltan almacenes nuevos (p. ej. documentos)
 
+  // ---- Copia una-sola-vez de la BD antigua (cnp-db) a la nueva (traindia-db) ----
+  // Operaciones sobre un handle concreto (no sobre la BD "oficial") para poder tocar las dos a la vez.
+  function rawCount(db, store) {
+    return new Promise((resolve) => {
+      if (!db.objectStoreNames.contains(store)) return resolve(0);
+      const r = db.transaction(store, 'readonly').objectStore(store).count();
+      r.onsuccess = () => resolve(r.result || 0); r.onerror = () => resolve(0);
+    });
+  }
+  function rawGetAll(db, store) {
+    return new Promise((resolve, reject) => {
+      if (!db.objectStoreNames.contains(store)) return resolve([]);
+      const r = db.transaction(store, 'readonly').objectStore(store).getAll();
+      r.onsuccess = () => resolve(r.result || []); r.onerror = () => reject(r.error);
+    });
+  }
+  function rawGet(db, store, key) {
+    return new Promise((resolve) => {
+      if (!db.objectStoreNames.contains(store)) return resolve(null);
+      const r = db.transaction(store, 'readonly').objectStore(store).get(key);
+      r.onsuccess = () => resolve(r.result || null); r.onerror = () => resolve(null);
+    });
+  }
+  function rawPut(db, store, obj) {
+    return new Promise((resolve, reject) => {
+      const t = db.transaction(store, 'readwrite'); t.objectStore(store).put(obj);
+      t.oncomplete = () => resolve(); t.onerror = () => reject(t.error); t.onabort = () => reject(t.error || new Error('abort'));
+    });
+  }
+  // Vuelca todos los registros de un store en UNA transacción (rápido y atómico por store).
+  function rawReplaceStore(db, store, records) {
+    return new Promise((resolve, reject) => {
+      const t = db.transaction(store, 'readwrite'); const os = t.objectStore(store);
+      os.clear();
+      records.forEach(rec => os.put(rec));
+      t.oncomplete = () => resolve(); t.onerror = () => reject(t.error); t.onabort = () => reject(t.error || new Error('abort'));
+    });
+  }
+  const STORE_NAMES = Object.keys(STORES);
+
+  // Copia cnp-db → traindia-db una sola vez. La antigua NO se modifica ni se borra
+  // (queda como respaldo). Solo escribe el marcador MIG_KEY si TODO se copió y verificó,
+  // así una copia interrumpida se repite entera en el siguiente arranque (cnp-db es la fuente).
+  async function ensureDbRenamed() {
+    // 1) ¿Ya migrado? Se mira SIN pedir versión concreta (no puede bloquear).
+    let target = await openWith(null); // crea traindia-db si no existía (con sus stores)
+    let done = target.objectStoreNames.contains('settings') ? await rawGet(target, 'settings', MIG_KEY) : null;
+    if (done) { target.close(); return; }
+    target.close();
+
+    // 2) Asegura el esquema completo en la nueva (sube a la versión actual). traindia-db
+    // es nueva en esta versión: no hay otra pestaña con ella abierta a otra versión → no bloquea.
+    target = await openWith(DB_VERSION);
+    try {
+      // 3) Mira si la BD antigua tiene datos que copiar.
+      let source = await openWith(null, OLD_DB_NAME);
+      let oldHasData = false;
+      for (const s of STORE_NAMES) { if (await rawCount(source, s) > 0) { oldHasData = true; break; } }
+
+      if (oldHasData) {
+        for (const s of STORE_NAMES) {
+          if (!source.objectStoreNames.contains(s)) continue;
+          const records = await rawGetAll(source, s);
+          if (!records.length) continue;
+          await rawReplaceStore(target, s, records);   // limpia + reescribe (idempotente ante reintentos)
+          const c = await rawCount(target, s);
+          if (c !== records.length) { source.close(); throw new Error(`DBMIG_${s}_${c}/${records.length}`); }
+        }
+      }
+      source.close();
+      // 4) Marcador final: solo llega aquí si toda la copia (o "no había nada") fue bien.
+      await rawPut(target, 'settings', { key: MIG_KEY, done: true, copied: oldHasData, ts: Date.now() });
+    } finally {
+      target.close();
+    }
+  }
+
   function open() {
     if (dbPromise) return dbPromise;
     dbPromise = (async () => {
+      await ensureDbRenamed(); // copia una-sola-vez cnp-db → traindia-db (conserva la antigua)
       const db = await openWith(null);
       if (db.objectStoreNames.length === 0) {
         // Base recién creada (instalación nueva): aquí sí hay que montar el esquema,
@@ -360,12 +440,13 @@ const DB = (() => {
   }
 
   // Nombre genérico: es una plantilla para cualquiera, no el plan de una persona.
-  const PLAN_NAME = 'Plan CNP';
+  const PLAN_NAME = 'Plan completo';
+  const OLD_PLAN_NAME = 'Plan CNP'; // nombre anterior; se renombra en la migración
   function routineName() { return PLAN_NAME; }
 
   const WEEKDAYS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
   const TYPE_LABELS_DB = { strong: 'Día fuerte', moderate: 'Día moderado', light: 'Día ligero', rest: 'Descanso' };
-  // 7 días vacíos editables para un plan personalizado (sin guías ni contenido CNP).
+  // 7 días vacíos editables para un plan personalizado (sin guías ni contenido).
   function buildEmptyDays() {
     return WEEKDAYS.map((name, i) => ({
       id: uid('day'), name, type: 'moderate', typeLabel: TYPE_LABELS_DB.moderate,
@@ -374,13 +455,13 @@ const DB = (() => {
     }));
   }
 
-  // Crea un plan (rutina). type: 'cnp' (todo el contenido) | 'custom' (7 días vacíos).
+  // Crea un plan (rutina). type: 'guided' (todo el contenido) | 'custom' (7 días vacíos).
   // Ambos conservan el catálogo de ejercicios. Si activate, pasa a ser el plan activo.
-  async function createPlan(userId, type = 'cnp', { name, activate = true } = {}) {
+  async function createPlan(userId, type = 'guided', { name, activate = true } = {}) {
     const { map } = await ensureDefaultExercises(userId);
     const isCustom = type === 'custom';
     const routine = {
-      id: uid('rt'), userId, planType: isCustom ? 'custom' : 'cnp',
+      id: uid('rt'), userId, planType: isCustom ? 'custom' : 'guided',
       name: name || (isCustom ? 'Mi plan' : routineName()),
       days: isCustom ? buildEmptyDays() : buildDefaultDays(map),
       order: Date.now(), createdAt: Date.now(), isPrimary: false,
@@ -395,9 +476,9 @@ const DB = (() => {
     return routine;
   }
 
-  // ---- Semilla inicial (primer arranque) — envoltura CNP por compatibilidad ----
+  // ---- Semilla inicial (primer arranque) — envoltura por compatibilidad ----
   async function seedForUser(userId) {
-    return createPlan(userId, 'cnp', { activate: true });
+    return createPlan(userId, 'guided', { activate: true });
   }
 
   // Conmuta el plan activo (mueve el flag isPrimary).
@@ -425,7 +506,7 @@ const DB = (() => {
     let rt = await primaryRoutineOf(userId);
     const days = buildDefaultDays(map);
     if (rt) { rt.days = days; rt.name = rt.name || routineName(); await put('routines', rt); }
-    else { rt = { id: uid('rt'), userId, name: routineName(), days, order: 0, createdAt: Date.now(), isPrimary: true }; await put('routines', rt); }
+    else { rt = { id: uid('rt'), userId, planType: 'guided', name: routineName(), days, order: 0, createdAt: Date.now(), isPrimary: true }; await put('routines', rt); }
     return rt;
   }
 
@@ -683,11 +764,27 @@ const DB = (() => {
     }
   }
 
+  // Aditivo: quita la marca antigua de los datos ya guardados sin perder nada —
+  // planType 'cnp' → 'guided' y nombre 'Plan CNP…' → 'Plan completo'. Idempotente.
+  async function debrandStoredData() {
+    const users = await getAll('users');
+    for (const u of users) {
+      for (const rt of await routinesOf(u.id)) {
+        let ch = false;
+        if (rt.planType === 'cnp') { rt.planType = 'guided'; ch = true; }
+        if (rt.name === OLD_PLAN_NAME || /^Plan CNP\b/.test(rt.name || '')) { rt.name = PLAN_NAME; ch = true; }
+        if (ch) await put('routines', rt);
+      }
+    }
+  }
+
   async function migrate() {
     const s = await getSettings();
     if (!s) return;
     // Aditivo, independiente del aviso de unificación (v10): añade 'time' al cardio existente.
     if (!s.cardioTimeMetric) { await addTimeTotalToCardio(); await saveSettings({ cardioTimeMetric: true }); }
+    // Aditivo: desmarca los datos antiguos (planType/nombre) una sola vez.
+    if (!s.debranded) { await debrandStoredData(); await saveSettings({ debranded: true }); }
     const v = s.dataVersion || 0;
     if (v >= 9) return; // la unificación de cardio (v10) la lanza la app aparte (con aviso)
     const defaults = defaultTypeByName();
@@ -728,8 +825,8 @@ const DB = (() => {
           }
         });
         // (antes se renombraba aquí el plan principal: pisaba el nombre que hubiera puesto el usuario)
-        // tipo de plan: las rutinas antiguas son el plan CNP
-        if (!rt.planType) { rt.planType = 'cnp'; }
+        // tipo de plan: las rutinas antiguas son el plan completo (guiado)
+        if (!rt.planType) { rt.planType = 'guided'; }
         await put('routines', rt);
       }
       // garantizar exactamente un plan activo por usuario

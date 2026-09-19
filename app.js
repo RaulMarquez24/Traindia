@@ -1,5 +1,5 @@
 // ============================================================
-// APP CNP v2 — controlador, router, shell, onboarding, perfiles
+// APP Traindía v2 — controlador, router, shell, onboarding, perfiles
 // ============================================================
 
 const app = {
@@ -96,7 +96,7 @@ const app = {
     // ¿Es un export de Traindía? Entonces se importa. Si no, se guarda como documento.
     let parsed = null;
     try { parsed = JSON.parse(new TextDecoder().decode(buf)); } catch (e) { /* no es texto JSON */ }
-    if (parsed && parsed.format === 'cnp-export' && parsed.data) {
+    if (parsed && (parsed.format === 'traindia-export' || parsed.format === 'cnp-export') && parsed.data) {
       VData.routeImport(this, parsed);
       return true;
     }
@@ -333,26 +333,22 @@ const app = {
       host.id = 'onboarding';
       document.body.appendChild(host);
     }
-    let planType = 'cnp';
+    let planType = 'custom';
     host.innerHTML = `
       <div class="onb-wrap">
         <div class="onb-card">
-          <div class="onb-eyebrow">Bienvenida a Traindía</div>
+          <div class="onb-eyebrow">Bienvenido a Traindía</div>
           <h2>Configura tu perfil</h2>
           <p class="onb-sub">Este es el perfil principal de este dispositivo. La app arrancará siempre con él. Podrás cambiarlo todo desde Ajustes.</p>
           <div id="onbForm">
             ${UI.field('Tu nombre', UI.input('name', '', { placeholder: 'Ej: Raúl' }))}
             ${UI.field('Color', UI.colorPicker('color', UI.COLORS[0]))}
           </div>
-          <span class="field-label">Elige tu plan</span>
+          <span class="field-label">Tu plan</span>
           <div class="plan-choices" id="planChoices">
-            <button type="button" class="plan-choice sel" data-plan="cnp">
-              <strong>Plan CNP (mujer)</strong>
-              <span class="dim">Rutina completa, guías y todo el contenido CNP.</span>
-            </button>
-            <button type="button" class="plan-choice" data-plan="custom">
+            <button type="button" class="plan-choice sel" data-plan="custom">
               <strong>Plan personalizado</strong>
-              <span class="dim">7 días vacíos que montas tú. Sin guías ni contenido CNP.</span>
+              <span class="dim">7 días que montas a tu medida: tus ejercicios, tus días.</span>
             </button>
             <div class="plan-choice disabled">
               <strong>Más planes <span class="badge soon">Próximamente</span></strong>
@@ -388,7 +384,7 @@ const app = {
     });
   },
 
-  isCnp() { return !this.routine || this.routine.planType !== 'custom'; },
+  isFullPlan() { return !this.routine || this.routine.planType !== 'custom'; }, // plan con guías/contenido (no personalizado vacío)
 
   // ---- Menú de usuario (desde el chip) ----
   openUserMenu() {
@@ -448,7 +444,7 @@ const app = {
                 tipo: d.tipo,
                 mensaje: d.mensaje.trim(),
                 contacto: (d.contacto || '').trim() || '(no indicado)',
-                version: 'v2.16.4',
+                version: 'v2.17.0',
                 perfil: (this.mainUser && this.mainUser.name) || '',
                 navegador: navigator.userAgent,
               }),
@@ -470,7 +466,7 @@ const app = {
   // ---- Vista MÁS ----
   renderMore() {
     const rows = [
-      { v: 'guides', icon: 'book', color: 'var(--light)', label: 'Guías', sub: 'Documentación del plan', cnp: true },
+      { v: 'guides', icon: 'book', color: 'var(--light)', label: 'Guías', sub: 'Documentación del plan', guidedOnly: true },
       { v: 'exercises', icon: 'tag', color: 'var(--strong)', label: 'Ejercicios', sub: 'Catálogo editable' },
       { v: 'places', icon: 'pin', color: 'var(--priority)', label: 'Lugares', sub: 'Sitios donde entrenas' },
       { v: 'info', icon: 'info', color: 'var(--moderate)', label: 'El plan', sub: 'Tus planes de entrenamiento' },
@@ -479,11 +475,11 @@ const app = {
       { v: 'docs', icon: 'book', color: 'var(--sub-accent)', label: 'Documentos', sub: 'PDFs y fotos, a mano en el entreno' },
       { v: 'backups', icon: 'clock', color: 'var(--moderate)', label: 'Copias internas', sub: 'Puntos de restauración' },
       { v: 'settings', icon: 'settings', color: 'var(--rest)', label: 'Ajustes', sub: 'Perfil principal y app' },
-    ].filter(r => !r.cnp || this.isCnp());
+    ].filter(r => !r.guidedOnly || this.isFullPlan());
     return `<div class="section">
       ${rows.map(r => `<button class="big-row" data-link="${r.v}"><span class="big-row-icon tile" style="background:${r.color}">${UI.icon(r.icon, 20)}</span><span class="big-row-text"><strong>${r.label}</strong><span class="dim">${r.sub}</span></span><span class="chev">›</span></button>`).join('')}
       <button class="big-row" data-feedback><span class="big-row-icon tile" style="background:var(--strong)">${UI.icon('chat', 20)}</span><span class="big-row-text"><strong>Sugerencias y reportes</strong><span class="dim">Envíame ideas o fallos</span></span><span class="chev">›</span></button>
-      <p class="version-foot">Traindía · v2.16.4 · ${Object.keys(this.usersById).length} perfil(es)<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
+      <p class="version-foot">Traindía · v2.17.0 · ${Object.keys(this.usersById).length} perfil(es)<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
     </div>`;
   },
   bindMore(root) {
@@ -741,7 +737,7 @@ const app = {
         </div>
         <button class="btn primary" id="saveMain">Guardar perfil</button>
       </div>
-      ${this.isCnp() ? `<div class="card">
+      ${this.isFullPlan() ? `<div class="card">
         <div class="card-label">Datos predefinidos</div>
         <p class="field-hint" style="margin-top:0;margin-bottom:10px">Los ejercicios predefinidos nunca se borran. Si has cambiado tu rutina, puedes volver al plan original.</p>
         <button class="btn ghost block" id="restorePlan">Restaurar plan original</button>
@@ -752,7 +748,7 @@ const app = {
         <button class="btn danger block" id="resetApp">Borrar todos los datos</button>
         <p class="field-hint">Restablece la app al estado inicial (se borran todos los perfiles, sesiones y progreso).</p>
       </div>
-      <p class="version-foot">Traindía · v2.16.4</p>
+      <p class="version-foot">Traindía · v2.17.0</p>
     </div>`;
   },
 
