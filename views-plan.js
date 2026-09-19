@@ -115,9 +115,12 @@ const VPlan = (() => {
   function weekBind(app, root) {
     const ww = root && root.querySelector('#weekWelcome');
     if (ww) {
-      const dismiss = () => { try { localStorage.setItem('traindia-welcomed', '1'); } catch (e) {} ww.remove(); };
-      ww.querySelector('[data-ww-view]').addEventListener('click', () => { dismiss(); app.previewLanding(); });
-      ww.querySelector('[data-ww-close]').addEventListener('click', dismiss);
+      // Ver la presentación NO descarta el aviso: sigue ahí hasta que se pulsa la ✕.
+      ww.querySelector('[data-ww-view]').addEventListener('click', () => app.previewLanding());
+      ww.querySelector('[data-ww-close]').addEventListener('click', () => {
+        try { localStorage.setItem('traindia-welcomed', '1'); } catch (e) {}
+        ww.remove();
+      });
     }
   }
 

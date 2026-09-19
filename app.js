@@ -305,6 +305,16 @@ const app = {
       if (g) label = g.title;
     }
     title.textContent = label;
+    // En la pantalla de inicio, pulsar el logo «Traindía» abre la presentación.
+    if (this.currentView === 'week') {
+      title.classList.add('title-tap');
+      title.title = 'Ver la presentación';
+      title.onclick = () => this.previewLanding();
+    } else {
+      title.classList.remove('title-tap');
+      title.removeAttribute('title');
+      title.onclick = null;
+    }
   },
 
   updateNavActive() {
@@ -672,7 +682,7 @@ const app = {
                 tipo: d.tipo,
                 mensaje: d.mensaje.trim(),
                 contacto: (d.contacto || '').trim() || '(no indicado)',
-                version: 'v2.30.0',
+                version: 'v2.30.1',
                 perfil: (this.mainUser && this.mainUser.name) || '',
                 navegador: navigator.userAgent,
               }),
@@ -703,11 +713,12 @@ const app = {
       { v: 'docs', icon: 'book', color: 'var(--sub-accent)', label: 'Documentos', sub: 'PDFs y fotos, a mano en el entreno' },
       { v: 'backups', icon: 'clock', color: 'var(--moderate)', label: 'Copias internas', sub: 'Puntos de restauración' },
       { v: 'settings', icon: 'settings', color: 'var(--rest)', label: 'Ajustes', sub: 'Perfil principal y app' },
+      { v: 'landing', icon: 'info', color: 'var(--light)', label: 'Ver la presentación', sub: 'La página de bienvenida', landing: true },
     ].filter(r => !r.guidedOnly || this.isFullPlan());
     return `<div class="section">
-      ${rows.map(r => `<button class="big-row" ${r.modal ? 'data-share' : `data-link="${r.v}"`}><span class="big-row-icon tile" style="background:${r.color}">${UI.icon(r.icon, 20)}</span><span class="big-row-text"><strong>${r.label}</strong><span class="dim">${r.sub}</span></span><span class="chev">›</span></button>`).join('')}
+      ${rows.map(r => `<button class="big-row" ${r.modal ? 'data-share' : r.landing ? 'data-landing' : `data-link="${r.v}"`}><span class="big-row-icon tile" style="background:${r.color}">${UI.icon(r.icon, 20)}</span><span class="big-row-text"><strong>${r.label}</strong><span class="dim">${r.sub}</span></span><span class="chev">›</span></button>`).join('')}
       <button class="big-row" data-feedback><span class="big-row-icon tile" style="background:var(--strong)">${UI.icon('chat', 20)}</span><span class="big-row-text"><strong>Sugerencias y reportes</strong><span class="dim">Envíame ideas o fallos</span></span><span class="chev">›</span></button>
-      <p class="version-foot">Traindía · v2.30.0 · ${Object.keys(this.usersById).length} perfil(es)<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
+      <p class="version-foot">Traindía · v2.30.1 · ${Object.keys(this.usersById).length} perfil(es)<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
     </div>`;
   },
   bindMore(root) {
@@ -715,6 +726,8 @@ const app = {
     if (fb) fb.addEventListener('click', () => this.openFeedback());
     const sh = root && root.querySelector('[data-share]');
     if (sh) sh.addEventListener('click', () => VData.openShare(this));
+    const ldb = root && root.querySelector('[data-landing]');
+    if (ldb) ldb.addEventListener('click', () => this.previewLanding());
   },
 
   // ---- Vista DOCUMENTOS (adjuntos consultables durante el entreno) ----
@@ -987,7 +1000,7 @@ const app = {
         <button class="btn danger block" id="resetApp">Borrar todos los datos</button>
         <p class="field-hint">Restablece la app al estado inicial (se borran todos los perfiles, sesiones y progreso).</p>
       </div>
-      <p class="version-foot">Traindía · v2.30.0</p>
+      <p class="version-foot">Traindía · v2.30.1</p>
     </div>`;
   },
 
