@@ -707,6 +707,20 @@ body.modal-open { overflow: hidden; }
   :root:not([data-theme="light"]) .ld-theme .ic-moon { display: none; }
 }
 
+/* Botón para salir de la vista previa de la presentación (solo cuando la abres
+   desde Ajustes teniendo ya perfil). Flotante abajo, siempre a mano. */
+.ld-close {
+  position: fixed; left: 50%; transform: translateX(-50%);
+  bottom: calc(16px + var(--safe-bottom)); z-index: 46;
+  padding: 12px 22px; border-radius: 999px;
+  background: var(--strong); border: 0; color: #fff;
+  font-family: inherit; font-size: 14px; font-weight: 700; cursor: pointer;
+  box-shadow: 0 10px 30px rgba(15, 17, 22, .3);
+  transition: transform .15s ease, filter .2s ease;
+}
+.ld-close:hover { filter: brightness(1.08); }
+.ld-close:active { transform: translateX(-50%) scale(.95); }
+
 /* Señal de "hay más abajo": una línea que late, sin texto que la explique. */
 .ld-cue { margin-top: 30px; }
 .ld-cue::after { content: ''; display: block; width: 1px; height: 34px; margin: 0 auto; background: linear-gradient(var(--ink-dim), transparent); animation: ld-cue 1.9s ease-in-out infinite; }
