@@ -661,6 +661,16 @@ body.modal-open { overflow: hidden; }
 .resp-opt em { font-style: normal; font-size: 12px; color: var(--ink-dim); }
 .resp-opt.go i { background: #2f9c6a; } .resp-opt.wait i { background: #c08a12; } .resp-opt.stop i { background: #c4503f; }
 
+/* Héroe de "Compartir": la copia completa, con más peso que el resto */
+.share-hero { display: flex; align-items: center; gap: 14px; width: 100%; text-align: left; cursor: pointer;
+  background: linear-gradient(135deg, var(--strong), var(--sub-accent)); color: #fff; border: none;
+  border-radius: 16px; padding: 18px; margin-bottom: 12px; box-shadow: 0 8px 24px rgba(79,70,229,0.28); }
+.share-hero:active { opacity: .9; }
+.share-hero-icon { width: 50px; height: 50px; border-radius: 13px; background: rgba(255,255,255,0.18); display: flex; align-items: center; justify-content: center; flex: none; }
+.share-hero-txt { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.share-hero-txt strong { font-size: 18px; font-weight: 800; letter-spacing: -0.01em; }
+.share-hero-txt span { font-size: 12.5px; line-height: 1.4; opacity: .92; }
+
 /* Selector segmentado (p. ej. tema claro/oscuro en Ajustes) */
 .seg { display: flex; gap: 4px; background: var(--line-soft); border: 1px solid var(--line); border-radius: 10px; padding: 4px; margin-bottom: 10px; }
 .seg-opt { flex: 1; border: none; background: transparent; color: var(--ink-soft); font-family: inherit; font-size: 13px; font-weight: 600; padding: 8px 6px; border-radius: 7px; cursor: pointer; }
