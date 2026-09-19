@@ -411,17 +411,23 @@ const app = {
     this.revealLanding();
   },
 
-  // Movimiento de la presentación. Dos cosas, las dos atadas al scroll normal:
-  //  - paralaje: las imágenes se mueven unos píxeles menos que el texto, lo que
-  //    da profundidad sin frenar la página en ningún momento.
+  // Movimiento de la presentación. Todo va atado al scroll normal y nada se ancla:
+  //  - paralaje: las imágenes se mueven unos píxeles menos que el texto (profundidad).
+  //  - bandas: la cinta de tarjetas se desplaza de lado mientras la sección cruza
+  //    la pantalla. La clave es que la sección NO se queda fija, así que bajar
+  //    siempre avanza la página: el lateral acompaña, no sustituye.
   //  - barra de progreso arriba, para que se vea que queda contenido por delante.
-  // Todo es transform/width: no toca el flujo, así que no hay saltos ni reflows.
+  // Solo transform y width: no toca el flujo, así que no hay saltos ni reflows.
   initScrollFx() {
     const reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
     const barra = document.querySelector('#landing .ld-bar i');
     const capas = reduce ? [] : [...document.querySelectorAll('#landing [data-par]')]
       .map(el => ({ el, amp: parseFloat(el.dataset.par) || 0 }));
-    if (!barra && !capas.length) return;
+    const bandas = reduce ? [] : [...document.querySelectorAll('#landing [data-band]')]
+      .map(sec => ({ sec, rail: sec.querySelector('.ld-rail'), dir: sec.dataset.bandDir === '-1' ? -1 : 1 }))
+      .filter(b => b.rail);
+    if (bandas.length) document.documentElement.classList.add('js-band');
+    if (!barra && !capas.length && !bandas.length) return;
 
     const pintar = () => {
       if (barra) {
@@ -434,6 +440,17 @@ const app = {
         if (r.bottom < -200 || r.top > innerHeight + 200) return; // fuera de vista: ni se toca
         const d = ((r.top + r.height / 2) - medio) / innerHeight; // -1 arriba, +1 abajo
         c.el.style.transform = `translate3d(0, ${(d * c.amp).toFixed(1)}px, 0)`;
+      });
+      bandas.forEach(b => {
+        const r = b.sec.getBoundingClientRect();
+        if (r.bottom < -200 || r.top > innerHeight + 200) return;
+        // 0 justo cuando la sección asoma por abajo, 1 cuando acaba de salir por arriba.
+        const avance = Math.min(1, Math.max(0, (innerHeight - r.top) / (innerHeight + r.height)));
+        const sobra = b.rail.scrollWidth - b.sec.clientWidth;
+        if (sobra <= 0) { b.rail.style.transform = ''; return; }
+        // dir -1 entra por el otro lado, para que las bandas no vayan todas igual.
+        const x = b.dir === 1 ? -avance * sobra : -(1 - avance) * sobra;
+        b.rail.style.transform = `translate3d(${x.toFixed(1)}px, 0, 0)`;
       });
     };
 
@@ -540,7 +557,7 @@ const app = {
                 tipo: d.tipo,
                 mensaje: d.mensaje.trim(),
                 contacto: (d.contacto || '').trim() || '(no indicado)',
-                version: 'v2.22.0',
+                version: 'v2.23.0',
                 perfil: (this.mainUser && this.mainUser.name) || '',
                 navegador: navigator.userAgent,
               }),
@@ -575,7 +592,7 @@ const app = {
     return `<div class="section">
       ${rows.map(r => `<button class="big-row" ${r.modal ? 'data-share' : `data-link="${r.v}"`}><span class="big-row-icon tile" style="background:${r.color}">${UI.icon(r.icon, 20)}</span><span class="big-row-text"><strong>${r.label}</strong><span class="dim">${r.sub}</span></span><span class="chev">›</span></button>`).join('')}
       <button class="big-row" data-feedback><span class="big-row-icon tile" style="background:var(--strong)">${UI.icon('chat', 20)}</span><span class="big-row-text"><strong>Sugerencias y reportes</strong><span class="dim">Envíame ideas o fallos</span></span><span class="chev">›</span></button>
-      <p class="version-foot">Traindía · v2.22.0 · ${Object.keys(this.usersById).length} perfil(es)<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
+      <p class="version-foot">Traindía · v2.23.0 · ${Object.keys(this.usersById).length} perfil(es)<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
     </div>`;
   },
   bindMore(root) {
@@ -855,7 +872,7 @@ const app = {
         <button class="btn danger block" id="resetApp">Borrar todos los datos</button>
         <p class="field-hint">Restablece la app al estado inicial (se borran todos los perfiles, sesiones y progreso).</p>
       </div>
-      <p class="version-foot">Traindía · v2.22.0</p>
+      <p class="version-foot">Traindía · v2.23.0</p>
     </div>`;
   },
 
