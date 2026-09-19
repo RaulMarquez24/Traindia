@@ -8,7 +8,6 @@
 //   routines   { id, userId, name, days[], order, createdAt }
 //   sessions   { id, userId, date, name, dayId?, routineId?, entries[], notes, durationSec, createdAt }
 //   progress   { id, userId, date, weight, measurements{}, notes }
-//   journal    { id, userId, date, mood, text }
 // ============================================================
 
 const DB = (() => {
@@ -23,7 +22,6 @@ const DB = (() => {
     routines:  { keyPath: 'id', indexes: ['userId'] },
     sessions:  { keyPath: 'id', indexes: ['userId', 'date'] },
     progress:  { keyPath: 'id', indexes: ['userId', 'date'] },
-    journal:   { keyPath: 'id', indexes: ['userId', 'date'] },
     files:     { keyPath: 'id', indexes: ['userId'] },   // { id, userId, name, type, size, addedAt, data:ArrayBuffer }
     nutrition: { keyPath: 'id', indexes: ['userId'] },   // pauta de alimentación (ver ESQUEMA en views-nutrition.js)
   };
@@ -626,7 +624,7 @@ const DB = (() => {
   }
   // ---- Copias internas (localStorage; máx 2 para no ocupar espacio) ----
   const IBACKUP_PREFIX = 'traindia-ibackup-';
-  const IBACKUP_STORES = ['users', 'exercises', 'routines', 'sessions', 'progress', 'journal', 'settings'];
+  const IBACKUP_STORES = ['users', 'exercises', 'routines', 'sessions', 'progress', 'nutrition', 'settings'];
   const MAX_IBACKUPS = 2;
   async function dumpAll() {
     const d = {};
@@ -664,8 +662,7 @@ const DB = (() => {
     let o; try { o = JSON.parse(localStorage.getItem(key)); } catch (e) { return false; }
     if (!o || !o.data) return false;
     for (const store of IBACKUP_STORES) {
-      await clearStore(store);
-      for (const item of (o.data[store] || [])) await put(store, item);
+      try { await clearStore(store); for (const item of (o.data[store] || [])) await put(store, item); } catch (e) {} // tolera stores ausentes (modo degradado)
     }
     return true;
   }
@@ -871,7 +868,6 @@ const DB = (() => {
   const routinesOf  = (userId) => byIndex('routines', 'userId', userId);
   const sessionsOf  = (userId) => byIndex('sessions', 'userId', userId);
   const progressOf  = (userId) => byIndex('progress', 'userId', userId);
-  const journalOf   = (userId) => byIndex('journal', 'userId', userId);
 
   async function primaryRoutineOf(userId) {
     const rs = await routinesOf(userId);
@@ -889,7 +885,7 @@ const DB = (() => {
     saveInternalBackup, listInternalBackups, deleteInternalBackup, restoreInternalBackup,
     filesOf, addFile, hasStore, isFallback, upgradeNow,
     nutritionOf, primaryNutritionOf, saveNutrition,
-    exercisesOf, routinesOf, sessionsOf, progressOf, journalOf, primaryRoutineOf,
+    exercisesOf, routinesOf, sessionsOf, progressOf, primaryRoutineOf,
     STORES,
   };
 })();

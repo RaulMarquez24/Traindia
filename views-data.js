@@ -19,7 +19,6 @@ const VData = (() => {
         routines: await DB.routinesOf(userId),
         sessions: (await DB.sessionsOf(userId)).filter(s => !s.draft),
         progress: await DB.progressOf(userId),
-        journal: await DB.journalOf(userId),   // sección retirada, pero sus datos se conservan
         nutrition: await DB.nutritionOf(userId),
       },
     };
@@ -134,10 +133,10 @@ const VData = (() => {
     const now = Date.now(), DAY = 86400000;
     const lastBackup = s.lastBackupAt || 0;
     const lastReminder = s.lastBackupReminderAt || 0;
-    const [sessions, progress, journal] = await Promise.all([
-      DB.sessionsOf(app.mainUser.id), DB.progressOf(app.mainUser.id), DB.journalOf(app.mainUser.id),
+    const [sessions, progress, nutrition] = await Promise.all([
+      DB.sessionsOf(app.mainUser.id), DB.progressOf(app.mainUser.id), DB.nutritionOf(app.mainUser.id),
     ]);
-    const stamps = [...sessions.filter(x => !x.draft), ...progress, ...journal].map(x => x.createdAt || 0).filter(Boolean);
+    const stamps = [...sessions.filter(x => !x.draft), ...progress, ...nutrition].map(x => x.createdAt || 0).filter(Boolean);
     if (!stamps.length) return;
     const newest = Math.max(...stamps);
     if (newest <= lastBackup) return; // nada nuevo que respaldar
@@ -158,22 +157,21 @@ const VData = (() => {
 
   // ====================================================
   function render(app) {
+    const part = (id, icon, color, title, sub) =>
+      `<button class="big-row" id="${id}"><span class="big-row-icon tile" style="background:${color}">${UI.icon(icon, 18)}</span><span class="big-row-text"><strong>${title}</strong><span class="dim">${sub}</span></span><span class="chev">›</span></button>`;
     return `<div class="section">
-      <div class="card">
-        <div class="card-label">Exportar</div>
-        <button class="btn primary block" id="expProfile">Perfil completo (${UI.esc(app.mainUser.name)})</button>
-        <button class="btn ghost block" id="expPlan">Plan completo (semana)</button>
-        <button class="btn ghost block" id="expDay">Un día concreto</button>
-        <button class="btn ghost block" id="expSessions">Sesiones (individuales o por fechas)</button>
-        <button class="btn ghost block" id="expProgress">Progreso</button>
-        <button class="btn ghost block" id="expRoutines">Rutinas específicas</button>
-        <p class="field-hint">Se descarga un archivo JSON que puedes guardar o compartir con un compañero.</p>
-      </div>
-      <div class="card">
-        <div class="card-label">Importar</div>
-        <button class="btn primary block" id="impBtn">Importar (archivo o pegar JSON)</button>
-        <p class="field-hint">Pega el JSON o elige un archivo. Podrás elegir a qué perfil(es) asignarlo y qué partes importar.</p>
-      </div>
+      <div class="card-label">Copia y traspaso</div>
+      ${part('expProfile', 'upload', 'var(--strong)', 'Copia completa', 'Todo tu perfil en un archivo: ejercicios, plan, sesiones, progreso y nutrición')}
+      ${part('impBtn', 'swap', 'var(--light)', 'Importar', 'Trae un archivo o pega el JSON; detecta solo qué es y lo importa')}
+
+      <div class="card-label" style="margin-top:20px">Exportar por partes</div>
+      ${part('expPlan', 'calendar', 'var(--moderate)', 'Plan de la semana', 'Tu rutina activa completa')}
+      ${part('expDay', 'calendar', 'var(--moderate)', 'Un día concreto', 'Comparte un solo día con un compañero')}
+      ${part('expSessions', 'activity', 'var(--light)', 'Sesiones', 'Todas, por fechas o sueltas')}
+      ${part('expProgress', 'activity', 'var(--strong)', 'Progreso', 'Peso corporal y medidas')}
+      ${part('expNutrition', 'book', 'var(--sub-accent)', 'Nutrición', 'Tu pauta de alimentación en uso')}
+      ${part('expRoutines', 'repeat', 'var(--rest)', 'Rutinas', 'Uno o varios planes concretos')}
+      <p class="field-hint">Cada opción descarga un archivo JSON que puedes guardar o compartir. Todo se importa desde "Importar".</p>
     </div>`;
   }
 
@@ -183,6 +181,11 @@ const VData = (() => {
     root.querySelector('#expDay').addEventListener('click', () => exportDay(app));
     root.querySelector('#expSessions').addEventListener('click', () => exportSessions(app));
     root.querySelector('#expProgress').addEventListener('click', () => exportProgress(app));
+    root.querySelector('#expNutrition').addEventListener('click', async () => {
+      const plan = await DB.primaryNutritionOf(app.mainUser.id);
+      if (!plan) { UI.toast('No tienes ninguna pauta de nutrición', 'err'); return; }
+      exportNutrition(app, plan);
+    });
     root.querySelector('#expRoutines').addEventListener('click', () => exportRoutines(app));
     root.querySelector('#impBtn').addEventListener('click', () => startImport(app));
   }
@@ -197,6 +200,7 @@ const VData = (() => {
         <button class="menu-row" data-act="exp-profile"><span>${UI.icon('upload', 17)} Exportar perfil completo</span><span class="chev">›</span></button>
         <button class="menu-row" data-act="exp-sessions"><span>${UI.icon('upload', 17)} Exportar sesiones</span><span class="chev">›</span></button>
         <button class="menu-row" data-act="exp-progress"><span>${UI.icon('upload', 17)} Exportar progreso</span><span class="chev">›</span></button>
+        <button class="menu-row" data-act="exp-nutrition"><span>${UI.icon('upload', 17)} Exportar nutrición</span><span class="chev">›</span></button>
         <button class="menu-row" data-act="exp-routines"><span>${UI.icon('upload', 17)} Exportar rutinas</span><span class="chev">›</span></button>
         <button class="menu-row" data-act="import"><span>${UI.icon('swap', 17)} Importar (archivo o pegar)</span><span class="chev">›</span></button>
       </div>
@@ -209,6 +213,11 @@ const VData = (() => {
         root.querySelector('[data-act="exp-profile"]').addEventListener('click', () => go(() => backupProfile(app)));
         root.querySelector('[data-act="exp-sessions"]').addEventListener('click', () => go(() => exportSessions(app)));
         root.querySelector('[data-act="exp-progress"]').addEventListener('click', () => go(() => exportProgress(app)));
+        root.querySelector('[data-act="exp-nutrition"]').addEventListener('click', () => go(async () => {
+          const plan = await DB.primaryNutritionOf(app.mainUser.id);
+          if (!plan) { UI.toast('No tienes ninguna pauta de nutrición', 'err'); return; }
+          exportNutrition(app, plan);
+        }));
         root.querySelector('[data-act="exp-routines"]').addEventListener('click', () => go(() => exportRoutines(app)));
         root.querySelector('[data-act="import"]').addEventListener('click', () => go(() => startImport(app)));
       },
@@ -402,7 +411,7 @@ const VData = (() => {
     download({
       format: FORMAT, version: 2, kind: 'sessions', exportedAt: new Date().toISOString(),
       user: { name: app.mainUser.name, color: app.mainUser.color },
-      data: { exercises: exercisesByIds(allEx, refIds), routines: [], sessions, progress: [], journal: [] },
+      data: { exercises: exercisesByIds(allEx, refIds), routines: [], sessions, progress: [] },
     }, sessions.length === 1 ? `traindia-sesion-${stamp()}.json` : `traindia-sesiones-${stamp()}.json`);
     UI.toast(`${sessions.length} sesión(es) exportadas`);
   }
@@ -438,7 +447,7 @@ const VData = (() => {
     download({
       format: FORMAT, version: 2, kind: 'progress', exportedAt: new Date().toISOString(),
       user: { name: app.mainUser.name, color: app.mainUser.color },
-      data: { exercises: [], routines: [], sessions: [], progress: entries, journal: [] },
+      data: { exercises: [], routines: [], sessions: [], progress: entries },
     }, entries.length === 1 ? `traindia-progreso-${stamp()}.json` : `traindia-progresos-${stamp()}.json`);
     UI.toast(`${entries.length} registro(s) exportados`);
   }
@@ -468,7 +477,7 @@ const VData = (() => {
           download({
             format: FORMAT, version: 2, kind: 'routines', exportedAt: new Date().toISOString(),
             user: { name: app.mainUser.name, color: app.mainUser.color },
-            data: { exercises: exercisesByIds(allEx, refIds), routines: selected, sessions: [], progress: [], journal: [] },
+            data: { exercises: exercisesByIds(allEx, refIds), routines: selected, sessions: [], progress: [] },
           }, `traindia-rutinas-${stamp()}.json`);
           UI.toast(`${selected.length} rutina(s) exportadas`);
         }},
@@ -482,7 +491,7 @@ const VData = (() => {
     if (key === 'routines') return UI.esc(it.name || 'Plan');
     if (key === 'sessions') return `${UI.fmtDateShort(it.date)} · ${UI.esc(it.name || 'Sesión')}`;
     if (key === 'progress') return `${UI.fmtDateShort(it.date)}${it.weight ? ` · ${it.weight} kg` : ''}`;
-    if (key === 'journal') return `${UI.fmtDateShort(it.date)}`;
+    if (key === 'nutrition') return UI.esc(it.nombre || 'Pauta');
     return UI.esc(String(it.id));
   }
 
@@ -497,6 +506,7 @@ const VData = (() => {
       { key: 'exercises', label: 'Ejercicios' },
       { key: 'sessions', label: 'Sesiones' },
       { key: 'progress', label: 'Progreso' },
+      { key: 'nutrition', label: 'Nutrición' },
     ].filter(s => (counts[s.key] || []).length);
     const hasData = DATA_SECTIONS.length > 0;
 
@@ -592,7 +602,7 @@ const VData = (() => {
           const policy = targetIds.length > 1 ? 'duplicate' : (root.querySelector('select[name="policy"]')?.value || 'duplicate');
           for (const tid of targetIds) {
             if (chosen.size) {
-              const payload2 = { ...payload, data: { exercises: [], routines: [], sessions: [], progress: [], journal: [], ...filtered } };
+              const payload2 = { ...payload, data: { exercises: [], routines: [], sessions: [], progress: [], ...filtered } };
               await applyImport(app, payload2, tid, policy, chosen);
             }
             if (wantDays) {
@@ -641,7 +651,7 @@ const VData = (() => {
   async function applyImport(app, payload, targetUserId, policy, sections) {
     const data = payload.data || {};
     const duplicate = policy === 'duplicate';
-    const want = sections || new Set(['exercises', 'routines', 'sessions', 'progress', 'journal']);
+    const want = sections || new Set(['exercises', 'routines', 'sessions', 'progress', 'nutrition']);
     let exMap = {}; // idOrigen -> idLocal (para reescribir referencias)
 
     // 1) Ejercicios — SIEMPRE se emparejan por NOMBRE con el catálogo, así que
@@ -685,12 +695,9 @@ const VData = (() => {
       await DB.put('progress', { ...p, id: duplicate ? DB.uid('prg') : p.id, userId: targetUserId });
     }
 
-    // 5) Diario
-    for (const n of (data.nutrition || [])) {   // pauta de alimentación
+    // 5) Nutrición (pauta de alimentación)
+    if (want.has('nutrition')) for (const n of (data.nutrition || [])) {
       try { await DB.saveNutrition({ ...n, id: duplicate ? DB.uid('nut') : n.id, userId: targetUserId }); } catch (e) {}
-    }
-    if (want.has('journal')) for (const j of (data.journal || [])) {
-      await DB.put('journal', { ...j, id: duplicate ? DB.uid('jrn') : j.id, userId: targetUserId });
     }
   }
 

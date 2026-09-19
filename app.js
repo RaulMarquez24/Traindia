@@ -458,7 +458,7 @@ const app = {
                 tipo: d.tipo,
                 mensaje: d.mensaje.trim(),
                 contacto: (d.contacto || '').trim() || '(no indicado)',
-                version: 'v2.18.1',
+                version: 'v2.19.0',
                 perfil: (this.mainUser && this.mainUser.name) || '',
                 navegador: navigator.userAgent,
               }),
@@ -493,7 +493,7 @@ const app = {
     return `<div class="section">
       ${rows.map(r => `<button class="big-row" data-link="${r.v}"><span class="big-row-icon tile" style="background:${r.color}">${UI.icon(r.icon, 20)}</span><span class="big-row-text"><strong>${r.label}</strong><span class="dim">${r.sub}</span></span><span class="chev">›</span></button>`).join('')}
       <button class="big-row" data-feedback><span class="big-row-icon tile" style="background:var(--strong)">${UI.icon('chat', 20)}</span><span class="big-row-text"><strong>Sugerencias y reportes</strong><span class="dim">Envíame ideas o fallos</span></span><span class="chev">›</span></button>
-      <p class="version-foot">Traindía · v2.18.1 · ${Object.keys(this.usersById).length} perfil(es)<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
+      <p class="version-foot">Traindía · v2.19.0 · ${Object.keys(this.usersById).length} perfil(es)<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
     </div>`;
   },
   bindMore(root) {
@@ -647,7 +647,7 @@ const app = {
       UI.toast('Copia descargada');
     }));
     root.querySelectorAll('[data-restore]').forEach(b => b.addEventListener('click', async () => {
-      const ok = await UI.confirm({ title: 'Restaurar copia', message: 'Se REEMPLAZARÁN todos tus datos actuales (ejercicios, sesiones, plan, progreso, diario) por los de esta copia. No se puede deshacer.', confirmLabel: 'Restaurar', danger: true });
+      const ok = await UI.confirm({ title: 'Restaurar copia', message: 'Se REEMPLAZARÁN todos tus datos actuales (ejercicios, sesiones, plan, progreso y nutrición) por los de esta copia. No se puede deshacer.', confirmLabel: 'Restaurar', danger: true });
       if (!ok) return;
       await DB.restoreInternalBackup(b.dataset.restore);
       UI.toast('Copia restaurada'); location.reload();
@@ -725,11 +725,11 @@ const app = {
     if (!u || u.isMain) return;
     const ok = await UI.confirm({
       title: `Eliminar a ${u.name}`,
-      message: 'Se borrarán también todas sus sesiones, progreso y diario importados. Esta acción no se puede deshacer.',
+      message: 'Se borrarán también todas sus sesiones y progreso importados. Esta acción no se puede deshacer.',
       confirmLabel: 'Eliminar', danger: true,
     });
     if (!ok) return;
-    for (const store of ['exercises', 'routines', 'sessions', 'progress', 'journal']) {
+    for (const store of ['exercises', 'routines', 'sessions', 'progress']) {
       const items = await DB.byIndex(store, 'userId', userId);
       for (const it of items) await DB.del(store, it.id);
     }
@@ -771,7 +771,7 @@ const app = {
         <button class="btn danger block" id="resetApp">Borrar todos los datos</button>
         <p class="field-hint">Restablece la app al estado inicial (se borran todos los perfiles, sesiones y progreso).</p>
       </div>
-      <p class="version-foot">Traindía · v2.18.1</p>
+      <p class="version-foot">Traindía · v2.19.0</p>
     </div>`;
   },
 
@@ -804,7 +804,7 @@ const app = {
     root.querySelector('#resetApp').addEventListener('click', async () => {
       const ok = await UI.confirm({
         title: 'Borrar todos los datos',
-        message: 'CUIDADO: esto elimina PERMANENTEMENTE todos los perfiles, sesiones, progreso, diario y rutinas. La app volverá a la pantalla inicial. No se puede deshacer.',
+        message: 'CUIDADO: esto elimina PERMANENTEMENTE todos los perfiles, sesiones, progreso, nutrición y rutinas. La app volverá a la pantalla inicial. No se puede deshacer.',
         confirmLabel: 'Borrar todo', danger: true, requireText: 'BORRAR',
       });
       if (!ok) return;
