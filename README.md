@@ -35,7 +35,7 @@ Nació como un plan de entrenamiento concreto y evolucionó a una herramienta ge
 
 #### 🗓️ Planes y rutina
 - **Varios planes** por perfil, con uno activo; **crea, cambia y elimina** planes.
-- Al empezar eliges plantilla: **plan CNP** (completo, con guías) o **plan personalizado** (en blanco).
+- Al empezar tienes tu **plan personalizado** (7 días en blanco que montas a tu medida); más plantillas en camino.
 - Semana de días editables: **bloques/categorías, ejercicios, orden, series objetivo**, marcando prioritarios y opcionales.
 - **Intercambiar días**, **lugares de entreno** (con lugares “especiales” destacados) y **restaurar** un día o el plan original.
 - **Suplentes** por ejercicio (“el sustituto de X es Y o Z”) y **Plan B** por día (alternativas según la situación: “si llueve…”).
@@ -77,7 +77,7 @@ Nació como un plan de entrenamiento concreto y evolucionó a una herramienta ge
 - En el móvil llegan también con **Compartir → Traindía** (útil para los adjuntos de WhatsApp, imposibles de encontrar en el explorador).
 
 #### 📚 Guías
-- Documentación incluida en el plan CNP (técnica, progresiones, lógica de la semana…), **enlazada desde cada día**.
+- Documentación incluida en los planes completos (técnica, progresiones, lógica de la semana…), **enlazada desde cada día**.
 
 #### ↕️ Importar / Exportar
 - Granular: **perfil completo, un día, sesiones (rango o concretas), rutinas, progreso, plan de nutrición** → JSON.
@@ -97,7 +97,7 @@ flowchart TD
     UIH["ui.js<br/>modales · gráficas SVG · iconos · helpers"]
     SEED["data.js<br/>plan semilla + guías"]
     DB["db.js<br/>capa IndexedDB + migraciones"]
-    IDB[("IndexedDB · cnp-db")]
+    IDB[("IndexedDB · traindia-db")]
     SW["sw.js<br/>service worker · cache-first"]
 
     SHELL --> V_PLAN["views-plan.js"]
@@ -113,7 +113,7 @@ flowchart TD
     SW -. cachea los assets .-> SHELL
 ```
 
-### Modelo de datos (IndexedDB · `cnp-db`)
+### Modelo de datos (IndexedDB · `traindia-db`)
 
 Todos los registros (salvo `settings`) llevan `userId`, generado en el primer arranque y persistente.
 

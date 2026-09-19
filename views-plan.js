@@ -107,7 +107,7 @@ const VPlan = (() => {
   async function day(app, params) {
     const d = (app.routine?.days || []).find(x => x.id === params.dayId);
     if (!d) return `<div class="empty-state"><p>Día no encontrado.</p></div>`;
-    const restoreBtn = (isDefaultDay(d) && app.isCnp()) ? `<button class="btn ghost" data-act="restore-day">${UI.icon('refresh', 16)} Restaurar día</button>` : '';
+    const restoreBtn = (isDefaultDay(d) && app.isFullPlan()) ? `<button class="btn ghost" data-act="restore-day">${UI.icon('refresh', 16)} Restaurar día</button>` : '';
     const byId = {};
     (await DB.exercisesOf(app.activeUser.id)).forEach(e => { byId[e.id] = e; });
     const subsLine = (ex) => {
@@ -156,7 +156,7 @@ const VPlan = (() => {
     }
 
     let related = '';
-    if (app.isCnp() && d.relatedGuides && d.relatedGuides.length) {
+    if (app.isFullPlan() && d.relatedGuides && d.relatedGuides.length) {
       const found = d.relatedGuides
         .map(gid => PLAN_DATA.guides.find(x => x.id === gid))
         .filter(Boolean); // ignora guías que ya no existen (p.ej. la eliminada)
@@ -502,7 +502,7 @@ const VPlan = (() => {
   }
 
   // ---------- PLANES (gestor de planes) ----------
-  const PLAN_TYPE_LABEL = { cnp: 'CNP', custom: 'Personalizado' };
+  const PLAN_TYPE_LABEL = { guided: 'Completo', custom: 'Personalizado' };
 
   async function info(app) {
     const routines = (await DB.routinesOf(app.activeUser.id)).sort((a, b) => (a.order || 0) - (b.order || 0));
@@ -511,7 +511,7 @@ const VPlan = (() => {
     const planCards = routines.map(r => {
       const tDays = (r.days || []).filter(d => !d.isRest).length;
       const isActive = r.id === activeId;
-      const typeBadge = `<span class="badge${(r.planType === 'custom') ? ' guest' : ''}">${PLAN_TYPE_LABEL[r.planType] || 'CNP'}</span>`;
+      const typeBadge = `<span class="badge${(r.planType === 'custom') ? ' guest' : ''}">${PLAN_TYPE_LABEL[r.planType] || 'Completo'}</span>`;
       return `<div class="plan-card${isActive ? ' active' : ''}">
         <div class="plan-card-main">
           <strong>${UI.esc(r.name)} ${typeBadge}${isActive ? ' <span class="badge">Activo</span>' : ''}</strong>
@@ -524,7 +524,7 @@ const VPlan = (() => {
       </div>`;
     }).join('');
 
-    const cnpInfo = app.isCnp() ? `
+    const planInfo = app.isFullPlan() ? `
       <div class="catalog-title" style="margin-top:8px">Sobre este plan</div>
       <div class="block"><div class="block-label">Datos atleta</div>
         <ul class="ex-list">
@@ -558,7 +558,7 @@ const VPlan = (() => {
       <div class="week-intro"><div class="eyebrow">Tus planes</div><h2>Planes</h2><p>Cambia entre planes o crea uno nuevo. El plan activo decide qué guías y contenido ves.</p></div>
       ${planCards}
       <button class="btn ghost block" id="newPlan">${UI.icon('plus', 16)} Crear plan</button>
-      ${cnpInfo}
+      ${planInfo}
       <p class="version-foot">Traindía · v2.1.0</p>`;
   }
 
@@ -581,15 +581,14 @@ const VPlan = (() => {
   }
 
   function createPlanModal(app) {
-    let type = 'cnp';
+    let type = 'custom';
     UI.modal({
       title: 'Crear plan',
       bodyHTML: `<div id="newPlanForm">
         ${UI.field('Nombre', UI.input('name', '', { placeholder: 'Ej: Mi plan' }))}
         <span class="field-label">Tipo de plan</span>
         <div class="plan-choices" id="planChoices">
-          <button type="button" class="plan-choice sel" data-plan="cnp"><strong>Plan CNP (mujer)</strong><span class="dim">Rutina completa, guías y contenido CNP.</span></button>
-          <button type="button" class="plan-choice" data-plan="custom"><strong>Plan personalizado</strong><span class="dim">7 días vacíos. Sin guías ni contenido CNP.</span></button>
+          <button type="button" class="plan-choice sel" data-plan="custom"><strong>Plan personalizado</strong><span class="dim">7 días que montas a tu medida: tus ejercicios, tus días.</span></button>
           <div class="plan-choice disabled"><strong>Más planes <span class="badge soon">Próximamente</span></strong></div>
         </div>
       </div>`,
