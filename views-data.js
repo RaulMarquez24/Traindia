@@ -156,68 +156,57 @@ const VData = (() => {
   }
 
   // ====================================================
-  const partRow = (id, icon, color, title, sub) =>
-    `<button class="big-row" id="${id}"><span class="big-row-icon tile" style="background:${color}">${UI.icon(icon, 18)}</span><span class="big-row-text"><strong>${title}</strong><span class="dim">${sub}</span></span><span class="chev">›</span></button>`;
+  const modRow = (act, icon, color, title, sub) =>
+    `<button class="big-row" data-act="${act}"><span class="big-row-icon tile" style="background:${color}">${UI.icon(icon, 18)}</span><span class="big-row-text"><strong>${title}</strong><span class="dim">${sub}</span></span><span class="chev">›</span></button>`;
 
-  // Portada de "Compartir": dos tarjetas grandes → Exportar / Importar.
-  function render(app, params) {
-    if (params && params.mode === 'export') return renderExport(app);
-    return `<div class="section">
-      <div class="share-grid">
-        <button class="share-card" id="goExport">
-          <span class="share-card-ic" style="background:var(--strong)">${UI.icon('upload', 26)}</span>
-          <strong>Exportar</strong>
-          <span class="dim">Tu copia completa o partes sueltas para guardar o compartir</span>
-        </button>
-        <button class="share-card" id="goImport">
-          <span class="share-card-ic" style="background:var(--light)">${UI.icon('swap', 26)}</span>
-          <strong>Importar</strong>
-          <span class="dim">Trae un archivo o pega el JSON; detecta solo qué es</span>
-        </button>
-      </div>
-      <p class="field-hint">Todo viaja en archivos JSON que puedes guardar o mandar a un compañero.</p>
-    </div>`;
-  }
-
-  // Subvista de exportar: copia completa (protagonista) + cada parte.
-  function renderExport(app) {
-    return `<div class="section">
-      <button class="share-hero" id="expProfile">
-        <span class="share-hero-icon">${UI.icon('upload', 26)}</span>
-        <span class="share-hero-txt">
-          <strong>Copia completa</strong>
-          <span>TODO tu perfil en un archivo: ejercicios, plan, sesiones, progreso y nutrición.</span>
-        </span>
-      </button>
-      <div class="card-label" style="margin-top:22px">Exportar algo concreto</div>
-      ${partRow('expPlan', 'calendar', 'var(--moderate)', 'Plan de la semana', 'Tu rutina activa completa')}
-      ${partRow('expDay', 'calendar', 'var(--moderate)', 'Un día concreto', 'Comparte un solo día con un compañero')}
-      ${partRow('expSessions', 'activity', 'var(--light)', 'Sesiones', 'Todas, por fechas o sueltas')}
-      ${partRow('expProgress', 'activity', 'var(--strong)', 'Progreso', 'Peso corporal y medidas')}
-      ${partRow('expNutrition', 'book', 'var(--sub-accent)', 'Nutrición', 'Tu pauta de alimentación en uso')}
-      ${partRow('expRoutines', 'repeat', 'var(--rest)', 'Rutinas', 'Uno o varios planes concretos')}
-      <p class="field-hint">Cada opción descarga un archivo JSON. Para traer datos, usa Importar.</p>
-    </div>`;
-  }
-
-  function bind(app, root, params) {
-    if (params && params.mode === 'export') return bindExport(app, root);
-    root.querySelector('#goExport').addEventListener('click', () => app.go('data', { mode: 'export' }));
-    root.querySelector('#goImport').addEventListener('click', () => startImport(app));
-  }
-
-  function bindExport(app, root) {
-    root.querySelector('#expProfile').addEventListener('click', () => backupProfile(app));
-    root.querySelector('#expPlan').addEventListener('click', () => exportPlan(app));
-    root.querySelector('#expDay').addEventListener('click', () => exportDay(app));
-    root.querySelector('#expSessions').addEventListener('click', () => exportSessions(app));
-    root.querySelector('#expProgress').addEventListener('click', () => exportProgress(app));
-    root.querySelector('#expNutrition').addEventListener('click', async () => {
-      const plan = await DB.primaryNutritionOf(app.mainUser.id);
-      if (!plan) { UI.toast('No tienes ninguna pauta de nutrición', 'err'); return; }
-      exportNutrition(app, plan);
+  // "Compartir": modal (hoja inferior) con dos tarjetas → Exportar / Importar.
+  function openShare(app) {
+    UI.modal({
+      title: 'Compartir',
+      bodyHTML: `<div class="share-grid">
+          <button class="share-card" data-act="export"><span class="share-card-ic" style="background:var(--strong)">${UI.icon('upload', 26)}</span><strong>Exportar</strong><span class="dim">Tu copia completa o partes sueltas</span></button>
+          <button class="share-card" data-act="import"><span class="share-card-ic" style="background:var(--light)">${UI.icon('swap', 26)}</span><strong>Importar</strong><span class="dim">Trae un archivo o pega el JSON</span></button>
+        </div>
+        <p class="field-hint">Todo viaja en archivos JSON que puedes guardar o mandar a un compañero.</p>`,
+      actions: [{ label: 'Cerrar', kind: 'ghost' }],
+      onMount: (root) => {
+        root.querySelector('[data-act="export"]').addEventListener('click', () => { UI.closeModal(); openExport(app); });
+        root.querySelector('[data-act="import"]').addEventListener('click', () => { UI.closeModal(); startImport(app); });
+      },
     });
-    root.querySelector('#expRoutines').addEventListener('click', () => exportRoutines(app));
+  }
+
+  // "Exportar": modal con la copia completa (protagonista) + cada parte.
+  function openExport(app) {
+    UI.modal({
+      title: 'Exportar',
+      bodyHTML: `<button class="share-hero" data-act="profile">
+          <span class="share-hero-icon">${UI.icon('upload', 26)}</span>
+          <span class="share-hero-txt"><strong>Copia completa</strong><span>TODO tu perfil en un archivo: ejercicios, plan, sesiones, progreso y nutrición.</span></span>
+        </button>
+        <div class="card-label" style="margin-top:18px">Exportar algo concreto</div>
+        ${modRow('plan', 'calendar', 'var(--moderate)', 'Plan de la semana', 'Tu rutina activa completa')}
+        ${modRow('day', 'calendar', 'var(--moderate)', 'Un día concreto', 'Comparte un solo día con un compañero')}
+        ${modRow('sessions', 'activity', 'var(--light)', 'Sesiones', 'Todas, por fechas o sueltas')}
+        ${modRow('progress', 'activity', 'var(--strong)', 'Progreso', 'Peso corporal y medidas')}
+        ${modRow('nutrition', 'book', 'var(--sub-accent)', 'Nutrición', 'Tu pauta de alimentación en uso')}
+        ${modRow('routines', 'repeat', 'var(--rest)', 'Rutinas', 'Uno o varios planes concretos')}`,
+      actions: [{ label: 'Cerrar', kind: 'ghost' }],
+      onMount: (root) => {
+        const go = (fn) => { UI.closeModal(); fn(); };
+        root.querySelector('[data-act="profile"]').addEventListener('click', () => go(() => backupProfile(app)));
+        root.querySelector('[data-act="plan"]').addEventListener('click', () => go(() => exportPlan(app)));
+        root.querySelector('[data-act="day"]').addEventListener('click', () => go(() => exportDay(app)));
+        root.querySelector('[data-act="sessions"]').addEventListener('click', () => go(() => exportSessions(app)));
+        root.querySelector('[data-act="progress"]').addEventListener('click', () => go(() => exportProgress(app)));
+        root.querySelector('[data-act="nutrition"]').addEventListener('click', () => go(async () => {
+          const plan = await DB.primaryNutritionOf(app.mainUser.id);
+          if (!plan) { UI.toast('No tienes ninguna pauta de nutrición', 'err'); return; }
+          exportNutrition(app, plan);
+        }));
+        root.querySelector('[data-act="routines"]').addEventListener('click', () => go(() => exportRoutines(app)));
+      },
+    });
   }
 
   // ---- Importar: pegar texto JSON o elegir archivo ----
@@ -853,5 +842,5 @@ const VData = (() => {
     return added;
   }
 
-  return { render, bind, exportDay, importDay, exportNutrition, exportSession, exportProgressEntry, routeImport, checkBackupReminder, backupProfile };
+  return { openShare, exportDay, importDay, exportNutrition, exportSession, exportProgressEntry, routeImport, checkBackupReminder, backupProfile };
 })();
