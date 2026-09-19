@@ -685,22 +685,34 @@ body.modal-open { overflow: hidden; }
 .ld-sec h2 { font-size: 22px; font-weight: 800; letter-spacing: -0.02em; margin-bottom: 12px; color: var(--ink); }
 .ld-sec > p { font-size: 15px; line-height: 1.6; color: var(--ink-soft); }
 
-/* ---- Bloques con un trozo real de la app ----
-   Sin anclajes ni scroll horizontal: el scroll vertical nunca se frena. El
-   movimiento lo pone el paralaje (ver initParallax en app.js), que es puro
-   transform y no toca el flujo de la página. */
-.ld-step { padding: 34px 0; border-top: 1px solid var(--line-soft); }
+/* ---- Pasos apilados ----
+   Mismo truco que el apilado de tarjetas de renterus.com: hermanas con
+   position:sticky que se van quedando quietas una encima de otra. El scroll
+   NUNCA se absorbe, por eso va suave. La diferencia es que aquí la que llega
+   entra desde la derecha (lo hace initStack en app.js moviendo la X).
+   Sin JS se apilan en vertical, que es el efecto de origen y también funciona. */
+.ld-stack { position: relative; padding: 18px 0 18svh; }
+.ld-card {
+  position: sticky; top: var(--pila, 76px);
+  background: var(--bg-2); border: 1px solid var(--line); border-radius: 20px;
+  padding: 22px 18px; margin-bottom: 20px;
+  box-shadow: 0 18px 50px rgba(15, 17, 22, .18);
+  display: flex; flex-direction: column; gap: 16px;
+}
+/* Cada una un pelín más abajo: así se ve el canto de las de debajo, como una baraja. */
+.ld-card:nth-child(2) { --pila: 88px; }
+.ld-card:nth-child(3) { --pila: 100px; }
+.ld-card:nth-child(4) { --pila: 112px; }
 .ld-num {
   font-family: 'IBM Plex Mono', monospace; font-size: 11px;
   letter-spacing: 0.18em; color: var(--strong);
 }
-.ld-step h2 { font-size: 25px; font-weight: 800; letter-spacing: -0.02em; color: var(--ink); margin: 8px 0 10px; }
-.ld-step p { font-size: 15.5px; line-height: 1.6; color: var(--ink-soft); max-width: 34em; }
-.ld-ui { margin-top: 20px; will-change: transform; }
+.ld-card h2 { font-size: 24px; font-weight: 800; letter-spacing: -0.02em; color: var(--ink); margin: 8px 0 8px; }
+.ld-card p { font-size: 15px; line-height: 1.55; color: var(--ink-soft); }
+.ld-ui { margin: 0; min-width: 0; }
 .ld-ui img {
-  width: 100%; height: auto; display: block; border-radius: 16px;
-  border: 1px solid var(--line); background: #0f1116;
-  box-shadow: 0 18px 44px rgba(15, 17, 22, .16);
+  width: 100%; height: auto; display: block; border-radius: 14px;
+  border: 1px solid var(--line); max-height: 42svh; object-fit: cover; object-position: top;
 }
 
 /* ---- Bandas que se desplazan de lado ----
@@ -747,11 +759,13 @@ body.modal-open { overflow: hidden; }
   .ld-sec > h2 { font-size: 28px; }
   /* Con sitio de sobra, texto e imagen van uno al lado del otro, alternando
      el lado en cada bloque para que la vista no caiga siempre en la misma columna. */
-  .ld-step { display: grid; grid-template-columns: 1fr 1.15fr; gap: 48px; align-items: center; padding: 54px 0; }
-  .ld-step.rev .ld-step-copy { order: 2; }
-  .ld-step h2 { font-size: 31px; }
-  .ld-step p { font-size: 16.5px; }
-  .ld-ui { margin-top: 0; }
+  /* Con sitio de sobra, texto e imagen van uno al lado del otro dentro de la tarjeta. */
+  .ld-card { flex-direction: row; align-items: center; gap: 40px; padding: 32px; }
+  .ld-card-copy { flex: 0 1 420px; }
+  .ld-ui { flex: 1 1 0; }
+  .ld-ui img { max-height: 54svh; }
+  .ld-card h2 { font-size: 30px; }
+  .ld-card p { font-size: 16.5px; }
   .ld-band h2 { font-size: 28px; }
 }
 

@@ -161,30 +161,19 @@
   html.has-profile #appShell { display: block; }
   html.has-profile #landing { display: none; }
 
-  /* Entrada de la presentación al ir bajando. El estado oculto se aplica ya en el
-     primer pintado (por eso está aquí y no en styles.css) para que no haya parpadeo.
-     El movimiento es LATERAL: texto e imagen entran por lados opuestos y se paran
-     enteros. Nada queda cortado y no hay nada que deslizar a mano. */
+  /* Entrada de los bloques normales al ir bajando. El estado oculto se aplica ya en
+     el primer pintado (por eso está aquí y no en styles.css) para que no parpadee.
+     Las tarjetas apiladas NO usan esto: las mueve el apilado (initStack en app.js). */
   html.js-reveal #landing .ld-sec,
-  html.js-reveal #landing .ld-step,
   html.js-reveal #landing .ld-band,
   html.js-reveal #landing .ld-final { opacity: 0; transition: opacity .5s ease; }
   html.js-reveal #landing .in { opacity: 1; }
 
-  html.js-reveal #landing .ld-step .ld-step-copy,
-  html.js-reveal #landing .ld-step .ld-ui,
   html.js-reveal #landing .ld-band .ld-bcard,
   html.js-reveal #landing .ld-band .ld-chips span {
     transform: translateX(-46px);
-    transition: transform .7s cubic-bezier(.22,.61,.36,1), opacity .5s ease;
+    transition: transform .7s cubic-bezier(.22,.61,.36,1);
   }
-  html.js-reveal #landing .ld-step .ld-ui { transform: translateX(46px); }
-  html.js-reveal #landing .ld-step.rev .ld-step-copy { transform: translateX(46px); }
-  html.js-reveal #landing .ld-step.rev .ld-ui { transform: translateX(-46px); }
-  /* OJO: esto tiene que pesar al menos tanto como las reglas de .rev de arriba,
-     o los bloques invertidos se quedarían desplazados para siempre. */
-  html.js-reveal #landing .ld-step.in .ld-step-copy,
-  html.js-reveal #landing .ld-step.in .ld-ui,
   html.js-reveal #landing .ld-band.in .ld-bcard,
   html.js-reveal #landing .ld-band.in .ld-chips span { transform: none; }
   /* Escalonado: entran una detrás de otra, no todas de golpe. */
@@ -819,51 +808,44 @@
     </div>
   </section>
 
-  <!-- Cuatro bloques con un trozo real de la app, alternando lado en pantalla ancha.
-       Se leen porque son recortes ampliados, no pantallas enteras en miniatura. -->
-  <section class="ld-step">
-    <div class="ld-step-copy">
-      <span class="ld-num">01</span>
-      <h2>Tu semana, de un vistazo</h2>
-      <p>Abres la app y ves qué toca: el grupo del día, si va fuerte o ligero y cuánto vas a tardar. Cero decisiones antes de empezar.</p>
-    </div>
-    <figure class="ld-ui">
-      <img data-par="22" src="ui-semana.jpg" width="1000" height="928" loading="lazy" decoding="async" alt="Tres días del plan en Traindía: lunes de empuje, martes de pierna y miércoles de tirón, con su intensidad y duración">
-    </figure>
-  </section>
-
-  <section class="ld-step rev">
-    <div class="ld-step-copy">
-      <span class="ld-num">02</span>
-      <h2>Apuntar sin cortar el ritmo</h2>
-      <p>Serie hecha, un toque. Y encima de cada ejercicio, lo que levantaste la última vez: ya sabes a qué aspiras sin pararte a pensar.</p>
-    </div>
-    <figure class="ld-ui">
-      <img data-par="22" src="ui-entreno.jpg" width="1000" height="1030" loading="lazy" decoding="async" alt="Entreno en marcha: cronómetro a 31:33 y el press banca con sus cuatro series marcadas y el registro de la última vez">
-    </figure>
-  </section>
-
-  <section class="ld-step">
-    <div class="ld-step-copy">
-      <span class="ld-num">03</span>
-      <h2>La gráfica no discute</h2>
-      <p>Tu racha de semanas, los entrenos que llevas y cómo se mueve tu peso corporal. Cuando dudes de si avanzas, míralo.</p>
-    </div>
-    <figure class="ld-ui">
-      <img data-par="22" src="ui-progreso.jpg" width="1000" height="1028" loading="lazy" decoding="async" alt="Progreso en Traindía: 12 semanas de racha, 53 entrenos y la gráfica del peso corporal bajando">
-    </figure>
-  </section>
-
-  <section class="ld-step rev">
-    <div class="ld-step-copy">
-      <span class="ld-num">04</span>
-      <h2>Cada récord, con su fecha</h2>
-      <p>Peso máximo, 1RM estimado, repeticiones y kilos totales levantados. Un ejercicio no es una sola cifra, y aquí no lo es.</p>
-    </div>
-    <figure class="ld-ui">
-      <img data-par="22" src="ui-records.jpg" width="1000" height="554" loading="lazy" decoding="async" alt="Récords de la sentadilla en Traindía: 106 kg por 8 repeticiones, 134 kg de 1RM estimado y 2974 kg levantados">
-    </figure>
-  </section>
+  <!-- Pasos apilados: cada tarjeta se ancla con position:sticky y la siguiente
+       entra DESDE LA DERECHA y se le monta encima. Nada se traga el scroll: la
+       página avanza a su ritmo (igual que el apilado vertical de renterus.com,
+       pero girado). Sin JS quedan apiladas en vertical, que también se entiende. -->
+  <div class="ld-stack">
+    <article class="ld-card">
+      <div class="ld-card-copy">
+        <span class="ld-num">01</span>
+        <h2>Tu semana, de un vistazo</h2>
+        <p>Abres la app y ves qué toca: el grupo del día, si va fuerte o ligero y cuánto vas a tardar. Cero decisiones antes de empezar.</p>
+      </div>
+      <figure class="ld-ui"><img src="ui-semana.jpg" width="1000" height="928" loading="lazy" decoding="async" alt="Tres días del plan en Traindía: lunes de empuje, martes de pierna y miércoles de tirón, con su intensidad y duración"></figure>
+    </article>
+    <article class="ld-card">
+      <div class="ld-card-copy">
+        <span class="ld-num">02</span>
+        <h2>Apuntar sin cortar el ritmo</h2>
+        <p>Serie hecha, un toque. Y encima de cada ejercicio, lo que levantaste la última vez: ya sabes a qué aspiras sin pararte a pensar.</p>
+      </div>
+      <figure class="ld-ui"><img src="ui-entreno.jpg" width="1000" height="1030" loading="lazy" decoding="async" alt="Entreno en marcha: cronómetro a 31:34 y el press banca con sus series y el registro de la última vez"></figure>
+    </article>
+    <article class="ld-card">
+      <div class="ld-card-copy">
+        <span class="ld-num">03</span>
+        <h2>La gráfica no discute</h2>
+        <p>Tu racha de semanas, los entrenos que llevas y cómo se mueve tu peso corporal. Cuando dudes de si avanzas, míralo.</p>
+      </div>
+      <figure class="ld-ui"><img src="ui-progreso.jpg" width="1000" height="1028" loading="lazy" decoding="async" alt="Progreso en Traindía: 12 semanas de racha, 53 entrenos y la gráfica del peso corporal bajando"></figure>
+    </article>
+    <article class="ld-card">
+      <div class="ld-card-copy">
+        <span class="ld-num">04</span>
+        <h2>Cada récord, con su fecha</h2>
+        <p>Peso máximo, 1RM estimado, repeticiones y kilos totales levantados. Un ejercicio no es una sola cifra, y aquí no lo es.</p>
+      </div>
+      <figure class="ld-ui"><img src="ui-records.jpg" width="1000" height="554" loading="lazy" decoding="async" alt="Récords de la sentadilla en Traindía: 106 kg por 8 repeticiones, 134 kg de 1RM estimado y 2974 kg levantados"></figure>
+    </article>
+  </div>
 
   <section class="ld-band">
     <h2>Y además</h2>

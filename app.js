@@ -408,6 +408,7 @@ const app = {
       this.renderOnboarding();
     }));
     this.initScrollFx();
+    this.initStack();
     this.revealLanding();
   },
 
@@ -447,11 +448,56 @@ const app = {
     pintar();
   },
 
+  // Pasos apilados. Cada tarjeta se ancla sola con position:sticky (eso lo hace el
+  // CSS y ya funciona sin JS, apilándose en vertical). Lo único que añade esto es
+  // que la que va llegando entre DESDE LA DERECHA en vez de desde abajo: se la
+  // sujeta a su altura de anclaje y se la trae de fuera hacia dentro.
+  // Importante: no se retiene el scroll en ningún momento. La página baja a su
+  // ritmo y el movimiento lateral es lo que ocurre mientras tanto.
+  initStack() {
+    const pila = document.querySelector('#landing .ld-stack');
+    if (!pila) return;
+    const reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduce) return; // apilado vertical a secas: ya se entiende igual
+    const cartas = [...pila.querySelectorAll('.ld-card')];
+    if (!cartas.length) return;
+
+    let anclajes = [];
+    const medir = () => { anclajes = cartas.map(c => parseFloat(getComputedStyle(c).top) || 0); };
+
+    const pintar = () => {
+      const arriba = pila.getBoundingClientRect().top;
+      cartas.forEach((c, i) => {
+        const suyo = arriba + c.offsetTop;      // dónde estaría sin anclar
+        const falta = suyo - anclajes[i];       // >0 mientras viene de camino
+        if (falta <= 0) { c.style.transform = ''; return; } // ya anclada: manda el CSS
+        const rango = Math.min(innerHeight * 0.8, c.offsetHeight) || 1;
+        const bruto = 1 - Math.min(1, falta / rango); // 0 lejos, 1 pegada
+        // Entra en la primera mitad del tramo y el resto se queda quieta: si no,
+        // la siguiente empieza a taparla antes de que dé tiempo a leer esta.
+        const t = Math.min(1, bruto / 0.5);
+        const cerca = t * t * (3 - 2 * t); // arranca y frena suave
+        // Se sube a la altura de anclaje (-falta) y se trae desde la derecha.
+        c.style.transform = `translate3d(${((1 - cerca) * 104).toFixed(2)}%, ${-falta.toFixed(1)}px, 0)`;
+      });
+    };
+
+    let pedido = false;
+    const alMover = () => {
+      if (pedido) return;
+      pedido = true;
+      requestAnimationFrame(() => { pedido = false; pintar(); });
+    };
+    medir(); pintar();
+    window.addEventListener('scroll', alMover, { passive: true });
+    window.addEventListener('resize', () => { medir(); alMover(); });
+  },
+
   // Va mostrando cada bloque al entrar en pantalla. El estado oculto lo pone el CSS
   // (clase .js-reveal del <html>), así que aquí solo hay que marcar lo que ya se ve.
   revealLanding() {
     if (!document.documentElement.classList.contains('js-reveal')) return;
-    const els = document.querySelectorAll('#landing .ld-sec, #landing .ld-step, #landing .ld-band, #landing .ld-final');
+    const els = document.querySelectorAll('#landing .ld-sec, #landing .ld-band, #landing .ld-final');
     if (!els.length) { document.documentElement.classList.remove('js-reveal'); return; }
     let alguno = false;
     const io = new IntersectionObserver((entries) => {
@@ -539,7 +585,7 @@ const app = {
                 tipo: d.tipo,
                 mensaje: d.mensaje.trim(),
                 contacto: (d.contacto || '').trim() || '(no indicado)',
-                version: 'v2.24.0',
+                version: 'v2.25.0',
                 perfil: (this.mainUser && this.mainUser.name) || '',
                 navegador: navigator.userAgent,
               }),
@@ -574,7 +620,7 @@ const app = {
     return `<div class="section">
       ${rows.map(r => `<button class="big-row" ${r.modal ? 'data-share' : `data-link="${r.v}"`}><span class="big-row-icon tile" style="background:${r.color}">${UI.icon(r.icon, 20)}</span><span class="big-row-text"><strong>${r.label}</strong><span class="dim">${r.sub}</span></span><span class="chev">›</span></button>`).join('')}
       <button class="big-row" data-feedback><span class="big-row-icon tile" style="background:var(--strong)">${UI.icon('chat', 20)}</span><span class="big-row-text"><strong>Sugerencias y reportes</strong><span class="dim">Envíame ideas o fallos</span></span><span class="chev">›</span></button>
-      <p class="version-foot">Traindía · v2.24.0 · ${Object.keys(this.usersById).length} perfil(es)<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
+      <p class="version-foot">Traindía · v2.25.0 · ${Object.keys(this.usersById).length} perfil(es)<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
     </div>`;
   },
   bindMore(root) {
@@ -854,7 +900,7 @@ const app = {
         <button class="btn danger block" id="resetApp">Borrar todos los datos</button>
         <p class="field-hint">Restablece la app al estado inicial (se borran todos los perfiles, sesiones y progreso).</p>
       </div>
-      <p class="version-foot">Traindía · v2.24.0</p>
+      <p class="version-foot">Traindía · v2.25.0</p>
     </div>`;
   },
 
