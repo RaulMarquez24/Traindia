@@ -120,6 +120,9 @@
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  /* Los <button>/<select> no heredan el color de texto por defecto (usan el negro del
+     navegador). Sin esto, los botones sin clase de color se ven negros en modo oscuro. */
+  button, select { color: inherit; }
   html { scroll-behavior: smooth; }
   body {
     font-family: 'Inter Tight', -apple-system, BlinkMacSystemFont, sans-serif;
