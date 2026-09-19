@@ -675,18 +675,9 @@ body.modal-open { overflow: hidden; }
 .ld-bar { position: fixed; inset: 0 0 auto 0; height: 3px; z-index: 40; background: transparent; pointer-events: none; }
 .ld-bar i { display: block; height: 100%; width: 0; background: var(--strong); transition: width .08s linear; }
 
-/* El móvil del hero asoma y se desvanece por abajo: se ve grande la parte de
-   arriba (que es la que se lee) y se entiende que la página sigue. */
-.ld-phone { width: min(300px, 78%); margin: 26px auto 0; overflow: hidden; will-change: transform; }
-.ld-phone img {
-  width: 100%; height: auto; display: block;
-  border-radius: 26px 26px 0 0; border: 5px solid #23262f; border-bottom: 0;
-  background: #0f1116; box-shadow: 0 -2px 40px rgba(15, 17, 22, .18);
-  -webkit-mask-image: linear-gradient(to bottom, #000 58%, transparent 96%);
-  mask-image: linear-gradient(to bottom, #000 58%, transparent 96%);
-}
-.ld-cue { font-size: 11.5px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-dim); margin-top: -18px; }
-.ld-cue::after { content: ''; display: block; width: 1px; height: 26px; margin: 10px auto 0; background: linear-gradient(var(--ink-dim), transparent); animation: ld-cue 1.9s ease-in-out infinite; }
+/* Señal de "hay más abajo": una línea que late, sin texto que la explique. */
+.ld-cue { margin-top: 30px; }
+.ld-cue::after { content: ''; display: block; width: 1px; height: 34px; margin: 0 auto; background: linear-gradient(var(--ink-dim), transparent); animation: ld-cue 1.9s ease-in-out infinite; }
 @keyframes ld-cue { 0%, 100% { opacity: .25; transform: translateY(-4px); } 50% { opacity: 1; transform: translateY(2px); } }
 @media (prefers-reduced-motion: reduce) { .ld-cue::after { animation: none; } }
 
