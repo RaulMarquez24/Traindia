@@ -675,6 +675,29 @@ body.modal-open { overflow: hidden; }
 .ld-bar { position: fixed; inset: 0 0 auto 0; height: 3px; z-index: 40; background: transparent; pointer-events: none; }
 .ld-bar i { display: block; height: 100%; width: 0; background: var(--strong); transition: width .08s linear; }
 
+/* Botón para cambiar claro/oscuro, flotante arriba a la derecha de la presentación.
+   Se oculta solo al entrar en la app (todo #landing pasa a display:none). */
+.ld-theme {
+  position: fixed; top: calc(12px + var(--safe-top)); right: 14px; z-index: 45;
+  width: 42px; height: 42px; border-radius: 50%;
+  display: grid; place-items: center;
+  background: var(--bg-card); border: 1px solid var(--line); color: var(--ink-soft);
+  cursor: pointer; -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+  transition: color .2s ease, border-color .2s ease, transform .15s ease;
+}
+.ld-theme:hover { color: var(--ink); border-color: var(--ink-dim); }
+.ld-theme:active { transform: scale(.92); }
+/* Estado base (claro): se ofrece pasar a oscuro → luna. */
+.ld-theme .ic-sun { display: none; }
+.ld-theme .ic-moon { display: block; }
+/* Oscuro forzado o sistema-oscuro: se ofrece pasar a claro → sol. */
+:root[data-theme="dark"] .ld-theme .ic-sun { display: block; }
+:root[data-theme="dark"] .ld-theme .ic-moon { display: none; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .ld-theme .ic-sun { display: block; }
+  :root:not([data-theme="light"]) .ld-theme .ic-moon { display: none; }
+}
+
 /* Señal de "hay más abajo": una línea que late, sin texto que la explique. */
 .ld-cue { margin-top: 30px; }
 .ld-cue::after { content: ''; display: block; width: 1px; height: 34px; margin: 0 auto; background: linear-gradient(var(--ink-dim), transparent); animation: ld-cue 1.9s ease-in-out infinite; }
