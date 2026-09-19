@@ -621,6 +621,15 @@ body.modal-open { overflow: hidden; }
 #onboarding { position: fixed; inset: 0; background: var(--bg); z-index: 600; overflow-y: auto; }
 .onb-wrap { min-height: 100%; display: flex; align-items: center; justify-content: center; padding: 24px; }
 .onb-card { max-width: 420px; width: 100%; }
+.onb-back {
+  display: inline-flex; align-items: center; gap: 4px; margin-bottom: 16px;
+  padding: 7px 12px 7px 10px; border-radius: 999px;
+  background: var(--bg-card); border: 1px solid var(--line);
+  font-family: inherit; font-size: 13px; font-weight: 600; color: var(--ink-soft);
+  cursor: pointer; transition: color .2s ease, border-color .2s ease, transform .15s ease;
+}
+.onb-back:hover { color: var(--ink); border-color: var(--ink-dim); }
+.onb-back:active { transform: scale(.96); }
 .onb-eyebrow { font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-dim); margin-bottom: 10px; font-weight: 500; }
 .onb-card h2 { font-size: 30px; font-weight: 800; letter-spacing: -0.02em; line-height: 1.1; margin-bottom: 12px; } /* h2, no h1: el único h1 de la página es el del header (SEO) */
 .onb-sub { font-size: 14px; color: var(--ink-soft); line-height: 1.55; margin-bottom: 24px; }
