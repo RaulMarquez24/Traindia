@@ -406,6 +406,28 @@ const app = {
       if (ld) ld.style.display = 'none';
       this.renderOnboarding();
     }));
+    this.revealLanding();
+  },
+  // Va mostrando cada bloque al entrar en pantalla. El estado oculto lo pone el CSS
+  // (clase .js-reveal del <html>), así que aquí solo hay que marcar lo que ya se ve.
+  revealLanding() {
+    if (!document.documentElement.classList.contains('js-reveal')) return;
+    const els = document.querySelectorAll('#landing .ld-shot, #landing .ld-sec, #landing .ld-final');
+    if (!els.length) { document.documentElement.classList.remove('js-reveal'); return; }
+    let alguno = false;
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach(en => {
+        if (!en.isIntersecting) return;
+        alguno = true;
+        en.target.classList.add('in');
+        io.unobserve(en.target);
+      });
+    }, { rootMargin: '0px 0px -8% 0px', threshold: 0.05 });
+    els.forEach(el => io.observe(el));
+    window.__ldRevealReady = true; // desactiva la red de seguridad del <head>
+    // Si por lo que sea el observador no llega a disparar (pestaña que nunca se pinta,
+    // navegador raro...), se quita la animación y se enseña todo tal cual: nunca en blanco.
+    setTimeout(() => { if (!alguno) { io.disconnect(); document.documentElement.classList.remove('js-reveal'); } }, 2500);
   },
 
   // ---- Tema (sistema / claro / oscuro) ----
@@ -478,7 +500,7 @@ const app = {
                 tipo: d.tipo,
                 mensaje: d.mensaje.trim(),
                 contacto: (d.contacto || '').trim() || '(no indicado)',
-                version: 'v2.20.1',
+                version: 'v2.20.2',
                 perfil: (this.mainUser && this.mainUser.name) || '',
                 navegador: navigator.userAgent,
               }),
@@ -513,7 +535,7 @@ const app = {
     return `<div class="section">
       ${rows.map(r => `<button class="big-row" ${r.modal ? 'data-share' : `data-link="${r.v}"`}><span class="big-row-icon tile" style="background:${r.color}">${UI.icon(r.icon, 20)}</span><span class="big-row-text"><strong>${r.label}</strong><span class="dim">${r.sub}</span></span><span class="chev">›</span></button>`).join('')}
       <button class="big-row" data-feedback><span class="big-row-icon tile" style="background:var(--strong)">${UI.icon('chat', 20)}</span><span class="big-row-text"><strong>Sugerencias y reportes</strong><span class="dim">Envíame ideas o fallos</span></span><span class="chev">›</span></button>
-      <p class="version-foot">Traindía · v2.20.1 · ${Object.keys(this.usersById).length} perfil(es)<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
+      <p class="version-foot">Traindía · v2.20.2 · ${Object.keys(this.usersById).length} perfil(es)<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
     </div>`;
   },
   bindMore(root) {
@@ -793,7 +815,7 @@ const app = {
         <button class="btn danger block" id="resetApp">Borrar todos los datos</button>
         <p class="field-hint">Restablece la app al estado inicial (se borran todos los perfiles, sesiones y progreso).</p>
       </div>
-      <p class="version-foot">Traindía · v2.20.1</p>
+      <p class="version-foot">Traindía · v2.20.2</p>
     </div>`;
   },
 

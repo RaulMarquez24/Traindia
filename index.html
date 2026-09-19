@@ -82,6 +82,16 @@
   (function () {
     try { var t = localStorage.getItem('traindia-theme'); if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t); } catch (e) {}
     try { if (localStorage.getItem('traindia-hasprofile') === '1') document.documentElement.classList.add('has-profile'); } catch (e) {}
+    // Animación de entrada de la presentación. Solo se activa si hay JS, IntersectionObserver
+    // y el usuario no ha pedido menos movimiento; así, sin JS, todo se ve igual (clave para SEO).
+    try {
+      var reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+      if (!reduce && 'IntersectionObserver' in window && !document.documentElement.classList.contains('has-profile')) {
+        document.documentElement.classList.add('js-reveal');
+        // Red de seguridad: si algo fallara y nadie llega a animar, se muestra todo igualmente.
+        setTimeout(function () { if (!window.__ldRevealReady) document.documentElement.classList.remove('js-reveal'); }, 3000);
+      }
+    } catch (e) {}
   })();
 </script>
 <style>
@@ -150,6 +160,16 @@
   #appShell { display: none; }
   html.has-profile #appShell { display: block; }
   html.has-profile #landing { display: none; }
+
+  /* Entrada suave de la presentación al ir bajando. El estado oculto se aplica ya en el
+     primer pintado (por eso está aquí y no en styles.css) para que no haya parpadeo. */
+  html.js-reveal #landing .ld-shot,
+  html.js-reveal #landing .ld-sec,
+  html.js-reveal #landing .ld-final {
+    opacity: 0; transform: translateY(18px);
+    transition: opacity .6s ease, transform .6s cubic-bezier(.22,.61,.36,1);
+  }
+  html.js-reveal #landing .in { opacity: 1; transform: none; }
 
   * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
   /* Los <button>/<select> no heredan el color de texto por defecto (usan el negro del
