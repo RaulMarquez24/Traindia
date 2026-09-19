@@ -340,6 +340,7 @@ const app = {
     host.innerHTML = `
       <div class="onb-wrap">
         <div class="onb-card">
+          <button type="button" class="onb-back" id="onbBack" aria-label="Volver a la presentación">← Volver</button>
           <div class="onb-eyebrow">Bienvenido a Traindía</div>
           <h2>Configura tu perfil</h2>
           <p class="onb-sub">Este es el perfil principal de este dispositivo. La app arrancará siempre con él. Podrás cambiarlo todo desde Ajustes.</p>
@@ -362,6 +363,15 @@ const app = {
         </div>
       </div>`;
     UI.bindColorPicker(host);
+    // Volver a la presentación: el #landing solo se ocultó (no se destruyó), así que
+    // basta con quitar el onboarding y volver a mostrarlo desde arriba.
+    const back = host.querySelector('#onbBack');
+    if (back) back.addEventListener('click', () => {
+      host.remove();
+      const ld = document.getElementById('landing');
+      if (ld) ld.style.display = '';
+      window.scrollTo(0, 0);
+    });
     host.querySelectorAll('.plan-choice[data-plan]').forEach(b => b.addEventListener('click', () => {
       host.querySelectorAll('.plan-choice').forEach(x => x.classList.remove('sel'));
       b.classList.add('sel'); planType = b.dataset.plan;
@@ -612,7 +622,7 @@ const app = {
                 tipo: d.tipo,
                 mensaje: d.mensaje.trim(),
                 contacto: (d.contacto || '').trim() || '(no indicado)',
-                version: 'v2.27.2',
+                version: 'v2.28.0',
                 perfil: (this.mainUser && this.mainUser.name) || '',
                 navegador: navigator.userAgent,
               }),
@@ -647,7 +657,7 @@ const app = {
     return `<div class="section">
       ${rows.map(r => `<button class="big-row" ${r.modal ? 'data-share' : `data-link="${r.v}"`}><span class="big-row-icon tile" style="background:${r.color}">${UI.icon(r.icon, 20)}</span><span class="big-row-text"><strong>${r.label}</strong><span class="dim">${r.sub}</span></span><span class="chev">›</span></button>`).join('')}
       <button class="big-row" data-feedback><span class="big-row-icon tile" style="background:var(--strong)">${UI.icon('chat', 20)}</span><span class="big-row-text"><strong>Sugerencias y reportes</strong><span class="dim">Envíame ideas o fallos</span></span><span class="chev">›</span></button>
-      <p class="version-foot">Traindía · v2.27.2 · ${Object.keys(this.usersById).length} perfil(es)<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
+      <p class="version-foot">Traindía · v2.28.0 · ${Object.keys(this.usersById).length} perfil(es)<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
     </div>`;
   },
   bindMore(root) {
@@ -927,7 +937,7 @@ const app = {
         <button class="btn danger block" id="resetApp">Borrar todos los datos</button>
         <p class="field-hint">Restablece la app al estado inicial (se borran todos los perfiles, sesiones y progreso).</p>
       </div>
-      <p class="version-foot">Traindía · v2.27.2</p>
+      <p class="version-foot">Traindía · v2.28.0</p>
     </div>`;
   },
 
