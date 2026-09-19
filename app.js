@@ -482,10 +482,20 @@ const app = {
       const bruto = avance * tramos;
       const i = Math.min(tramos - 1, Math.floor(bruto));
       const donde = i + suave(bruto - i); // 0 = primer paso centrado, tramos = último
+      const hueco = innerWidth < 700 ? 44 : 90; // aire entre un paso y el siguiente
       pasos.forEach((el, n) => {
         const rel = donde - n; // <0 aún por llegar (derecha), >0 ya se fue (izquierda)
-        el.style.transform = `translate3d(${(-rel * 100).toFixed(2)}%, 0, 0)`;
-        el.style.visibility = Math.abs(rel) > 1.05 ? 'hidden' : ''; // fuera de vista: ni se pinta
+        const fuera = Math.min(1, Math.abs(rel));
+        if (fuera >= 1) { el.style.visibility = 'hidden'; return; } // ni se pinta
+        el.style.visibility = '';
+        const d = -rel;
+        // Además de apartarse, el que se va se encoge y se apaga: el que manda es
+        // siempre el del centro y la transición tiene fondo, no es un simple barrido.
+        el.style.transform = `translate3d(calc(${(d * 100).toFixed(2)}% + ${(d * hueco).toFixed(0)}px), 0, 0) scale(${(1 - fuera * 0.09).toFixed(3)})`;
+        el.style.opacity = (1 - fuera * 1.05 < 0 ? 0 : 1 - fuera * 1.05).toFixed(3);
+        // La captura va un pelín por detrás del texto: da sensación de profundidad.
+        const ui = el.querySelector('.seq-ui');
+        if (ui) ui.style.transform = `translate3d(${(d * 7).toFixed(2)}%, 0, 0)`;
       });
       const activo = Math.round(donde);
       puntos.forEach((el, n) => el.classList.toggle('on', n === activo));
@@ -594,7 +604,7 @@ const app = {
                 tipo: d.tipo,
                 mensaje: d.mensaje.trim(),
                 contacto: (d.contacto || '').trim() || '(no indicado)',
-                version: 'v2.26.0',
+                version: 'v2.26.1',
                 perfil: (this.mainUser && this.mainUser.name) || '',
                 navegador: navigator.userAgent,
               }),
@@ -629,7 +639,7 @@ const app = {
     return `<div class="section">
       ${rows.map(r => `<button class="big-row" ${r.modal ? 'data-share' : `data-link="${r.v}"`}><span class="big-row-icon tile" style="background:${r.color}">${UI.icon(r.icon, 20)}</span><span class="big-row-text"><strong>${r.label}</strong><span class="dim">${r.sub}</span></span><span class="chev">›</span></button>`).join('')}
       <button class="big-row" data-feedback><span class="big-row-icon tile" style="background:var(--strong)">${UI.icon('chat', 20)}</span><span class="big-row-text"><strong>Sugerencias y reportes</strong><span class="dim">Envíame ideas o fallos</span></span><span class="chev">›</span></button>
-      <p class="version-foot">Traindía · v2.26.0 · ${Object.keys(this.usersById).length} perfil(es)<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
+      <p class="version-foot">Traindía · v2.26.1 · ${Object.keys(this.usersById).length} perfil(es)<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
     </div>`;
   },
   bindMore(root) {
@@ -909,7 +919,7 @@ const app = {
         <button class="btn danger block" id="resetApp">Borrar todos los datos</button>
         <p class="field-hint">Restablece la app al estado inicial (se borran todos los perfiles, sesiones y progreso).</p>
       </div>
-      <p class="version-foot">Traindía · v2.26.0</p>
+      <p class="version-foot">Traindía · v2.26.1</p>
     </div>`;
   },
 
