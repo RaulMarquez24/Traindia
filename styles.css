@@ -681,11 +681,6 @@ body.modal-open { overflow: hidden; }
 .ld-feat h3 { font-size: 15.5px; font-weight: 700; margin-bottom: 6px; color: var(--ink); }
 .ld-feat p { font-size: 13.5px; line-height: 1.5; color: var(--ink-soft); }
 
-.ld-why { list-style: none; display: flex; flex-direction: column; gap: 10px; }
-.ld-why li { font-size: 14.5px; line-height: 1.5; color: var(--ink-soft); padding-left: 26px; position: relative; }
-.ld-why li::before { content: "✓"; position: absolute; left: 2px; color: var(--strong); font-weight: 800; }
-.ld-why strong { color: var(--ink); }
-
 .ld-faq { padding: 13px 0; border-bottom: 1px solid var(--line-soft); }
 .ld-faq:last-child { border-bottom: 0; }
 .ld-faq h3 { font-size: 15px; font-weight: 700; margin-bottom: 5px; color: var(--ink); }
