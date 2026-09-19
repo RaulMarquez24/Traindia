@@ -1,0 +1,59 @@
+# Despliegue de la web a GitHub Pages.
+#
+# Por qué existe: el despliegue automático de Pages (build_type "legacy") se
+# saltaba pushes sin avisar — 4 de 7 veces en una misma tarde — y había que
+# desatascarlo con un commit vacío. Con un workflow explícito el despliegue es
+# determinista, sale en la pestaña Actions y se puede relanzar a mano.
+#
+# El sitio son archivos estáticos: se sube el repositorio tal cual, sin construir
+# nada. El archivo CNAME de la raíz es lo que mantiene el dominio propio.
+name: Desplegar en GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: # para relanzarlo a mano sin tocar el código
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Un despliegue cada vez. No se cancela el que esté en curso: si se cancelase a
+# medias, la web podría quedarse a medio publicar.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  desplegar:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.despliegue.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/configure-pages@v5
+
+      - name: Empaquetar el sitio
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: '.'
+
+      - name: Publicar
+        id: despliegue
+        uses: actions/deploy-pages@v4
+
+      - name: Comprobar que lo publicado es lo que se acaba de subir
+        run: |
+          esperado=$(grep -oE "traindia-build-[0-9]+" sw.js | head -1)
+          echo "Se esperaba: $esperado"
+          for i in $(seq 1 20); do
+            sleep 15
+            vivo=$(curl -fsS "https://traindia.raulmarquez.dev/sw.js?cb=$RANDOM" | grep -oE "traindia-build-[0-9]+" | head -1 || true)
+            echo "  intento $i: $vivo"
+            [ "$vivo" = "$esperado" ] && exit 0
+          done
+          echo "::error::La web sigue sin servir $esperado cinco minutos después de publicar."
+          exit 1
