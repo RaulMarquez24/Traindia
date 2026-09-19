@@ -670,28 +670,61 @@ body.modal-open { overflow: hidden; }
 .ld-lead { font-size: 15px; line-height: 1.55; color: var(--ink-soft); margin: 14px auto 20px; max-width: 34em; }
 .ld-cta { font-size: 16px; padding: 14px 30px; border-radius: 12px; width: auto; }
 .ld-note { font-size: 12px; color: var(--ink-dim); margin-top: 10px; }
-.ld-shot { width: 100%; height: auto; border-radius: 16px; margin-top: 26px; border: 1px solid var(--line); display: block; }
 
 .ld-sec { padding: 26px 0; border-top: 1px solid var(--line-soft); }
 .ld-sec h2 { font-size: 22px; font-weight: 800; letter-spacing: -0.02em; margin-bottom: 12px; color: var(--ink); }
 .ld-sec > p { font-size: 15px; line-height: 1.6; color: var(--ink-soft); }
 
-/* Carrusel de pantallas: se desliza con el dedo y encaja una a una.
-   Los márgenes negativos son para que las capturas lleguen al borde del móvil. */
-.ld-sub { font-size: 14px; color: var(--ink-dim); margin: -6px 0 16px; }
-.ld-phones {
-  display: flex; gap: 16px; overflow-x: auto; scroll-snap-type: x mandatory;
-  margin: 0 -18px; padding: 4px 18px 14px; -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
+/* ---- Bloques con desplazamiento horizontal ----
+   Sin JS esto es una lista vertical normal: el anclaje y el movimiento lateral
+   solo se activan si el JS añade .js-hscroll (ver initHScroll en app.js). */
+.ld-hs { padding: 26px 0; border-top: 1px solid var(--line-soft); }
+.hs-head h2 { font-size: 22px; font-weight: 800; letter-spacing: -0.02em; color: var(--ink); }
+.hs-dots { display: none; gap: 6px; margin-top: 12px; }
+.hs-dots i { width: 22px; height: 3px; border-radius: 2px; background: var(--line); transition: background .25s ease; }
+.hs-dots i.on { background: var(--strong); }
+.hs-track { display: grid; gap: 22px; margin-top: 16px; }
+.hs-num { font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: 0.18em; color: var(--strong); }
+.hs-copy h3, .hs-card h3 { font-size: 20px; font-weight: 800; letter-spacing: -0.02em; color: var(--ink); margin: 6px 0 8px; }
+.hs-copy p, .hs-card p { font-size: 14.5px; line-height: 1.6; color: var(--ink-soft); }
+.hs-card { background: var(--bg-card); border: 1px solid var(--line); border-radius: 16px; padding: 18px; }
+.hs-shot {
+  width: 100%; max-width: 230px; height: auto; display: block; margin-top: 16px;
+  border-radius: 22px; border: 5px solid #23262f; background: #0f1116;
+  box-shadow: 0 12px 32px rgba(15, 17, 22, .2);
 }
-.ld-phones::-webkit-scrollbar { display: none; }
-.ld-phone { flex: 0 0 auto; width: 208px; scroll-snap-align: center; text-align: center; }
-.ld-phone img {
-  width: 100%; height: auto; display: block; border-radius: 22px;
-  border: 5px solid #23262f; background: #0f1116;
-  box-shadow: 0 10px 28px rgba(15, 17, 22, .18);
+
+html.js-hscroll .ld-hs {
+  position: relative; padding: 0; border-top: 0;
+  height: calc(var(--n) * var(--step));
+  margin: 0 -18px; /* se come el margen de #landing: las pantallas llegan al borde */
 }
-.ld-phone figcaption { font-size: 12.5px; font-weight: 600; color: var(--ink-soft); margin-top: 10px; }
+html.js-hscroll .hs-head, html.js-hscroll .hs-panel { padding: 0 18px; }
+html.js-hscroll .hs-sticky {
+  position: sticky; height: var(--alto, 100svh); overflow: hidden;
+  top: calc((100svh - var(--alto, 100svh)) / 2); /* la banda queda centrada en pantalla */
+  display: flex; flex-direction: column; justify-content: center; gap: 18px;
+}
+/* Las tarjetas no necesitan la pantalla entera: una banda más baja deja ver que
+   arriba y abajo sigue habiendo página, y no se queda todo ese hueco vacío. */
+html.js-hscroll .ld-hs-cards { --alto: 66svh; }
+html.js-hscroll .ld-hs-cards .hs-card {
+  min-height: 34svh; display: flex; flex-direction: column; justify-content: center;
+}
+html.js-hscroll .hs-head { flex: 0 0 auto; }
+html.js-hscroll .hs-dots { display: flex; }
+html.js-hscroll .hs-track {
+  display: flex; gap: 0; margin: 0; align-items: center;
+  will-change: transform;
+}
+html.js-hscroll .hs-panel {
+  flex: 0 0 100%; min-width: 0;
+  display: flex; flex-direction: column; justify-content: center;
+}
+/* El contenido entra con un pequeño desfase: se nota que el panel "llega". */
+html.js-hscroll .hs-panel > * { opacity: .25; transform: translateY(14px); transition: opacity .45s ease, transform .45s ease; }
+html.js-hscroll .hs-panel.on > * { opacity: 1; transform: none; }
+html.js-hscroll .hs-shot { margin: 16px auto 0; max-height: 46svh; width: auto; }
 
 .ld-grid { display: grid; gap: 12px; }
 .ld-feat { background: var(--bg-card); border: 1px solid var(--line); border-radius: 14px; padding: 16px; }
@@ -712,9 +745,22 @@ body.modal-open { overflow: hidden; }
 
 @media (min-width: 620px) {
   .ld-grid { grid-template-columns: 1fr 1fr; }
-  /* En pantalla ancha caben las cuatro: ya no hace falta deslizar. */
-  .ld-phones { justify-content: space-between; gap: 12px; overflow-x: visible; margin: 0; padding: 4px 0 6px; }
-  .ld-phone { width: calc((100% - 36px) / 4); }
+  /* Con sitio de sobra, el texto va al lado de la captura en vez de encima. */
+  html.js-hscroll .hs-panel { flex-direction: row; align-items: center; justify-content: center; gap: 44px; }
+  html.js-hscroll .hs-copy { flex: 0 1 460px; }
+  html.js-hscroll .hs-shot { margin: 0; flex: 0 0 auto; max-height: 72svh; max-width: none; }
+  .hs-copy h3, .hs-card h3 { font-size: 27px; }
+  .hs-copy p, .hs-card p { font-size: 16px; max-width: 30em; }
+  html.js-hscroll .hs-card { padding: 28px; max-width: 640px; margin: 0 auto; }
+
+  /* Los bloques anclados se salen del ancho de lectura y ocupan la pantalla entera.
+     El recorte va en el <body> (no en #landing, que cortaría justo lo que se sale) y
+     con clip en vez de hidden, que no rompe el position:sticky. Solo con la
+     presentación a la vista: la app no lo necesita. */
+  html:not(.has-profile) body { overflow-x: clip; }
+  html.js-hscroll .ld-hs { width: 100vw; margin-inline: calc(50% - 50vw); }
+  html.js-hscroll .hs-head { max-width: 1120px; margin: 0 auto; width: 100%; padding: 0 40px; }
+  html.js-hscroll .hs-panel { padding: 0 40px; }
 }
 
 /* Portada de "Compartir": dos tarjetas grandes Exportar / Importar */

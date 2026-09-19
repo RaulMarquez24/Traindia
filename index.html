@@ -163,7 +163,6 @@
 
   /* Entrada suave de la presentación al ir bajando. El estado oculto se aplica ya en el
      primer pintado (por eso está aquí y no en styles.css) para que no haya parpadeo. */
-  html.js-reveal #landing .ld-shot,
   html.js-reveal #landing .ld-sec,
   html.js-reveal #landing .ld-final {
     opacity: 0; transform: translateY(18px);
@@ -765,7 +764,6 @@
     <p class="ld-lead">¿Cuánto levantaste la última vez? ¿Y cuántas repeticiones? Si tu respuesta empieza por «creo que…», esto es para ti.</p>
     <button class="btn primary ld-cta" data-ld-start>Empezar gratis</button>
     <p class="ld-note">Sin registro · Sin anuncios · Funciona sin internet</p>
-    <img class="ld-shot" src="og-image.jpg" width="1200" height="630" loading="lazy" alt="Traindía en el móvil: el plan de la semana y el historial de sesiones">
   </section>
 
   <section class="ld-sec">
@@ -779,38 +777,65 @@
     <p>Traindía es una <strong>app de entrenamiento</strong> para el móvil y el ordenador: montas tu rutina semanal, registras cada serie mientras entrenas y sigues tu progreso con récords y gráficas. Peso y repeticiones, tiempos, cardio, lastre o asistencia: lo que entrenes, cabe.</p>
   </section>
 
-  <section class="ld-sec">
-    <h2>Así se ve por dentro</h2>
-    <p class="ld-sub">Cuatro pantallas y ya sabes de qué va.</p>
-    <div class="ld-phones">
-      <figure class="ld-phone">
-        <img src="shot-semana.jpg" width="540" height="1169" loading="lazy" decoding="async" alt="Pantalla de Traindía con el plan de la semana: cada día con su grupo muscular, la intensidad y la duración estimada">
-        <figcaption>Tu semana, de un vistazo</figcaption>
-      </figure>
-      <figure class="ld-phone">
-        <img src="shot-entreno.jpg" width="540" height="1169" loading="lazy" decoding="async" alt="Entreno en marcha en Traindía: cronómetro, series marcadas y lo que se levantó la última vez encima de cada ejercicio">
-        <figcaption>Apuntar sin cortar el ritmo</figcaption>
-      </figure>
-      <figure class="ld-phone">
-        <img src="shot-progreso.jpg" width="540" height="1169" loading="lazy" decoding="async" alt="Pantalla de progreso de Traindía con la racha de semanas, el total de entrenos y la gráfica de peso corporal">
-        <figcaption>La gráfica no discute</figcaption>
-      </figure>
-      <figure class="ld-phone">
-        <img src="shot-records.jpg" width="540" height="1169" loading="lazy" decoding="async" alt="Récords de un ejercicio en Traindía: peso máximo, 1RM estimado, repeticiones máximas y peso total levantado">
-        <figcaption>Cada récord, con su fecha</figcaption>
-      </figure>
+  <!-- Bloque anclado: se queda quieto y las pantallas pasan de lado según bajas.
+       Sin JS (o con "reducir movimiento") es una lista vertical normal y corriente. -->
+  <section class="ld-hs" data-hs style="--n: 4; --step: 92svh">
+    <div class="hs-sticky">
+      <div class="hs-head">
+        <h2>Así se ve por dentro</h2>
+        <div class="hs-dots" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+      </div>
+      <div class="hs-track">
+        <article class="hs-panel">
+          <div class="hs-copy">
+            <span class="hs-num">01</span>
+            <h3>Tu semana, de un vistazo</h3>
+            <p>Abres la app y ves qué toca: el grupo del día, si va fuerte o ligero y cuánto vas a tardar. Cero decisiones antes de empezar.</p>
+          </div>
+          <img class="hs-shot" src="shot-semana.jpg" width="540" height="1169" loading="lazy" decoding="async" alt="Pantalla de Traindía con el plan de la semana: cada día con su grupo muscular, la intensidad y la duración estimada">
+        </article>
+        <article class="hs-panel">
+          <div class="hs-copy">
+            <span class="hs-num">02</span>
+            <h3>Apuntar sin cortar el ritmo</h3>
+            <p>Serie hecha, un toque. Y encima de cada ejercicio, lo que levantaste la última vez: ya sabes a qué aspiras sin pararte a pensar.</p>
+          </div>
+          <img class="hs-shot" src="shot-entreno.jpg" width="540" height="1169" loading="lazy" decoding="async" alt="Entreno en marcha en Traindía: cronómetro, series marcadas y lo que se levantó la última vez encima de cada ejercicio">
+        </article>
+        <article class="hs-panel">
+          <div class="hs-copy">
+            <span class="hs-num">03</span>
+            <h3>La gráfica no discute</h3>
+            <p>Tu racha de semanas, los entrenos que llevas y cómo se mueve tu peso corporal. Cuando dudes de si avanzas, míralo.</p>
+          </div>
+          <img class="hs-shot" src="shot-progreso.jpg" width="540" height="1169" loading="lazy" decoding="async" alt="Pantalla de progreso de Traindía con la racha de semanas, el total de entrenos y la gráfica de peso corporal">
+        </article>
+        <article class="hs-panel">
+          <div class="hs-copy">
+            <span class="hs-num">04</span>
+            <h3>Cada récord, con su fecha</h3>
+            <p>Peso máximo, 1RM estimado, repeticiones y kilos totales levantados. Un ejercicio no es una sola cifra, y aquí no lo es.</p>
+          </div>
+          <img class="hs-shot" src="shot-records.jpg" width="540" height="1169" loading="lazy" decoding="async" alt="Récords de un ejercicio en Traindía: peso máximo, 1RM estimado, repeticiones máximas y peso total levantado">
+        </article>
+      </div>
     </div>
   </section>
 
-  <section class="ld-sec">
-    <h2>Qué puedes hacer</h2>
-    <div class="ld-grid">
-      <article class="ld-feat"><h3>Tu semana, como la tienes en la cabeza</h3><p>Ordena los días por grupos, marca los ejercicios que no puedes saltarte y deja suplentes preparados por si la máquina está ocupada.</p></article>
-      <article class="ld-feat"><h3>Apuntar sin romper el ritmo</h3><p>Serie hecha, un toque. Cronómetro de descanso, duplicar la serie anterior y el «última vez» delante para saber a qué aspiras.</p></article>
-      <article class="ld-feat"><h3>Saber si de verdad progresas</h3><p>Peso máximo, 1RM estimado, repeticiones, distancia, tiempo y peso total levantado. Tus récords y tu peso corporal, en gráficas.</p></article>
-      <article class="ld-feat"><h3>Qué te toca comer hoy</h3><p>Guarda la pauta de tu nutricionista y consúltala al momento, sin rebuscar el PDF entre mil archivos del móvil.</p></article>
-      <article class="ld-feat"><h3>En el gimnasio no hay cobertura</h3><p>Da igual: Traindía funciona entera sin internet y se instala en la pantalla de inicio como una app más.</p></article>
-      <article class="ld-feat"><h3>Entrena con quien quieras</h3><p>Pásale un día suelto o tu plan entero a un compañero en un archivo; al importarlo verá justo lo mismo que tú.</p></article>
+  <section class="ld-hs ld-hs-cards" data-hs style="--n: 6; --step: 58svh">
+    <div class="hs-sticky">
+      <div class="hs-head">
+        <h2>Qué puedes hacer</h2>
+        <div class="hs-dots" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+      </div>
+      <div class="hs-track">
+        <article class="hs-panel"><div class="hs-card"><span class="hs-num">01</span><h3>Tu semana, como la tienes en la cabeza</h3><p>Ordena los días por grupos, marca los ejercicios que no puedes saltarte y deja suplentes preparados por si la máquina está ocupada.</p></div></article>
+        <article class="hs-panel"><div class="hs-card"><span class="hs-num">02</span><h3>Apuntar sin romper el ritmo</h3><p>Serie hecha, un toque. Cronómetro de descanso, duplicar la serie anterior y el «última vez» delante para saber a qué aspiras.</p></div></article>
+        <article class="hs-panel"><div class="hs-card"><span class="hs-num">03</span><h3>Saber si de verdad progresas</h3><p>Peso máximo, 1RM estimado, repeticiones, distancia, tiempo y peso total levantado. Tus récords y tu peso corporal, en gráficas.</p></div></article>
+        <article class="hs-panel"><div class="hs-card"><span class="hs-num">04</span><h3>Qué te toca comer hoy</h3><p>Guarda la pauta de tu nutricionista y consúltala al momento, sin rebuscar el PDF entre mil archivos del móvil.</p></div></article>
+        <article class="hs-panel"><div class="hs-card"><span class="hs-num">05</span><h3>En el gimnasio no hay cobertura</h3><p>Da igual: Traindía funciona entera sin internet y se instala en la pantalla de inicio como una app más.</p></div></article>
+        <article class="hs-panel"><div class="hs-card"><span class="hs-num">06</span><h3>Entrena con quien quieras</h3><p>Pásale un día suelto o tu plan entero a un compañero en un archivo; al importarlo verá justo lo mismo que tú.</p></div></article>
+      </div>
     </div>
   </section>
 
