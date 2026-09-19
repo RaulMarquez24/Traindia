@@ -25,6 +25,51 @@ Sin cuentas, sin servidores, sin dependencias. Tus datos viven en tu dispositivo
 
 ---
 
+## 📸 Así se ve
+
+<div align="center">
+
+<table>
+<tr>
+<td width="50%" align="center">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="ui-semana-dark.jpg">
+  <img src="ui-semana-light.jpg" alt="Plan de la semana: cada día con su grupo muscular, intensidad y duración">
+</picture>
+<br><sub><b>Tu semana, de un vistazo</b></sub>
+</td>
+<td width="50%" align="center">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="ui-entreno-dark.jpg">
+  <img src="ui-entreno-light.jpg" alt="Entreno en marcha: cronómetro, series marcadas y lo que levantaste la última vez">
+</picture>
+<br><sub><b>Apuntar sin cortar el ritmo</b></sub>
+</td>
+</tr>
+<tr>
+<td width="50%" align="center">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="ui-progreso-dark.jpg">
+  <img src="ui-progreso-light.jpg" alt="Progreso: racha de semanas, total de entrenos y gráfica de peso corporal">
+</picture>
+<br><sub><b>La gráfica no discute</b></sub>
+</td>
+<td width="50%" align="center">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="ui-records-dark.jpg">
+  <img src="ui-records-light.jpg" alt="Récords: peso máximo, 1RM estimado, repeticiones máximas y kilos totales levantados">
+</picture>
+<br><sub><b>Cada récord, con su fecha</b></sub>
+</td>
+</tr>
+</table>
+
+<sub>Las capturas se adaptan al tema claro u oscuro de tu GitHub.</sub>
+
+</div>
+
+---
+
 ## 📖 Qué es
 
 **Traindía** es una aplicación web progresiva (PWA) para gestionar tu entrenamiento por completo, pensada para usarse en el gimnasio (incluso sin cobertura). Organizas uno o varios **planes** semanales, registras tus **sesiones** (en vivo con cronómetro o a mano), analizas tu **progreso** con gráficas y consultas tu **plan de alimentación**. Todo queda guardado **en local**, sin registro ni backend, y puedes **exportar/importar** para compartir o hacer copias.
@@ -86,6 +131,12 @@ Nació como un plan de entrenamiento concreto y evolucionó a una herramienta ge
 
 #### 📲 PWA
 - Instalable en pantalla de inicio, **100 % offline** tras la primera carga, icono y tema propios.
+- **Tema** claro, oscuro o el del sistema, con la barra del navegador a juego.
+
+#### 👋 Presentación
+- Quien llega **sin perfil** ve una página de presentación (la misma `index.html`); quien ya lo tiene entra directo a la app.
+- Los pasos se recorren en **horizontal** mientras bajas, con la sección anclada. Sin JavaScript o con *reducir movimiento* del sistema se leen en vertical, uno debajo de otro — que es lo que indexan Google y los asistentes.
+- Datos estructurados `WebApplication` y `FAQPage`, Open Graph y Twitter Card.
 
 ## 🧩 Arquitectura
 
@@ -98,7 +149,7 @@ flowchart TD
     SEED["data.js<br/>plan semilla + guías"]
     DB["db.js<br/>capa IndexedDB + migraciones"]
     IDB[("IndexedDB · traindia-db")]
-    SW["sw.js<br/>service worker · cache-first"]
+    SW["sw.js<br/>service worker · network-first"]
 
     SHELL --> V_PLAN["views-plan.js"]
     SHELL --> V_SES["views-sessions.js"]
@@ -127,26 +178,28 @@ Todos los registros (salvo `settings`) llevan `userId`, generado en el primer ar
 | `progress` | Peso corporal y medidas por fecha |
 | `nutrition` | Planes de alimentación: variantes de día → comidas → opciones → alimentos, y tus platos |
 | `files` | Documentos guardados en el dispositivo (PDF, fotos): nombre, tipo y contenido |
-| `journal` | *(en desuso)* entradas del antiguo diario; se conserva para no perder lo ya escrito |
 
 ### Estructura del proyecto
 
 ```
 traindia/
-├── index.html              · shell, tema (variables CSS), service worker
+├── index.html              · shell, presentación, tema (variables CSS), SEO
 ├── styles.css              · estilos de componentes
-├── app.js                  · estado, router, onboarding, perfiles, ajustes
+├── app.js                  · estado, router, onboarding, perfiles, ajustes, presentación
 ├── db.js                   · IndexedDB, semilla y migraciones
 ├── ui.js                   · modales, toasts, formularios, selector de color, gráficas SVG
 ├── data.js                 · plan semilla + guías
 ├── views-plan.js           · planes, días, lugares, catálogo, guías
 ├── views-sessions.js       · registro en vivo / manual, historial
-├── views-progress.js       · progreso corporal, por ejercicio, comparativa
+├── views-progress.js       · progreso corporal, por ejercicio, récords, comparativa
 ├── views-nutrition.js      · nutrición: pauta del día, platos, importador por IA
 ├── views-data.js           · importar / exportar
 ├── manifest.json           · metadatos PWA
 ├── sw.js                   · service worker (offline)
-└── icon*.png · icon.svg    · iconos (app, maskable, favicon)
+├── ui-*-light/dark.jpg     · capturas de la presentación (y de este README)
+├── og-image.jpg            · imagen al compartir (1200×630, <300 KB o WhatsApp no la agranda)
+├── robots.txt · sitemap.xml · google*.html   · SEO y verificación
+└── icon*.png · icon.svg · favicon*           · iconos (app, maskable, favicon)
 ```
 
 ## 🚀 Desarrollo local
@@ -164,7 +217,10 @@ Abre `http://localhost:8000`.
 Publicado con **GitHub Pages** desde `main` (`/root`). Cada push redespliega solo.
 
 > [!IMPORTANT]
-> **Actualizaciones:** el service worker es *cache-first*. Para que los cambios lleguen a las apps ya instaladas, sube `CACHE_NAME` en `sw.js` (p. ej. `traindia-v2.5.0` → `v2.5.1`). Al activarse, borra la caché de archivos antigua y descarga la nueva.
+> **Actualizaciones:** el service worker es *network-first* para los archivos propios (con `{cache:'reload'}`, para saltarse también la caché HTTP de Pages), así que con conexión siempre sirve lo último y los cambios se ven al recargar. Aun así, **sube `CACHE_NAME` en `sw.js` en cada despliegue** (`traindia-build-N`): es lo que descarta la copia offline antigua. Las fuentes externas sí van *cache-first*.
+
+> [!WARNING]
+> GitHub Pages **no siempre reacciona al push**: a veces tarda o directamente se salta el despliegue. Si tras unos minutos `sw.js` en producción sigue mostrando el `CACHE_NAME` anterior, un commit vacío en `main` lo desatasca.
 
 > [!NOTE]
 > **Tus datos no se tocan al actualizar.** Los archivos viven en *Cache Storage* y los datos en *IndexedDB*: son almacenes distintos. Subir `CACHE_NAME` solo renueva los archivos; el perfil, sesiones y progreso permanecen.
@@ -179,18 +235,6 @@ Publicado con **GitHub Pages** desde `main` (`/root`). Cada push redespliega sol
 - **100 % local:** sin cuentas, login ni servidor. Tus datos no salen del dispositivo.
 - **Offline-first:** tras la primera carga, funciona sin conexión.
 - **Tú mandas:** exporta/importa en JSON; “Borrar todos los datos” lo deja a cero.
-
-## 📸 Capturas
-
-<div align="center">
-
-| Semana | Registro en vivo |
-|:---:|:---:|
-| <img src="docs/semana.png" width="240" alt="Vista semanal"> | <img src="docs/sesiones.png" width="240" alt="Registro en vivo"> |
-| **Progreso** | **Pregunta a una IA** |
-| <img src="docs/progreso.png" width="240" alt="Progreso"> | <img src="docs/ia.png" width="240" alt="Preguntar a una IA"> |
-
-</div>
 
 ## 📄 Derechos
 
