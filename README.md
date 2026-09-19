@@ -214,13 +214,15 @@ Abre `http://localhost:8000`.
 
 ## ☁️ Despliegue
 
-Publicado con **GitHub Pages** desde `main` (`/root`). Cada push redespliega solo.
+Publicado con **GitHub Pages** desde el workflow [`.github/workflows/pages.yml`](.github/workflows/pages.yml): cada push a `main` empaqueta el repositorio tal cual (no se construye nada) y lo publica. También se puede relanzar a mano desde la pestaña *Actions*.
+
+El último paso del workflow **comprueba que la web sirve de verdad el `CACHE_NAME` recién subido**; si en cinco minutos no lo hace, la ejecución sale en rojo. Antes se usaba el despliegue automático de Pages, que se saltaba pushes sin avisar y obligaba a desatascarlo con commits vacíos.
+
+El dominio propio está tanto en los ajustes del repositorio como en el archivo `CNAME` de la raíz, que viaja en el artefacto.
 
 > [!IMPORTANT]
 > **Actualizaciones:** el service worker es *network-first* para los archivos propios (con `{cache:'reload'}`, para saltarse también la caché HTTP de Pages), así que con conexión siempre sirve lo último y los cambios se ven al recargar. Aun así, **sube `CACHE_NAME` en `sw.js` en cada despliegue** (`traindia-build-N`): es lo que descarta la copia offline antigua. Las fuentes externas sí van *cache-first*.
 
-> [!WARNING]
-> GitHub Pages **no siempre reacciona al push**: a veces tarda o directamente se salta el despliegue. Si tras unos minutos `sw.js` en producción sigue mostrando el `CACHE_NAME` anterior, un commit vacío en `main` lo desatasca.
 
 > [!NOTE]
 > **Tus datos no se tocan al actualizar.** Los archivos viven en *Cache Storage* y los datos en *IndexedDB*: son almacenes distintos. Subir `CACHE_NAME` solo renueva los archivos; el perfil, sesiones y progreso permanecen.
