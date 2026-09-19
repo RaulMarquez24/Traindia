@@ -787,7 +787,7 @@ html.js-seq .seq-ui img { max-height: calc(var(--alto) - 230px); width: auto; ma
 
 
 
-.ld-faq { padding: 13px 0; border-bottom: 1px solid var(--line-soft); }
+.ld-faq { padding: 13px 0; border-bottom: 1px solid var(--line); }
 .ld-faq:last-child { border-bottom: 0; }
 .ld-faq h3 { font-size: 15px; font-weight: 700; margin-bottom: 5px; color: var(--ink); }
 .ld-faq p { font-size: 14px; line-height: 1.55; color: var(--ink-soft); }
