@@ -55,6 +55,10 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script>
+  // Aplica el tema guardado ANTES de pintar, para que no haya parpadeo blanco al abrir en oscuro.
+  (function () { try { var t = localStorage.getItem('traindia-theme'); if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t); } catch (e) {} })();
+</script>
 <style>
   :root {
     /* Paleta Pulse — índigo & frío */
@@ -85,6 +89,34 @@
     --header-h: 56px;
     --safe-bottom: env(safe-area-inset-bottom, 0);
     --safe-top: env(safe-area-inset-top, 0);
+  }
+
+  /* ---- TEMA OSCURO ----
+     'system' (sin data-theme): sigue al SO vía media query, salvo que se fuerce claro.
+     data-theme="dark": oscuro siempre.  data-theme="light": claro siempre. */
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0f1116; --bg-2: #171a21; --bg-card: #1b1e27;
+      --ink: #eceef4; --ink-soft: #b9bdca; --ink-dim: #7f8598;
+      --line: #2b2f3a; --line-soft: #232732;
+      --strong: #8b83ff; --strong-bg: #272449;
+      --moderate: #eaa64a; --moderate-bg: #3a2c17;
+      --light: #34c0d4; --light-bg: #123138;
+      --rest: #94a0b4; --rest-bg: #262b35;
+      --priority: #fb6f8e; --priority-bg: #3a1e27;
+      --sub-accent: #a98bff; --sub-bg: #272040;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0f1116; --bg-2: #171a21; --bg-card: #1b1e27;
+    --ink: #eceef4; --ink-soft: #b9bdca; --ink-dim: #7f8598;
+    --line: #2b2f3a; --line-soft: #232732;
+    --strong: #8b83ff; --strong-bg: #272449;
+    --moderate: #eaa64a; --moderate-bg: #3a2c17;
+    --light: #34c0d4; --light-bg: #123138;
+    --rest: #94a0b4; --rest-bg: #262b35;
+    --priority: #fb6f8e; --priority-bg: #3a1e27;
+    --sub-accent: #a98bff; --sub-bg: #272040;
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
