@@ -713,6 +713,7 @@ body.modal-open { overflow: hidden; }
 .ld-band h2 { font-size: 22px; font-weight: 800; letter-spacing: -0.02em; color: var(--ink); margin-bottom: 4px; }
 .ld-band-lead { font-size: 13px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-dim); }
 .ld-rail { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 16px; }
+.ld-chips { gap: 10px; }
 .ld-bcard {
   flex: 1 1 240px; background: var(--bg-card); border: 1px solid var(--line);
   border-radius: 14px; padding: 16px;
@@ -725,9 +726,6 @@ body.modal-open { overflow: hidden; }
   font-size: 14px; font-weight: 600; color: var(--ink-soft); white-space: nowrap;
 }
 
-html.js-band .ld-band { overflow: hidden; margin: 0 -18px; padding-inline: 18px; }
-html.js-band .ld-rail { flex-wrap: nowrap; width: max-content; will-change: transform; }
-html.js-band .ld-bcard { flex: 0 0 250px; }
 
 
 .ld-faq { padding: 13px 0; border-bottom: 1px solid var(--line-soft); }
@@ -755,9 +753,6 @@ html.js-band .ld-bcard { flex: 0 0 250px; }
   .ld-step p { font-size: 16.5px; }
   .ld-ui { margin-top: 0; }
   .ld-band h2 { font-size: 28px; }
-  /* Tarjetas más anchas: así la cinta sigue siendo bastante más larga que la
-     pantalla y el recorrido lateral se aprecia igual que en el móvil. */
-  html.js-band .ld-bcard { flex: 0 0 340px; }
 }
 
 /* Portada de "Compartir": dos tarjetas grandes Exportar / Importar */
