@@ -409,25 +409,73 @@ const app = {
     document.documentElement.classList.add('has-profile');
     if (window.showInstallPrompt) window.showInstallPrompt(); // el aviso esperaba a que hubiera perfil
   },
+  // Visitante nuevo: presentación como puerta de entrada (aún sin perfil).
   showLanding() {
     try { localStorage.removeItem(this.HASPROFILE_KEY); } catch (e) {}
     document.documentElement.classList.remove('has-profile');
-    document.querySelectorAll('[data-ld-start]').forEach(b => b.addEventListener('click', () => {
-      const ld = document.getElementById('landing');
-      if (ld) ld.style.display = 'none';
-      this.renderOnboarding();
-    }));
-    // Botón claro/oscuro: alterna a partir del tema EFECTIVO (resuelve 'system').
-    const themeBtn = document.querySelector('[data-ld-theme]');
-    if (themeBtn) themeBtn.addEventListener('click', () => {
-      const root = document.documentElement;
-      const dark = root.getAttribute('data-theme') === 'dark'
-        || (!root.hasAttribute('data-theme') && window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches);
-      this.setTheme(dark ? 'light' : 'dark');
-    });
-    this.initScrollFx();
-    this.initSeq();
+    this.initLanding();
+  },
+
+  // Ver la presentación teniendo YA perfil (desde Ajustes), para releerla o enseñarla.
+  // No toca los datos ni el flag de perfil: solo la oculta/muestra en memoria.
+  previewLanding() {
+    this._landingPreview = true;
+    const ld = document.getElementById('landing');
+    if (ld) ld.style.display = '';
+    document.documentElement.classList.remove('has-profile'); // muestra landing y oculta la app (localStorage intacto)
+    // Con perfil, "Empezar gratis" no aplica: el CTA pasa a "Volver a la app".
+    document.querySelectorAll('[data-ld-start]').forEach(b => { if (!b.dataset.orig) b.dataset.orig = b.textContent; b.textContent = 'Volver a la app'; });
+    let close = document.getElementById('ldClose');
+    if (!close && ld) {
+      close = document.createElement('button');
+      close.id = 'ldClose'; close.type = 'button'; close.className = 'ld-close';
+      close.textContent = '✕ Volver a la app';
+      close.addEventListener('click', () => this.exitLandingPreview());
+      ld.appendChild(close);
+    }
+    if (close) close.style.display = '';
+    this.initLanding();
+    window.scrollTo(0, 0);
+  },
+  exitLandingPreview() {
+    this._landingPreview = false;
+    const ld = document.getElementById('landing');
+    if (ld) ld.style.display = 'none';
+    const close = document.getElementById('ldClose');
+    if (close) close.style.display = 'none';
+    document.querySelectorAll('[data-ld-start]').forEach(b => { if (b.dataset.orig) b.textContent = b.dataset.orig; });
+    document.documentElement.classList.add('has-profile');
+    window.scrollTo(0, 0);
+  },
+
+  // Bindeos y efectos de la presentación. Idempotente: los listeners y los efectos
+  // se montan una sola vez; revealLanding se re-lanza en cada apertura.
+  initLanding() {
+    if (!this._landingReady) {
+      this._landingReady = true;
+      document.querySelectorAll('[data-ld-start]').forEach(b => b.addEventListener('click', () => this.startFromLanding()));
+      // Botón claro/oscuro: alterna a partir del tema EFECTIVO (resuelve 'system').
+      const themeBtn = document.querySelector('[data-ld-theme]');
+      if (themeBtn) themeBtn.addEventListener('click', () => {
+        const root = document.documentElement;
+        const dark = root.getAttribute('data-theme') === 'dark'
+          || (!root.hasAttribute('data-theme') && window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches);
+        this.setTheme(dark ? 'light' : 'dark');
+      });
+      this.initScrollFx();
+      this.initSeq();
+    }
     this.revealLanding();
+  },
+  // El CTA de la presentación: si ya hay perfil, vuelve a la app; si no, al onboarding.
+  startFromLanding() {
+    if (this._landingPreview || (this.settings && this.settings.seeded && this.settings.mainUserId)) {
+      this.exitLandingPreview();
+      return;
+    }
+    const ld = document.getElementById('landing');
+    if (ld) ld.style.display = 'none';
+    this.renderOnboarding();
   },
 
   // Movimiento de la presentación. Todo va atado al scroll normal y nada se ancla:
@@ -622,7 +670,7 @@ const app = {
                 tipo: d.tipo,
                 mensaje: d.mensaje.trim(),
                 contacto: (d.contacto || '').trim() || '(no indicado)',
-                version: 'v2.28.0',
+                version: 'v2.29.0',
                 perfil: (this.mainUser && this.mainUser.name) || '',
                 navegador: navigator.userAgent,
               }),
@@ -657,7 +705,7 @@ const app = {
     return `<div class="section">
       ${rows.map(r => `<button class="big-row" ${r.modal ? 'data-share' : `data-link="${r.v}"`}><span class="big-row-icon tile" style="background:${r.color}">${UI.icon(r.icon, 20)}</span><span class="big-row-text"><strong>${r.label}</strong><span class="dim">${r.sub}</span></span><span class="chev">›</span></button>`).join('')}
       <button class="big-row" data-feedback><span class="big-row-icon tile" style="background:var(--strong)">${UI.icon('chat', 20)}</span><span class="big-row-text"><strong>Sugerencias y reportes</strong><span class="dim">Envíame ideas o fallos</span></span><span class="chev">›</span></button>
-      <p class="version-foot">Traindía · v2.28.0 · ${Object.keys(this.usersById).length} perfil(es)<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
+      <p class="version-foot">Traindía · v2.29.0 · ${Object.keys(this.usersById).length} perfil(es)<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
     </div>`;
   },
   bindMore(root) {
@@ -932,17 +980,24 @@ const app = {
         <button class="btn ghost block" id="restorePlan">Restaurar plan original</button>
       </div>` : ''}
       <div class="card">
+        <div class="card-label">Presentación</div>
+        <button class="btn ghost block" id="viewLanding">Ver la presentación</button>
+        <p class="field-hint" style="margin-bottom:0">La página de bienvenida, por si quieres releerla o enseñarla. No cambia nada de tus datos.</p>
+      </div>
+      <div class="card">
         <div class="card-label">Datos de la app</div>
         <button class="btn ghost block" id="shareData">Compartir datos (exportar / importar)</button>
         <button class="btn danger block" id="resetApp">Borrar todos los datos</button>
         <p class="field-hint">Restablece la app al estado inicial (se borran todos los perfiles, sesiones y progreso).</p>
       </div>
-      <p class="version-foot">Traindía · v2.28.0</p>
+      <p class="version-foot">Traindía · v2.29.0</p>
     </div>`;
   },
 
   bindSettings(root) {
     UI.bindColorPicker(root);
+    const viewLandingBtn = root.querySelector('#viewLanding');
+    if (viewLandingBtn) viewLandingBtn.addEventListener('click', () => this.previewLanding());
     const shareBtn = root.querySelector('#shareData');
     if (shareBtn) shareBtn.addEventListener('click', () => VData.openShare(this));
     root.querySelectorAll('[data-theme-opt]').forEach(b => b.addEventListener('click', () => {
