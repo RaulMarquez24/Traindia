@@ -90,6 +90,15 @@ Nació como un plan de entrenamiento concreto y evolucionó a una herramienta ge
 - Campos según el tipo de ejercicio: **peso + reps**, **reps** (peso corporal) o **tiempo**.
 - Soporte de **cardio**: velocidad (km/h), inclinación (%) y nivel.
 - **🤖 Pregunta a una IA:** genera un resumen del ejercicio/serie y lo abre en **ChatGPT, Gemini o Claude** para resolver dudas al instante.
+
+  <div align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="ui-ia-dark.jpg">
+    <img src="ui-ia-light.jpg" width="440" alt="Modal «Preguntar a una IA» con el contexto del ejercicio ya escrito: día, objetivo y series realizadas, y botones para abrirlo en ChatGPT, Gemini o Claude">
+  </picture>
+  <br><sub>El contexto se rellena solo con lo que acabas de levantar; tú solo escribes la duda.</sub>
+  </div>
+
 - **Volumen** (reps × kg) y **duración** calculados solos; reordena ejercicios y añade **notas**.
 - Historial **agrupado por día** con **filtros por año / mes / día** y por autor.
 
