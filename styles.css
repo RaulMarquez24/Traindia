@@ -685,35 +685,45 @@ body.modal-open { overflow: hidden; }
 .ld-sec h2 { font-size: 22px; font-weight: 800; letter-spacing: -0.02em; margin-bottom: 12px; color: var(--ink); }
 .ld-sec > p { font-size: 15px; line-height: 1.6; color: var(--ink-soft); }
 
-/* ---- Pasos apilados ----
-   Mismo truco que el apilado de tarjetas de renterus.com: hermanas con
-   position:sticky que se van quedando quietas una encima de otra. El scroll
-   NUNCA se absorbe, por eso va suave. La diferencia es que aquí la que llega
-   entra desde la derecha (lo hace initStack en app.js moviendo la X).
-   Sin JS se apilan en vertical, que es el efecto de origen y también funciona. */
-.ld-stack { position: relative; padding: 18px 0 18svh; }
-.ld-card {
-  position: sticky; top: var(--pila, 76px);
-  background: var(--bg-2); border: 1px solid var(--line); border-radius: 20px;
-  padding: 22px 18px; margin-bottom: 20px;
-  box-shadow: 0 18px 50px rgba(15, 17, 22, .18);
-  display: flex; flex-direction: column; gap: 16px;
-}
-/* Cada una un pelín más abajo: así se ve el canto de las de debajo, como una baraja. */
-.ld-card:nth-child(2) { --pila: 88px; }
-.ld-card:nth-child(3) { --pila: 100px; }
-.ld-card:nth-child(4) { --pila: 112px; }
-.ld-num {
-  font-family: 'IBM Plex Mono', monospace; font-size: 11px;
-  letter-spacing: 0.18em; color: var(--strong);
-}
-.ld-card h2 { font-size: 24px; font-weight: 800; letter-spacing: -0.02em; color: var(--ink); margin: 8px 0 8px; }
-.ld-card p { font-size: 15px; line-height: 1.55; color: var(--ink-soft); }
-.ld-ui { margin: 0; min-width: 0; }
-.ld-ui img {
+/* ---- Los pasos ----
+   Sin JS: lista vertical normal, un paso debajo de otro y todos legibles.
+   Con JS (clase .js-seq): la sección se ancla, el fondo se queda quieto y los
+   pasos entran por la derecha y salen por la izquierda (lo mueve initSeq).
+   Sin marco de tarjeta: solo el texto y la captura, puestos ahí. */
+.ld-seq { padding: 8px 0; }
+.seq-step { padding: 30px 0; border-top: 1px solid var(--line-soft); }
+.seq-step:first-child { border-top: 0; }
+.seq-dots { display: none; gap: 7px; justify-content: center; }
+.seq-dots i { width: 26px; height: 3px; border-radius: 2px; background: var(--line); transition: background .3s ease; }
+.seq-dots i.on { background: var(--strong); }
+.ld-num { font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: 0.18em; color: var(--strong); }
+.seq-step h2 { font-size: 26px; font-weight: 800; letter-spacing: -0.02em; color: var(--ink); margin: 8px 0 10px; }
+.seq-step p { font-size: 15.5px; line-height: 1.6; color: var(--ink-soft); max-width: 34em; }
+.seq-ui { margin: 18px 0 0; min-width: 0; }
+.seq-ui img {
   width: 100%; height: auto; display: block; border-radius: 14px;
-  border: 1px solid var(--line); max-height: 42svh; object-fit: cover; object-position: top;
+  border: 1px solid var(--line); box-shadow: 0 16px 40px rgba(15, 17, 22, .16);
 }
+
+html.js-seq .ld-seq {
+  /* Una pantalla para el primer paso + una tirada por cada cambio. */
+  height: calc(100svh + (var(--pasos) - 1) * 80svh);
+  padding: 0;
+}
+html.js-seq .seq-pin {
+  position: sticky; top: 0; height: 100svh; overflow: hidden;
+  display: flex; flex-direction: column; justify-content: center; gap: 20px;
+  padding: calc(16px + var(--safe-top)) 0 20px;
+}
+html.js-seq .seq-stage { position: relative; flex: 1 1 auto; min-height: 0; }
+html.js-seq .seq-step {
+  position: absolute; inset: 0; padding: 0; border-top: 0;
+  display: flex; flex-direction: column; justify-content: center; gap: 4px;
+  will-change: transform;
+}
+html.js-seq .seq-dots { display: flex; flex: 0 0 auto; }
+html.js-seq .seq-ui { margin-top: 16px; min-height: 0; }
+html.js-seq .seq-ui img { max-height: 46svh; width: auto; max-width: 100%; }
 
 /* ---- Bandas que se desplazan de lado ----
    El movimiento lateral lo marca lo que has bajado (ver initScrollFx), pero la
@@ -759,13 +769,13 @@ body.modal-open { overflow: hidden; }
   .ld-sec > h2 { font-size: 28px; }
   /* Con sitio de sobra, texto e imagen van uno al lado del otro, alternando
      el lado en cada bloque para que la vista no caiga siempre en la misma columna. */
-  /* Con sitio de sobra, texto e imagen van uno al lado del otro dentro de la tarjeta. */
-  .ld-card { flex-direction: row; align-items: center; gap: 40px; padding: 32px; }
-  .ld-card-copy { flex: 0 1 420px; }
-  .ld-ui { flex: 1 1 0; }
-  .ld-ui img { max-height: 54svh; }
-  .ld-card h2 { font-size: 30px; }
-  .ld-card p { font-size: 16.5px; }
+  /* Con sitio de sobra, texto y captura van uno al lado del otro. */
+  .seq-step h2 { font-size: 32px; }
+  .seq-step p { font-size: 16.5px; }
+  html.js-seq .seq-step { flex-direction: row; align-items: center; gap: 48px; }
+  html.js-seq .seq-copy { flex: 0 1 420px; }
+  html.js-seq .seq-ui { flex: 1 1 0; margin: 0; display: flex; justify-content: flex-end; }
+  html.js-seq .seq-ui img { max-height: 62svh; }
   .ld-band h2 { font-size: 28px; }
 }
 

@@ -408,7 +408,7 @@ const app = {
       this.renderOnboarding();
     }));
     this.initScrollFx();
-    this.initStack();
+    this.initSeq();
     this.revealLanding();
   },
 
@@ -448,38 +448,47 @@ const app = {
     pintar();
   },
 
-  // Pasos apilados. Cada tarjeta se ancla sola con position:sticky (eso lo hace el
-  // CSS y ya funciona sin JS, apilándose en vertical). Lo único que añade esto es
-  // que la que va llegando entre DESDE LA DERECHA en vez de desde abajo: se la
-  // sujeta a su altura de anclaje y se la trae de fuera hacia dentro.
-  // Importante: no se retiene el scroll en ningún momento. La página baja a su
-  // ritmo y el movimiento lateral es lo que ocurre mientras tanto.
-  initStack() {
-    const pila = document.querySelector('#landing .ld-stack');
-    if (!pila) return;
+  // Los pasos. La sección se ancla (position:sticky, lo hace el CSS) y el fondo se
+  // queda quieto mientras lo que has bajado se traduce en movimiento lateral: el
+  // paso que viene entra por la derecha y el anterior sale por la izquierda.
+  // Al llegar al último la sección se suelta y se sigue bajando con normalidad.
+  // Sin esto el CSS deja los pasos en vertical, uno debajo de otro, y se leen igual.
+  initSeq() {
+    const sec = document.querySelector('#landing [data-seq]');
+    if (!sec) return;
     const reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (reduce) return; // apilado vertical a secas: ya se entiende igual
-    const cartas = [...pila.querySelectorAll('.ld-card')];
-    if (!cartas.length) return;
+    if (reduce) return;
+    const pin = sec.querySelector('.seq-pin');
+    const pasos = [...sec.querySelectorAll('.seq-step')];
+    const puntos = [...sec.querySelectorAll('.seq-dots i')];
+    if (!pin || pasos.length < 2) return;
+    document.documentElement.classList.add('js-seq');
 
-    let anclajes = [];
-    const medir = () => { anclajes = cartas.map(c => parseFloat(getComputedStyle(c).top) || 0); };
+    // Cada cambio se mueve en el tramo central y descansa en los extremos: así da
+    // tiempo a leer el paso antes de que empiece a irse.
+    const suave = (f) => {
+      const ini = 0.14, fin = 0.86;
+      if (f <= ini) return 0;
+      if (f >= fin) return 1;
+      const t = (f - ini) / (fin - ini);
+      return t * t * (3 - 2 * t);
+    };
 
     const pintar = () => {
-      const arriba = pila.getBoundingClientRect().top;
-      cartas.forEach((c, i) => {
-        const suyo = arriba + c.offsetTop;      // dónde estaría sin anclar
-        const falta = suyo - anclajes[i];       // >0 mientras viene de camino
-        if (falta <= 0) { c.style.transform = ''; return; } // ya anclada: manda el CSS
-        const rango = Math.min(innerHeight * 0.8, c.offsetHeight) || 1;
-        const bruto = 1 - Math.min(1, falta / rango); // 0 lejos, 1 pegada
-        // Entra en la primera mitad del tramo y el resto se queda quieta: si no,
-        // la siguiente empieza a taparla antes de que dé tiempo a leer esta.
-        const t = Math.min(1, bruto / 0.5);
-        const cerca = t * t * (3 - 2 * t); // arranca y frena suave
-        // Se sube a la altura de anclaje (-falta) y se trae desde la derecha.
-        c.style.transform = `translate3d(${((1 - cerca) * 104).toFixed(2)}%, ${-falta.toFixed(1)}px, 0)`;
+      const recorrido = sec.offsetHeight - pin.offsetHeight;
+      if (recorrido <= 0) return;
+      const avance = Math.min(1, Math.max(0, -sec.getBoundingClientRect().top / recorrido));
+      const tramos = pasos.length - 1;
+      const bruto = avance * tramos;
+      const i = Math.min(tramos - 1, Math.floor(bruto));
+      const donde = i + suave(bruto - i); // 0 = primer paso centrado, tramos = último
+      pasos.forEach((el, n) => {
+        const rel = donde - n; // <0 aún por llegar (derecha), >0 ya se fue (izquierda)
+        el.style.transform = `translate3d(${(-rel * 100).toFixed(2)}%, 0, 0)`;
+        el.style.visibility = Math.abs(rel) > 1.05 ? 'hidden' : ''; // fuera de vista: ni se pinta
       });
+      const activo = Math.round(donde);
+      puntos.forEach((el, n) => el.classList.toggle('on', n === activo));
     };
 
     let pedido = false;
@@ -488,9 +497,9 @@ const app = {
       pedido = true;
       requestAnimationFrame(() => { pedido = false; pintar(); });
     };
-    medir(); pintar();
+    pintar();
     window.addEventListener('scroll', alMover, { passive: true });
-    window.addEventListener('resize', () => { medir(); alMover(); });
+    window.addEventListener('resize', alMover);
   },
 
   // Va mostrando cada bloque al entrar en pantalla. El estado oculto lo pone el CSS
@@ -585,7 +594,7 @@ const app = {
                 tipo: d.tipo,
                 mensaje: d.mensaje.trim(),
                 contacto: (d.contacto || '').trim() || '(no indicado)',
-                version: 'v2.25.0',
+                version: 'v2.26.0',
                 perfil: (this.mainUser && this.mainUser.name) || '',
                 navegador: navigator.userAgent,
               }),
@@ -620,7 +629,7 @@ const app = {
     return `<div class="section">
       ${rows.map(r => `<button class="big-row" ${r.modal ? 'data-share' : `data-link="${r.v}"`}><span class="big-row-icon tile" style="background:${r.color}">${UI.icon(r.icon, 20)}</span><span class="big-row-text"><strong>${r.label}</strong><span class="dim">${r.sub}</span></span><span class="chev">›</span></button>`).join('')}
       <button class="big-row" data-feedback><span class="big-row-icon tile" style="background:var(--strong)">${UI.icon('chat', 20)}</span><span class="big-row-text"><strong>Sugerencias y reportes</strong><span class="dim">Envíame ideas o fallos</span></span><span class="chev">›</span></button>
-      <p class="version-foot">Traindía · v2.25.0 · ${Object.keys(this.usersById).length} perfil(es)<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
+      <p class="version-foot">Traindía · v2.26.0 · ${Object.keys(this.usersById).length} perfil(es)<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
     </div>`;
   },
   bindMore(root) {
@@ -900,7 +909,7 @@ const app = {
         <button class="btn danger block" id="resetApp">Borrar todos los datos</button>
         <p class="field-hint">Restablece la app al estado inicial (se borran todos los perfiles, sesiones y progreso).</p>
       </div>
-      <p class="version-foot">Traindía · v2.25.0</p>
+      <p class="version-foot">Traindía · v2.26.0</p>
     </div>`;
   },
 
