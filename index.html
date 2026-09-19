@@ -60,7 +60,7 @@
     { "@type": "Question", "name": "¿Traindía es gratis?", "acceptedAnswer": { "@type": "Answer", "text": "Sí, es completamente gratis y sin anuncios. No hay versión de pago ni funciones bloqueadas." } },
     { "@type": "Question", "name": "¿Necesito crear una cuenta?", "acceptedAnswer": { "@type": "Answer", "text": "No. Solo escribes tu nombre al empezar: no hay registro, ni correo, ni contraseña." } },
     { "@type": "Question", "name": "¿Funciona sin internet?", "acceptedAnswer": { "@type": "Answer", "text": "Sí. Traindía funciona al 100 % sin conexión, así que puedes entrenar y registrar tus series aunque no tengas cobertura en el gimnasio." } },
-    { "@type": "Question", "name": "¿Dónde se guardan mis datos?", "acceptedAnswer": { "@type": "Answer", "text": "Solo en tu dispositivo, en el almacenamiento del navegador. No hay servidores ni se envía nada a ningún sitio. Por eso conviene que te descargues copias de seguridad de vez en cuando." } },
+    { "@type": "Question", "name": "¿Dónde se guardan mis datos?", "acceptedAnswer": { "@type": "Answer", "text": "Solo en tu dispositivo, en el almacenamiento del navegador. Tus entrenos no salen de tu dispositivo: no hay cuentas ni un servidor donde se guarden. Por eso conviene que te descargues copias de seguridad de vez en cuando." } },
     { "@type": "Question", "name": "¿Cómo la instalo en el móvil?", "acceptedAnswer": { "@type": "Answer", "text": "Abre traindia.raulmarquez.dev en el navegador y elige «Añadir a la pantalla de inicio», o acepta el aviso de instalación. A partir de ahí se comporta como una app normal." } },
     { "@type": "Question", "name": "¿Puedo compartir mis entrenos?", "acceptedAnswer": { "@type": "Answer", "text": "Sí. Puedes exportar tu plan, un día concreto o tu perfil completo en un archivo y pasárselo a quien quieras; al importarlo verá lo mismo que tú." } }
   ]
@@ -877,7 +877,7 @@
     <div class="ld-faq"><h3>¿Traindía es gratis?</h3><p>Sí, es completamente gratis y sin anuncios. No hay versión de pago ni funciones bloqueadas.</p></div>
     <div class="ld-faq"><h3>¿Necesito crear una cuenta?</h3><p>No. Solo escribes tu nombre al empezar: no hay registro, ni correo, ni contraseña.</p></div>
     <div class="ld-faq"><h3>¿Funciona sin internet?</h3><p>Sí. Traindía funciona al 100 % sin conexión, así que puedes entrenar y registrar tus series aunque no tengas cobertura en el gimnasio.</p></div>
-    <div class="ld-faq"><h3>¿Dónde se guardan mis datos?</h3><p>Solo en tu dispositivo. No hay servidores ni se manda nada a ningún sitio, así que tus datos son tuyos y de nadie más. Por eso conviene que te descargues una copia de seguridad de vez en cuando.</p></div>
+    <div class="ld-faq"><h3>¿Dónde se guardan mis datos?</h3><p>Solo en tu dispositivo. Tus entrenos no salen de tu dispositivo: no hay cuentas ni un servidor donde se guarden, así que tus datos son tuyos y de nadie más. Por eso conviene que te descargues una copia de seguridad de vez en cuando.</p></div>
     <div class="ld-faq"><h3>¿Cómo la instalo en el móvil?</h3><p>Abre traindia.raulmarquez.dev en el navegador y elige «Añadir a la pantalla de inicio», o acepta el aviso de instalación. A partir de ahí se comporta como una app normal.</p></div>
     <div class="ld-faq"><h3>¿Puedo compartir mis entrenos?</h3><p>Sí. Puedes exportar tu plan, un día concreto o tu perfil completo en un archivo y pasárselo a quien quieras; al importarlo verá lo mismo que tú.</p></div>
   </section>
@@ -1008,6 +1008,24 @@
   document.getElementById('installClose')?.addEventListener('click', () => {
     document.getElementById('installPrompt').classList.remove('show');
   });
+</script>
+
+<!-- Recuento de visitas (GoatCounter): sin cookies, sin identificador y sin nada
+     del usuario. Se carga aparte y con async para no retrasar el arranque, y se
+     omite si el navegador pide no ser rastreado. Peticiones desde localhost y
+     redes privadas las ignora el propio servicio. -->
+<script>
+  (function () {
+    try {
+      var dnt = navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack;
+      if (dnt === '1' || dnt === 'yes') return;
+      var s = document.createElement('script');
+      s.async = true;
+      s.src = 'https://gc.zgo.at/count.js';
+      s.setAttribute('data-goatcounter', 'https://traindia.goatcounter.com/count');
+      document.head.appendChild(s);
+    } catch (e) { /* un contador jamás puede romper la app */ }
+  })();
 </script>
 </body>
 </html>
