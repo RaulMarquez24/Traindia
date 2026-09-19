@@ -661,6 +661,45 @@ body.modal-open { overflow: hidden; }
 .resp-opt em { font-style: normal; font-size: 12px; color: var(--ink-dim); }
 .resp-opt.go i { background: #2f9c6a; } .resp-opt.wait i { background: #c08a12; } .resp-opt.stop i { background: #c4503f; }
 
+/* ============ PRESENTACIÓN (landing del visitante nuevo) ============ */
+#landing { max-width: 720px; margin: 0 auto; padding: calc(24px + var(--safe-top)) 18px 40px; }
+.ld-hero { text-align: center; padding: 18px 0 24px; }
+.ld-logo { border-radius: 18px; margin-bottom: 14px; }
+#landing h1 { font-size: 42px; font-weight: 800; letter-spacing: -0.03em; line-height: 1; color: var(--ink); }
+.ld-tagline { font-size: 17px; font-weight: 600; color: var(--strong); margin-top: 8px; }
+.ld-lead { font-size: 15px; line-height: 1.55; color: var(--ink-soft); margin: 14px auto 20px; max-width: 34em; }
+.ld-cta { font-size: 16px; padding: 14px 30px; border-radius: 12px; width: auto; }
+.ld-note { font-size: 12px; color: var(--ink-dim); margin-top: 10px; }
+.ld-shot { width: 100%; height: auto; border-radius: 16px; margin-top: 26px; border: 1px solid var(--line); display: block; }
+
+.ld-sec { padding: 26px 0; border-top: 1px solid var(--line-soft); }
+.ld-sec h2 { font-size: 22px; font-weight: 800; letter-spacing: -0.02em; margin-bottom: 12px; color: var(--ink); }
+.ld-sec > p { font-size: 15px; line-height: 1.6; color: var(--ink-soft); }
+
+.ld-grid { display: grid; gap: 12px; }
+.ld-feat { background: var(--bg-card); border: 1px solid var(--line); border-radius: 14px; padding: 16px; }
+.ld-feat h3 { font-size: 15.5px; font-weight: 700; margin-bottom: 6px; color: var(--ink); }
+.ld-feat p { font-size: 13.5px; line-height: 1.5; color: var(--ink-soft); }
+
+.ld-why { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+.ld-why li { font-size: 14.5px; line-height: 1.5; color: var(--ink-soft); padding-left: 26px; position: relative; }
+.ld-why li::before { content: "✓"; position: absolute; left: 2px; color: var(--strong); font-weight: 800; }
+.ld-why strong { color: var(--ink); }
+
+.ld-faq { padding: 13px 0; border-bottom: 1px solid var(--line-soft); }
+.ld-faq:last-child { border-bottom: 0; }
+.ld-faq h3 { font-size: 15px; font-weight: 700; margin-bottom: 5px; color: var(--ink); }
+.ld-faq p { font-size: 14px; line-height: 1.55; color: var(--ink-soft); }
+
+.ld-final { text-align: center; padding: 34px 0 12px; border-top: 1px solid var(--line-soft); }
+.ld-final h2 { font-size: 24px; font-weight: 800; margin-bottom: 6px; color: var(--ink); }
+.ld-final p { font-size: 14.5px; color: var(--ink-soft); margin-bottom: 18px; }
+
+.ld-foot { text-align: center; padding: 24px 0 0; font-size: 12.5px; color: var(--ink-dim); line-height: 1.6; }
+.ld-foot a { color: var(--strong); text-decoration: none; }
+
+@media (min-width: 620px) { .ld-grid { grid-template-columns: 1fr 1fr; } }
+
 /* Portada de "Compartir": dos tarjetas grandes Exportar / Importar */
 .share-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .share-card { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; text-align: left; cursor: pointer;
