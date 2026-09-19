@@ -94,10 +94,32 @@ const VPlan = (() => {
         </a>`;
     }).join('');
 
-    return `<div class="week-days">${days}</div>`;
+    // Aviso de bienvenida: solo la primera vez (p. ej. si has puesto el nombre sin
+    // leer la presentación). Se descarta al cerrarlo o al abrir la presentación.
+    let welcome = '';
+    try {
+      if (localStorage.getItem('traindia-welcomed') !== '1') {
+        welcome = `<div class="week-welcome" id="weekWelcome">
+          <div class="ww-text"><strong>👋 ¿Primera vez por aquí?</strong><span>Mira en un momento qué puede hacer Traindía.</span></div>
+          <div class="ww-actions">
+            <button class="btn primary" data-ww-view>Ver presentación</button>
+            <button class="ww-close" data-ww-close aria-label="Ahora no">✕</button>
+          </div>
+        </div>`;
+      }
+    } catch (e) {}
+
+    return `${welcome}<div class="week-days">${days}</div>`;
   }
 
-  function weekBind() {}
+  function weekBind(app, root) {
+    const ww = root && root.querySelector('#weekWelcome');
+    if (ww) {
+      const dismiss = () => { try { localStorage.setItem('traindia-welcomed', '1'); } catch (e) {} ww.remove(); };
+      ww.querySelector('[data-ww-view]').addEventListener('click', () => { dismiss(); app.previewLanding(); });
+      ww.querySelector('[data-ww-close]').addEventListener('click', dismiss);
+    }
+  }
 
   // ---------- DÍA ----------
   function isDefaultDay(d) {

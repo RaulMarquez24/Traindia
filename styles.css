@@ -215,6 +215,24 @@ textarea.inp { resize: vertical; line-height: 1.4; }
 .detail-toolbar .btn { flex: 1; }
 
 /* ---- Home: los 7 días caben en pantalla sin desbordar ---- */
+/* Aviso de bienvenida (solo la primera vez), sobre la lista de días. */
+.week-welcome {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  background: var(--strong-bg); border: 1px solid var(--strong);
+  border-radius: 14px; padding: 14px 16px; margin-bottom: 12px;
+}
+.ww-text { display: flex; flex-direction: column; gap: 2px; flex: 1 1 180px; min-width: 0; }
+.ww-text strong { font-size: 15px; color: var(--ink); }
+.ww-text span { font-size: 13px; color: var(--ink-soft); }
+.ww-actions { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+.ww-actions .btn.primary { padding: 9px 16px; font-size: 13px; white-space: nowrap; }
+.ww-close {
+  width: 34px; height: 34px; flex: 0 0 auto; border-radius: 9px;
+  background: transparent; border: 0; color: var(--ink-dim);
+  font-size: 16px; cursor: pointer; transition: color .2s ease;
+}
+.ww-close:hover { color: var(--ink); }
+
 .week-days {
   display: flex;
   flex-direction: column;
