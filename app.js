@@ -29,6 +29,7 @@ const app = {
   // Pantalla de error en vez de dejar la app en blanco si el arranque falla.
   showBootError(e) {
     const bloqueada = e && (e.message === 'BLOCKED' || e.name === 'VersionError');
+    document.documentElement.classList.add('has-profile'); // saca la app (si no, el error quedaría oculto tras la presentación)
     const main = document.getElementById('mainContent');
     if (!main) return;
     main.innerHTML = `<div class="view active"><div class="section">
@@ -53,9 +54,10 @@ const app = {
 
     this.settings = await DB.getSettings();
     if (!this.settings || !this.settings.seeded || !this.settings.mainUserId) {
-      this.renderOnboarding();
+      this.showLanding(); // visitante nuevo: presentación con botón para empezar
       return;
     }
+    this.markHasProfile();
     await DB.migrate();
     await this.loadUsers();
     await this.refreshRoutine();
@@ -375,6 +377,7 @@ const app = {
       await DB.migrate();
       await DB.runCardioUnify(); // usuario nuevo: cardio ya unificado de inicio, sin aviso
       host.remove();
+      this.markHasProfile(); // ya hay perfil: se oculta la presentación y se muestra la app
       document.getElementById('appShell').style.display = '';
       this.settings = await DB.getSettings();
       await this.loadUsers();
@@ -386,6 +389,24 @@ const app = {
   },
 
   isFullPlan() { return !this.routine || this.routine.planType !== 'custom'; }, // plan con guías/contenido (no personalizado vacío)
+
+  // ---- Presentación (landing) vs app ----
+  // Por defecto el HTML muestra la presentación; en cuanto hay perfil se marca el <html>
+  // (y se recuerda en localStorage) para entrar directo a la app sin verla.
+  HASPROFILE_KEY: 'traindia-hasprofile',
+  markHasProfile() {
+    try { localStorage.setItem(this.HASPROFILE_KEY, '1'); } catch (e) {}
+    document.documentElement.classList.add('has-profile');
+  },
+  showLanding() {
+    try { localStorage.removeItem(this.HASPROFILE_KEY); } catch (e) {}
+    document.documentElement.classList.remove('has-profile');
+    document.querySelectorAll('[data-ld-start]').forEach(b => b.addEventListener('click', () => {
+      const ld = document.getElementById('landing');
+      if (ld) ld.style.display = 'none';
+      this.renderOnboarding();
+    }));
+  },
 
   // ---- Tema (sistema / claro / oscuro) ----
   THEME_KEY: 'traindia-theme',
@@ -457,7 +478,7 @@ const app = {
                 tipo: d.tipo,
                 mensaje: d.mensaje.trim(),
                 contacto: (d.contacto || '').trim() || '(no indicado)',
-                version: 'v2.19.5',
+                version: 'v2.20.0',
                 perfil: (this.mainUser && this.mainUser.name) || '',
                 navegador: navigator.userAgent,
               }),
@@ -492,7 +513,7 @@ const app = {
     return `<div class="section">
       ${rows.map(r => `<button class="big-row" ${r.modal ? 'data-share' : `data-link="${r.v}"`}><span class="big-row-icon tile" style="background:${r.color}">${UI.icon(r.icon, 20)}</span><span class="big-row-text"><strong>${r.label}</strong><span class="dim">${r.sub}</span></span><span class="chev">›</span></button>`).join('')}
       <button class="big-row" data-feedback><span class="big-row-icon tile" style="background:var(--strong)">${UI.icon('chat', 20)}</span><span class="big-row-text"><strong>Sugerencias y reportes</strong><span class="dim">Envíame ideas o fallos</span></span><span class="chev">›</span></button>
-      <p class="version-foot">Traindía · v2.19.5 · ${Object.keys(this.usersById).length} perfil(es)<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
+      <p class="version-foot">Traindía · v2.20.0 · ${Object.keys(this.usersById).length} perfil(es)<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
     </div>`;
   },
   bindMore(root) {
@@ -772,7 +793,7 @@ const app = {
         <button class="btn danger block" id="resetApp">Borrar todos los datos</button>
         <p class="field-hint">Restablece la app al estado inicial (se borran todos los perfiles, sesiones y progreso).</p>
       </div>
-      <p class="version-foot">Traindía · v2.19.5</p>
+      <p class="version-foot">Traindía · v2.20.0</p>
     </div>`;
   },
 

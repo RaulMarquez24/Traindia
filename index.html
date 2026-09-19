@@ -51,6 +51,21 @@
   "author": { "@type": "Person", "name": "Raúl Márquez" }
 }
 </script>
+<!-- FAQ estructurada: es de lo que más usan Google y los asistentes con IA para responder -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    { "@type": "Question", "name": "¿Traindía es gratis?", "acceptedAnswer": { "@type": "Answer", "text": "Sí, es completamente gratis y sin anuncios. No hay versión de pago ni funciones bloqueadas." } },
+    { "@type": "Question", "name": "¿Necesito crear una cuenta?", "acceptedAnswer": { "@type": "Answer", "text": "No. Solo escribes tu nombre al empezar: no hay registro, ni correo, ni contraseña." } },
+    { "@type": "Question", "name": "¿Funciona sin internet?", "acceptedAnswer": { "@type": "Answer", "text": "Sí. Traindía funciona al 100 % sin conexión, así que puedes entrenar y registrar tus series aunque no tengas cobertura en el gimnasio." } },
+    { "@type": "Question", "name": "¿Dónde se guardan mis datos?", "acceptedAnswer": { "@type": "Answer", "text": "Solo en tu dispositivo, en el almacenamiento del navegador. No hay servidores ni se envía nada a ningún sitio. Por eso conviene que te descargues copias de seguridad de vez en cuando." } },
+    { "@type": "Question", "name": "¿Cómo la instalo en el móvil?", "acceptedAnswer": { "@type": "Answer", "text": "Abre traindia.raulmarquez.dev en el navegador y elige «Añadir a la pantalla de inicio», o acepta el aviso de instalación. A partir de ahí se comporta como una app normal." } },
+    { "@type": "Question", "name": "¿Puedo compartir mis entrenos?", "acceptedAnswer": { "@type": "Answer", "text": "Sí. Puedes exportar tu plan, un día concreto o tu perfil completo en un archivo y pasárselo a quien quieras; al importarlo verá lo mismo que tú." } }
+  ]
+}
+</script>
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="favicon.ico" sizes="any"><!-- Google busca /favicon.ico por defecto -->
 <link rel="icon" type="image/svg+xml" href="icon.svg">
@@ -61,8 +76,13 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <script>
-  // Aplica el tema guardado ANTES de pintar, para que no haya parpadeo blanco al abrir en oscuro.
-  (function () { try { var t = localStorage.getItem('traindia-theme'); if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t); } catch (e) {} })();
+  // Antes de pintar, para que no haya parpadeos:
+  //  - tema guardado (claro/oscuro)
+  //  - si ya hay perfil, se marca el <html> para entrar directo a la app (sin ver la presentación)
+  (function () {
+    try { var t = localStorage.getItem('traindia-theme'); if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t); } catch (e) {}
+    try { if (localStorage.getItem('traindia-hasprofile') === '1') document.documentElement.classList.add('has-profile'); } catch (e) {}
+  })();
 </script>
 <style>
   :root {
@@ -123,6 +143,13 @@
     --priority: #fb6f8e; --priority-bg: #3a1e27;
     --sub-accent: #a98bff; --sub-bg: #272040;
   }
+
+  /* Presentación vs app. Por defecto se ve la PRESENTACIÓN (así la leen buscadores e IAs
+     aunque no ejecuten JS). Si ya hay perfil, el script de arriba marca .has-profile y
+     se entra directo a la app, sin que la presentación llegue a verse. */
+  #appShell { display: none; }
+  html.has-profile #appShell { display: block; }
+  html.has-profile #landing { display: none; }
 
   * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
   /* Los <button>/<select> no heredan el color de texto por defecto (usan el negro del
@@ -708,6 +735,67 @@
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+
+<!-- ===== PRESENTACIÓN (lo que ve quien llega por primera vez, y lo que leen buscadores e IAs) ===== -->
+<div id="landing">
+  <section class="ld-hero">
+    <img class="ld-logo" src="icon.svg" width="76" height="76" alt="Logo de Traindía">
+    <h1>Traindía</h1>
+    <p class="ld-tagline">Entrena. Progresa. Cada día.</p>
+    <p class="ld-lead">Planifica tu semana de entrenamiento, registra cada sesión mientras entrenas y mira cómo progresas. Gratis, sin cuentas y funciona sin conexión.</p>
+    <button class="btn primary ld-cta" data-ld-start>Empezar gratis</button>
+    <p class="ld-note">Sin registro · Sin anuncios · Tus datos se quedan en tu móvil</p>
+    <img class="ld-shot" src="og-image.jpg" width="1200" height="630" loading="lazy" alt="Traindía en el móvil: el plan de la semana y el historial de sesiones">
+  </section>
+
+  <section class="ld-sec">
+    <h2>Qué es Traindía</h2>
+    <p>Traindía es una <strong>aplicación de entrenamiento</strong> para el móvil y el ordenador con la que planificas tu rutina semanal, registras cada sesión mientras entrenas —series, repeticiones, peso, tiempo y cardio— y sigues tu progreso con récords y gráficas. Funciona al 100&nbsp;% sin conexión, no necesita cuenta y todos tus datos se guardan solo en tu dispositivo.</p>
+  </section>
+
+  <section class="ld-sec">
+    <h2>Qué puedes hacer</h2>
+    <div class="ld-grid">
+      <article class="ld-feat"><h3>Tu semana, a tu medida</h3><p>Monta tus días con tus ejercicios, series objetivo, bloques por grupo muscular, suplentes y días de descanso.</p></article>
+      <article class="ld-feat"><h3>Registro en vivo</h3><p>Apunta cada serie mientras entrenas, con cronómetro de descanso. Peso y repeticiones, peso corporal con lastre o asistencia, tiempos y cardio.</p></article>
+      <article class="ld-feat"><h3>Progreso y récords</h3><p>Peso corporal y medidas, y por ejercicio: peso máximo, 1RM estimado, repeticiones, distancia, tiempo y peso total levantado.</p></article>
+      <article class="ld-feat"><h3>Nutrición</h3><p>Guarda la pauta de tu nutricionista y consulta de un vistazo qué te toca comer hoy.</p></article>
+      <article class="ld-feat"><h3>Offline e instalable</h3><p>Se instala en la pantalla de inicio y funciona sin internet: en el gimnasio, en el parque o donde no haya cobertura.</p></article>
+      <article class="ld-feat"><h3>Tus datos son tuyos</h3><p>Copias de seguridad completas, exportar por partes y compartir un entreno con quien quieras. Sin servidores de por medio.</p></article>
+    </div>
+  </section>
+
+  <section class="ld-sec">
+    <h2>Por qué Traindía</h2>
+    <ul class="ld-why">
+      <li><strong>Gratis y sin anuncios.</strong> Sin versión de pago ni funciones bloqueadas.</li>
+      <li><strong>Sin cuenta ni registro.</strong> Pones tu nombre y a entrenar.</li>
+      <li><strong>100&nbsp;% offline.</strong> No depende de la cobertura ni de ningún servidor.</li>
+      <li><strong>Privada de verdad.</strong> Tus entrenos no salen de tu dispositivo.</li>
+      <li><strong>Rápida y ligera.</strong> Se instala como una app y abre al instante.</li>
+    </ul>
+  </section>
+
+  <section class="ld-sec">
+    <h2>Preguntas frecuentes</h2>
+    <div class="ld-faq"><h3>¿Traindía es gratis?</h3><p>Sí, es completamente gratis y sin anuncios. No hay versión de pago ni funciones bloqueadas.</p></div>
+    <div class="ld-faq"><h3>¿Necesito crear una cuenta?</h3><p>No. Solo escribes tu nombre al empezar: no hay registro, ni correo, ni contraseña.</p></div>
+    <div class="ld-faq"><h3>¿Funciona sin internet?</h3><p>Sí. Traindía funciona al 100 % sin conexión, así que puedes entrenar y registrar tus series aunque no tengas cobertura en el gimnasio.</p></div>
+    <div class="ld-faq"><h3>¿Dónde se guardan mis datos?</h3><p>Solo en tu dispositivo, en el almacenamiento del navegador. No hay servidores ni se envía nada a ningún sitio. Por eso conviene que te descargues copias de seguridad de vez en cuando.</p></div>
+    <div class="ld-faq"><h3>¿Cómo la instalo en el móvil?</h3><p>Abre traindia.raulmarquez.dev en el navegador y elige «Añadir a la pantalla de inicio», o acepta el aviso de instalación. A partir de ahí se comporta como una app normal.</p></div>
+    <div class="ld-faq"><h3>¿Puedo compartir mis entrenos?</h3><p>Sí. Puedes exportar tu plan, un día concreto o tu perfil completo en un archivo y pasárselo a quien quieras; al importarlo verá lo mismo que tú.</p></div>
+  </section>
+
+  <section class="ld-final">
+    <h2>Empieza hoy</h2>
+    <p>Tu primer entreno registrado está a un toque.</p>
+    <button class="btn primary ld-cta" data-ld-start>Empezar gratis</button>
+  </section>
+
+  <footer class="ld-foot">
+    <p>Traindía · Hecho por Raúl Márquez · <a href="https://github.com/RaulMarquez24/Traindia" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
+  </footer>
+</div>
 
 <div id="appShell">
 <!-- HEADER -->
