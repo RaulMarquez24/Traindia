@@ -189,7 +189,6 @@ const app = {
 
       more:     { render: (a, p) => this.renderMore(),      bind: (a, r) => this.bindMore(r) },
       profiles: { render: (a, p) => this.renderProfiles(),  bind: (a, r) => this.bindProfiles(r) },
-      data:     { render: (a, p) => VData.render(a, p),     bind: (a, r, p) => VData.bind(a, r, p) },
       settings: { render: (a, p) => this.renderSettings(),  bind: (a, r) => this.bindSettings(r) },
       backups:  { render: (a, p) => this.renderBackups(),   bind: (a, r) => this.bindBackups(r) },
       docs:     { render: (a, p) => this.renderDocs(),      bind: (a, r) => this.bindDocs(r) },
@@ -203,7 +202,7 @@ const app = {
     document.getElementById('backBtn').addEventListener('click', () => this.back());
     document.getElementById('userChip').addEventListener('click', () => this.openUserMenu());
     const dataBtn = document.getElementById('dataBtn');
-    if (dataBtn) dataBtn.addEventListener('click', () => this.go('data', {}));
+    if (dataBtn) dataBtn.addEventListener('click', () => VData.openShare(this));
     const activeBar = document.getElementById('activeBar');
     if (activeBar) activeBar.addEventListener('click', () => { if (this._live) this.go('live', { dayId: this._live.dayId }); });
     // Autoguardado extra al ocultar/cerrar la app
@@ -291,7 +290,7 @@ const app = {
       week: 'Traindía', exercises: 'Ejercicios', places: 'Lugares', guides: 'Guías', info: 'El plan',
       sessions: 'Sesiones', live: 'Entreno', session: 'Sesión',
       progress: 'Progreso', nutrition: 'Nutrición',
-      more: 'Más', profiles: 'Perfiles', data: 'Compartir', settings: 'Ajustes', backups: 'Copias internas', docs: 'Documentos',
+      more: 'Más', profiles: 'Perfiles', settings: 'Ajustes', backups: 'Copias internas', docs: 'Documentos',
     };
     let label = titles[this.currentView] || 'Traindía';
     if (this.currentView === 'nutrition' && typeof VNutrition !== 'undefined') {
@@ -311,7 +310,7 @@ const app = {
       week: 'week', day: 'week', exercises: 'week',
       sessions: 'sessions', session: 'sessions', live: 'sessions',
       progress: 'progress', nutrition: 'nutrition',
-      more: 'more', profiles: 'more', data: 'more', settings: 'more', guides: 'more', guide: 'more', info: 'more', places: 'more', backups: 'more', docs: 'more',
+      more: 'more', profiles: 'more', settings: 'more', guides: 'more', guide: 'more', info: 'more', places: 'more', backups: 'more', docs: 'more',
     };
     const active = map[this.currentView] || 'week';
     document.querySelectorAll('.nav-btn').forEach(btn => {
@@ -458,7 +457,7 @@ const app = {
                 tipo: d.tipo,
                 mensaje: d.mensaje.trim(),
                 contacto: (d.contacto || '').trim() || '(no indicado)',
-                version: 'v2.19.2',
+                version: 'v2.19.3',
                 perfil: (this.mainUser && this.mainUser.name) || '',
                 navegador: navigator.userAgent,
               }),
@@ -485,20 +484,22 @@ const app = {
       { v: 'places', icon: 'pin', color: 'var(--priority)', label: 'Lugares', sub: 'Sitios donde entrenas' },
       { v: 'info', icon: 'info', color: 'var(--moderate)', label: 'El plan', sub: 'Tus planes de entrenamiento' },
       { v: 'profiles', icon: 'users', color: 'var(--sub-accent)', label: 'Perfiles', sub: 'Principal e invitados' },
-      { v: 'data', icon: 'swap', color: 'var(--light)', label: 'Compartir', sub: 'Copia, exporta o importa tus datos' },
+      { v: 'data', icon: 'swap', color: 'var(--light)', label: 'Compartir', sub: 'Copia, exporta o importa tus datos', modal: true },
       { v: 'docs', icon: 'book', color: 'var(--sub-accent)', label: 'Documentos', sub: 'PDFs y fotos, a mano en el entreno' },
       { v: 'backups', icon: 'clock', color: 'var(--moderate)', label: 'Copias internas', sub: 'Puntos de restauración' },
       { v: 'settings', icon: 'settings', color: 'var(--rest)', label: 'Ajustes', sub: 'Perfil principal y app' },
     ].filter(r => !r.guidedOnly || this.isFullPlan());
     return `<div class="section">
-      ${rows.map(r => `<button class="big-row" data-link="${r.v}"><span class="big-row-icon tile" style="background:${r.color}">${UI.icon(r.icon, 20)}</span><span class="big-row-text"><strong>${r.label}</strong><span class="dim">${r.sub}</span></span><span class="chev">›</span></button>`).join('')}
+      ${rows.map(r => `<button class="big-row" ${r.modal ? 'data-share' : `data-link="${r.v}"`}><span class="big-row-icon tile" style="background:${r.color}">${UI.icon(r.icon, 20)}</span><span class="big-row-text"><strong>${r.label}</strong><span class="dim">${r.sub}</span></span><span class="chev">›</span></button>`).join('')}
       <button class="big-row" data-feedback><span class="big-row-icon tile" style="background:var(--strong)">${UI.icon('chat', 20)}</span><span class="big-row-text"><strong>Sugerencias y reportes</strong><span class="dim">Envíame ideas o fallos</span></span><span class="chev">›</span></button>
-      <p class="version-foot">Traindía · v2.19.2 · ${Object.keys(this.usersById).length} perfil(es)<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
+      <p class="version-foot">Traindía · v2.19.3 · ${Object.keys(this.usersById).length} perfil(es)<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
     </div>`;
   },
   bindMore(root) {
     const fb = root && root.querySelector('[data-feedback]');
     if (fb) fb.addEventListener('click', () => this.openFeedback());
+    const sh = root && root.querySelector('[data-share]');
+    if (sh) sh.addEventListener('click', () => VData.openShare(this));
   },
 
   // ---- Vista DOCUMENTOS (adjuntos consultables durante el entreno) ----
@@ -767,16 +768,18 @@ const app = {
       </div>` : ''}
       <div class="card">
         <div class="card-label">Datos de la app</div>
-        <button class="btn ghost block" data-link="data">Compartir datos (exportar / importar)</button>
+        <button class="btn ghost block" id="shareData">Compartir datos (exportar / importar)</button>
         <button class="btn danger block" id="resetApp">Borrar todos los datos</button>
         <p class="field-hint">Restablece la app al estado inicial (se borran todos los perfiles, sesiones y progreso).</p>
       </div>
-      <p class="version-foot">Traindía · v2.19.2</p>
+      <p class="version-foot">Traindía · v2.19.3</p>
     </div>`;
   },
 
   bindSettings(root) {
     UI.bindColorPicker(root);
+    const shareBtn = root.querySelector('#shareData');
+    if (shareBtn) shareBtn.addEventListener('click', () => VData.openShare(this));
     root.querySelectorAll('[data-theme-opt]').forEach(b => b.addEventListener('click', () => {
       this.setTheme(b.dataset.themeOpt);
       root.querySelectorAll('[data-theme-opt]').forEach(x => x.classList.toggle('on', x === b));
