@@ -537,6 +537,7 @@ const app = {
     const pin = sec.querySelector('.seq-pin');
     const pasos = [...sec.querySelectorAll('.seq-step')];
     const puntos = [...sec.querySelectorAll('.seq-dots i')];
+    const cue = sec.querySelector('.seq-cue');
     if (!pin || pasos.length < 2) return;
     document.documentElement.classList.add('js-seq');
 
@@ -574,7 +575,12 @@ const app = {
         if (ui) ui.style.transform = `translate3d(${(d * 7).toFixed(2)}%, 0, 0)`;
       });
       const activo = Math.round(donde);
-      puntos.forEach((el, n) => el.classList.toggle('on', n === activo));
+      puntos.forEach((el, n) => {
+        el.classList.toggle('on', n === activo);
+        el.classList.toggle('done', n < activo); // los ya pasados quedan llenos: barra que baja
+      });
+      // La flecha "sigue bajando" se apaga al acercarse al último paso.
+      if (cue) cue.style.opacity = avance < 0.85 ? '1' : Math.max(0, (1 - avance) / 0.15).toFixed(2);
     };
 
     let pedido = false;
@@ -586,6 +592,45 @@ const app = {
     pintar();
     window.addEventListener('scroll', alMover, { passive: true });
     window.addEventListener('resize', alMover);
+
+    // --- El gesto HORIZONTAL también avanza (se traduce a scroll vertical) ---
+    // Es puramente ADITIVO: el scroll vertical sigue igual; esto solo hace que,
+    // cuando alguien intenta deslizar de lado (trackpad o swipe), la presentación
+    // avance en vez de no hacer nada. Solo actúa con la sección anclada; en los
+    // extremos deja pasar el gesto para poder entrar y salir. Los listeners van en
+    // la sección (no en window) para no penalizar el scroll del resto de la página.
+    const anclada = () => {
+      const r = sec.getBoundingClientRect();
+      const recorrido = sec.offsetHeight - pin.offsetHeight;
+      return r.top <= 1 && (-r.top) < recorrido - 1;
+    };
+    sec.addEventListener('wheel', (e) => {
+      if (Math.abs(e.deltaX) <= Math.abs(e.deltaY)) return; // vertical: como siempre
+      if (!anclada()) return;
+      e.preventDefault();
+      window.scrollBy({ top: e.deltaX, behavior: 'auto' });
+    }, { passive: false });
+
+    let sx = 0, sy = 0, modo = null; // modo: null indeciso · true horizontal · false vertical/fuera
+    sec.addEventListener('touchstart', (e) => {
+      sx = e.touches[0].clientX; sy = e.touches[0].clientY;
+      modo = anclada() ? null : false;
+    }, { passive: true });
+    sec.addEventListener('touchmove', (e) => {
+      if (modo === false) return; // vertical o fuera: scroll nativo, no se toca
+      const x = e.touches[0].clientX, y = e.touches[0].clientY;
+      if (modo === null) {
+        const dx = x - sx, dy = y - sy;
+        if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return; // gesto aún sin definir
+        modo = Math.abs(dx) > Math.abs(dy) * 1.3;
+        if (!modo) return; // predominantemente vertical: se deja al scroll nativo
+      }
+      if (!anclada()) { modo = false; return; }
+      e.preventDefault();
+      window.scrollBy({ top: -(x - sx) * 1.5, behavior: 'auto' }); // deslizar a la izquierda = avanzar
+      sx = x; sy = y;
+    }, { passive: false });
+    sec.addEventListener('touchend', () => { modo = null; }, { passive: true });
   },
 
   // Va mostrando cada bloque al entrar en pantalla. El estado oculto lo pone el CSS
@@ -682,7 +727,7 @@ const app = {
                 tipo: d.tipo,
                 mensaje: d.mensaje.trim(),
                 contacto: (d.contacto || '').trim() || '(no indicado)',
-                version: 'v2.31.0',
+                version: 'v2.32.0',
                 perfil: (this.mainUser && this.mainUser.name) || '',
                 navegador: navigator.userAgent,
               }),
@@ -718,7 +763,7 @@ const app = {
     return `<div class="section">
       ${rows.map(r => `<button class="big-row" ${r.modal ? 'data-share' : r.landing ? 'data-landing' : `data-link="${r.v}"`}><span class="big-row-icon tile" style="background:${r.color}">${UI.icon(r.icon, 20)}</span><span class="big-row-text"><strong>${r.label}</strong><span class="dim">${r.sub}</span></span><span class="chev">›</span></button>`).join('')}
       <button class="big-row" data-feedback><span class="big-row-icon tile" style="background:var(--strong)">${UI.icon('chat', 20)}</span><span class="big-row-text"><strong>Sugerencias y reportes</strong><span class="dim">Envíame ideas o fallos</span></span><span class="chev">›</span></button>
-      <p class="version-foot">Traindía · v2.31.0 · ${Object.keys(this.usersById).length} perfil(es)<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
+      <p class="version-foot">Traindía · v2.32.0 · ${Object.keys(this.usersById).length} perfil(es)<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
     </div>`;
   },
   bindMore(root) {
@@ -1000,7 +1045,7 @@ const app = {
         <button class="btn danger block" id="resetApp">Borrar todos los datos</button>
         <p class="field-hint">Restablece la app al estado inicial (se borran todos los perfiles, sesiones y progreso).</p>
       </div>
-      <p class="version-foot">Traindía · v2.31.0</p>
+      <p class="version-foot">Traindía · v2.32.0</p>
     </div>`;
   },
 
