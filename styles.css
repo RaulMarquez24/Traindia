@@ -757,9 +757,13 @@ body.modal-open { overflow: hidden; }
 .ld-seq { padding: 8px 0; }
 .seq-step { padding: 30px 0; border-top: 1px solid var(--line-soft); }
 .seq-step:first-child { border-top: 0; }
-.seq-dots { display: none; gap: 7px; justify-content: center; }
-.seq-dots i { width: 26px; height: 3px; border-radius: 2px; background: var(--line); transition: background .3s ease; }
-.seq-dots i.on { background: var(--strong); }
+/* Indicador de progreso VERTICAL: sustituye a los guiones en fila (que parecían
+   la paginación de un carrusel horizontal) por un riel a un lado que se llena de
+   arriba abajo, reforzando que se AVANZA BAJANDO aunque los pasos crucen de lado.
+   Sin JS no se muestra (la lista vertical no lo necesita). */
+.seq-dots { display: none; }
+/* Flecha "sigue bajando": refuerza el eje vertical mientras estás en la sección. */
+.seq-cue { display: none; }
 .ld-num { font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: 0.18em; color: var(--strong); }
 .seq-step h2 { font-size: 26px; font-weight: 800; letter-spacing: -0.02em; color: var(--ink); margin: 8px 0 10px; }
 .seq-step p { font-size: 15.5px; line-height: 1.6; color: var(--ink-soft); max-width: 34em; }
@@ -791,15 +795,40 @@ html.js-seq .seq-pin {
   position: sticky; height: var(--alto); overflow: hidden;
   top: calc((100svh - var(--alto)) / 2);
   display: flex; flex-direction: column; justify-content: center; gap: 18px;
-  padding: 0;
+  padding: 0 0 0 22px; /* hueco a la izquierda para el riel de progreso */
 }
 html.js-seq .seq-stage { position: relative; flex: 1 1 auto; min-height: 0; }
+
+/* Riel vertical a la izquierda: segmentos apilados que se llenan hacia abajo. */
+html.js-seq .seq-dots {
+  display: flex; flex-direction: column; gap: 8px;
+  position: absolute; left: 0; top: 50%; transform: translateY(-50%); z-index: 3;
+}
+html.js-seq .seq-dots i {
+  width: 4px; height: 22px; border-radius: 2px;
+  background: var(--line); transition: background .3s ease, opacity .3s ease, height .3s ease;
+}
+html.js-seq .seq-dots i.done { background: var(--strong); opacity: .45; }
+html.js-seq .seq-dots i.on { background: var(--strong); opacity: 1; height: 30px; }
+
+/* Chevron ↓ que late; el JS lo desvanece al llegar al último paso. */
+html.js-seq .seq-cue {
+  display: block; position: absolute; left: 50%; bottom: 12px; margin-left: -7px;
+  width: 13px; height: 13px;
+  border-right: 2px solid var(--ink-dim); border-bottom: 2px solid var(--ink-dim);
+  transform: rotate(45deg); z-index: 3; pointer-events: none;
+  animation: seq-cue-bob 1.8s ease-in-out infinite;
+}
+@keyframes seq-cue-bob {
+  0%, 100% { transform: rotate(45deg) translate(-2px, -2px); }
+  50%      { transform: rotate(45deg) translate(2px, 2px); }
+}
+@media (prefers-reduced-motion: reduce) { html.js-seq .seq-cue { animation: none; } }
 html.js-seq .seq-step {
   position: absolute; inset: 0; padding: 0; border-top: 0;
   display: flex; flex-direction: column; justify-content: center; gap: 4px;
   will-change: transform;
 }
-html.js-seq .seq-dots { display: flex; flex: 0 0 auto; }
 html.js-seq .seq-ui { margin-top: 16px; min-height: 0; transition: none; }
 html.js-seq .seq-ui img { max-height: calc(var(--alto) - 230px); width: auto; max-width: 100%; }
 
