@@ -21,6 +21,28 @@ const VSessions = (() => {
     { key: 'load', label: 'Lastre / asistencia', unit: '', ph: '', step: '0.5', scope: 'set' }, // opcional: para suspensiones/colgadas (± kg), como en peso corporal
   ];
   const TIME_FIELD = Object.fromEntries(TIME_FIELDS.map(f => [f.key, f]));
+
+  // Datos opcionales de los ejercicios de «HECHO / NO HECHO» (estiramientos, movilidad,
+  // acarreos…): además de la marca, cuánto duró, con qué peso… Todos van por serie y
+  // se eligen por ejercicio, igual que en los de tiempo.
+  const CHECK_FIELDS = [
+    { key: 'time', label: 'Tiempo', unit: 'min:seg', ph: '', step: '1' },
+    { key: 'reps', label: 'Repeticiones', unit: '', ph: 'reps', step: '1' },
+    { key: 'weight', label: 'Peso', unit: 'kg', ph: 'kg', step: '0.5' },
+    { key: 'load', label: 'Lastre / asistencia', unit: '± kg', ph: '', step: '0.5' },
+    { key: 'distance', label: 'Distancia', unit: 'km', ph: 'km', step: '0.01' },
+  ];
+  const CHECK_FIELD = Object.fromEntries(CHECK_FIELDS.map(f => [f.key, f]));
+  function checkHasValue(s, k) {
+    if (k === 'load') return !!(s.load || s.loadMode); // el lastre/asist ocupa dos campos
+    return s[k] !== undefined && s[k] !== null && s[k] !== '';
+  }
+  // Datos activos de una entry de hecho/no hecho: los elegidos + los que ya tengan valor.
+  function checkActiveMetrics(entry) {
+    const keys = new Set(Array.isArray(entry.metrics) ? entry.metrics : []);
+    CHECK_FIELDS.forEach(f => { if ((entry.sets || []).some(s => checkHasValue(s, f.key))) keys.add(f.key); });
+    return CHECK_FIELDS.filter(f => keys.has(f.key)).map(f => f.key);
+  }
   // Métricas activas de una entry de tiempo: las elegidas (entry.metrics) + las
   // que ya tengan datos (para no ocultar nada introducido), ordenadas.
   // OJO: sin métricas elegidas NO se asume cardio (un ejercicio de tiempo "pelado"
@@ -57,6 +79,7 @@ const VSessions = (() => {
   }
   // Aplica la selección de datos a la entry (limpia los quitados) y la recuerda en el ejercicio.
   async function applyMetrics(app, entry, keys) {
+    if (entry.type === 'check') return applyCheckMetrics(app, entry, keys);
     const ordered = TIME_FIELDS.filter(f => keys.includes(f.key)).map(f => f.key);
     const removed = timeActiveMetrics(entry).filter(k => !ordered.includes(k));
     (entry.sets || []).forEach(s => removed.forEach(k => {
@@ -68,7 +91,29 @@ const VSessions = (() => {
     entry.metrics = ordered;
     await setExerciseMetrics(app, entry.exerciseId, ordered);
   }
+  async function applyCheckMetrics(app, entry, keys) {
+    const ordered = CHECK_FIELDS.filter(f => keys.includes(f.key)).map(f => f.key);
+    const removed = checkActiveMetrics(entry).filter(k => !ordered.includes(k));
+    (entry.sets || []).forEach(s => removed.forEach(k => { delete s[k]; if (k === 'load') delete s.loadMode; }));
+    entry.metrics = ordered;
+    await setExerciseMetrics(app, entry.exerciseId, ordered);
+  }
+  function pickCheckMetrics(app, entry, onDone) {
+    const active = new Set(checkActiveMetrics(entry));
+    UI.modal({
+      title: 'Datos a registrar',
+      bodyHTML: `<div class="metric-opts">${CHECK_FIELDS.map(f => `<label class="metric-opt"><input type="checkbox" data-mk="${f.key}"${active.has(f.key) ? ' checked' : ''}><span>${f.label}${f.unit ? ` <em>(${f.unit})</em>` : ''}</span></label>`).join('')}</div>
+        <p class="field-hint">Opcional: además de marcarlo, apunta cuánto duró, con qué peso… Se recuerda para este ejercicio.</p>`,
+      actions: [
+        { label: 'Cancelar', kind: 'ghost' },
+        { label: 'Listo', kind: 'primary', onClick: async (root) => {
+          await onDone([...root.querySelectorAll('[data-mk]')].filter(c => c.checked).map(c => c.dataset.mk));
+        } },
+      ],
+    });
+  }
   function pickMetrics(app, entry, onDone) {
+    if (entry.type === 'check') return pickCheckMetrics(app, entry, onDone);
     const active = new Set(timeActiveMetrics(entry));
     const opt = (f) => `<label class="metric-opt"><input type="checkbox" data-mk="${f.key}"${active.has(f.key) ? ' checked' : ''}><span>${f.label}${f.unit ? ` <em>(${f.unit})</em>` : ''}</span></label>`;
     const totals = TIME_FIELDS.filter(f => f.scope === 'total');
@@ -231,6 +276,7 @@ const VSessions = (() => {
   function cloneSet(set) {
     const c = { ...set, done: false };
     delete c.drops;
+    delete c.skip; // tampoco arrastra un «No hecho»: la copia sale sin marcar
     return c;
   }
 
@@ -279,6 +325,15 @@ const VSessions = (() => {
     let v;
     if (type === 'check') {
       v = set.done ? 'Hecho' : set.skip ? 'No hecho' : '—';
+      if (set.done) { // los datos solo tienen sentido si se hizo
+        const extra = [];
+        const t = fmtTime(set.time); if (t) extra.push(t);
+        if (set.reps) extra.push(`${set.reps} reps`);
+        if (set.weight) extra.push(`${set.weight} kg`);
+        const ls = loadSuffix(set).trim(); if (ls) extra.push(ls);
+        if (set.distance) extra.push(`${set.distance} km`);
+        if (extra.length) v += ' · ' + extra.join(' · ');
+      }
       if (set.effort) v += ` · ${set.effort}`;
       return v;
     }
@@ -756,12 +811,27 @@ const VSessions = (() => {
               <button type="button" class="chk-opt chk-no${s.skip ? ' on' : ''}" data-chk="skip" data-ei="${ei}" data-si="${si}" aria-pressed="${s.skip ? 'true' : 'false'}">${UI.icon('x', 15)} No hecho</button>
             </div>`
           : `<span class="set-check-txt">${s.done ? 'Hecho' : s.skip ? 'No hecho' : 'Sin marcar'}</span>`;
+        // Datos opcionales (tiempo, peso…). En «No hecho» no se enseñan, pero lo
+        // apuntado no se borra: si vuelves a marcar «Hecho», reaparece.
+        const ms = (editable && !s.skip) ? checkActiveMetrics(entry) : [];
+        const extra = ms.length ? `<div class="set-extra">${ms.map(k => {
+          if (k === 'load') return loadChipHTML(s, ei, si, '');
+          if (k === 'time') {
+            const tt = parseInt(s.time), has = s.time !== '' && s.time != null && !isNaN(tt);
+            return `<span class="chk-time"><input class="inp set-f" data-f="timemin" data-ei="${ei}" data-si="${si}" type="number" min="0" value="${has ? Math.floor(tt / 60) : ''}" placeholder="min"><span class="set-x">:</span><input class="inp set-f" data-f="timesec" data-ei="${ei}" data-si="${si}" type="number" min="0" max="59" value="${has ? tt % 60 : ''}" placeholder="seg"></span>`;
+          }
+          // Con la unidad detrás: al rellenarlo el placeholder desaparece y «24» solo
+          // no dice si son kilos o repeticiones.
+          const f = CHECK_FIELD[k];
+          return `<span class="chk-f"><input class="inp set-f" data-f="${k}" data-ei="${ei}" data-si="${si}" type="number" min="0" step="${f.step}" value="${UI.esc(s[k] != null ? s[k] : '')}" placeholder="${f.ph}"><span class="set-x">${f.unit || f.ph}</span></span>`;
+        }).join('')}</div>` : '';
         return `<div class="set-wrap${estado}${mode === 'live' && !setHasData(s) ? ' pend' : ''}">
           <div class="set-row set-row-check">
             <span class="set-n">${si + 1}</span>
             <div class="set-vals">${vals}</div>
             <div class="set-acts">${rm}</div>
           </div>
+          ${extra}
         </div>`;
       }
       if (type === 'time') {
@@ -874,7 +944,7 @@ const VSessions = (() => {
         <div class="ex-card-foot">
           <button class="btn ghost small" data-add-set data-ei="${ei}">+ Serie</button>
           ${(entry.sets || []).length ? `<button type="button" class="metric-add" data-repeat-block data-ei="${ei}">↻ repetir</button>` : ''}
-          ${entry.type === 'time' ? `<button type="button" class="metric-add" data-metrics data-ei="${ei}">${UI.icon('plus', 13)} datos</button>` : ''}
+          ${(entry.type === 'time' || entry.type === 'check') ? `<button type="button" class="metric-add" data-metrics data-ei="${ei}">${UI.icon('plus', 13)} datos</button>` : ''}
           ${entry.note ? '' : `<button type="button" class="metric-add" data-note data-ei="${ei}">${UI.icon('edit', 13)} nota</button>`}
         </div>
       </div>
@@ -890,7 +960,18 @@ const VSessions = (() => {
       if (!e) return;
       const sets = e.sets || [];
       card.querySelectorAll('.set-wrap').forEach((w, si) => {
-        if (sets[si]) w.classList.toggle('pend', !setHasData(sets[si]));
+        const st = sets[si];
+        if (!st) return;
+        w.classList.toggle('pend', !setHasData(st));
+        // Hecho / no hecho: refleja la marca (p. ej. la que se pone sola al teclear
+        // un dato) sin redibujar, para no perder el foco del campo.
+        if (st.check) {
+          w.classList.toggle('chk-done', !!st.done);
+          w.classList.toggle('chk-skip', !!st.skip);
+          const y = w.querySelector('.chk-yes'), n = w.querySelector('.chk-no');
+          if (y) { y.classList.toggle('on', !!st.done); y.setAttribute('aria-pressed', st.done ? 'true' : 'false'); }
+          if (n) { n.classList.toggle('on', !!st.skip); n.setAttribute('aria-pressed', st.skip ? 'true' : 'false'); }
+        }
       });
       const { hechas, total } = entryProgreso(e);
       card.classList.toggle('ex-pend', hechas < total);
@@ -900,7 +981,12 @@ const VSessions = (() => {
   }
 
   // Lee inputs del DOM al modelo de sesión (incluye dropsets via data-di)
+  // Huella de los datos de una serie de hecho/no hecho, para saber si se han tocado.
+  const huellaCheck = (s) => CHECK_FIELDS.map(f => (s[f.key] == null ? '' : String(s[f.key]))).join('|');
   function syncEntries(root, session) {
+    // Foto de las series de hecho/no hecho ANTES de leer el DOM (ver la marca automática abajo).
+    const antes = new Map();
+    (session.entries || []).forEach(e => { if (e.type === 'check') (e.sets || []).forEach(s => antes.set(s, huellaCheck(s))); });
     root.querySelectorAll('.set-f').forEach(inp => {
       const ei = +inp.dataset.ei, si = +inp.dataset.si, f = inp.dataset.f;
       const set = session.entries[ei] && session.entries[ei].sets[si];
@@ -913,14 +999,28 @@ const VSessions = (() => {
       }
     });
     // los sets de tiempo guardan los segundos totales a partir de min:seg
+    // (también los de hecho / no hecho con el dato «tiempo» activado)
     (session.entries || []).forEach(e => {
-      if ((e.type || 'weight') !== 'time') return;
+      const t = e.type || 'weight';
+      if (t !== 'time' && t !== 'check') return;
       (e.sets || []).forEach(s => {
         if (s.timemin !== undefined || s.timesec !== undefined) {
           const m = parseInt(s.timemin) || 0, sec = parseInt(s.timesec) || 0;
           s.time = (m || sec) ? (m * 60 + sec) : '';
           delete s.timemin; delete s.timesec;
         }
+      });
+    });
+    // Hecho / no hecho: si CAMBIAS un dato de una serie sin marcar, es que la hiciste
+    // y se marca sola (si no, se perdería al terminar). Ojo: cuenta el cambio, no tener
+    // datos — las copias de «repetir» vienen con datos precargados y no están hechas.
+    // Respeta un «No hecho».
+    (session.entries || []).forEach(e => {
+      if (e.type !== 'check') return;
+      (e.sets || []).forEach(s => {
+        if (s.done || s.skip) return;
+        const cambiado = antes.has(s) && antes.get(s) !== huellaCheck(s);
+        if (cambiado && CHECK_FIELDS.some(f => checkHasValue(s, f.key))) s.done = true;
       });
     });
     // totales del ejercicio (cardio): distancia/kcal una vez por entry
@@ -945,7 +1045,7 @@ const VSessions = (() => {
         (await DB.exercisesOf(app.activeUser.id)).forEach(x => { if (Array.isArray(x.metrics)) metricsById[x.id] = x.metrics; });
         day.blocks.forEach(b => b.exercises.forEach(ex => {
           const e = entryFromExercise(ex);
-          if (e.type === 'time' && e.exerciseId && metricsById[e.exerciseId]) e.metrics = metricsById[e.exerciseId].slice();
+          if ((e.type === 'time' || e.type === 'check') && e.exerciseId && metricsById[e.exerciseId]) e.metrics = metricsById[e.exerciseId].slice();
           const first = emptySet(e.type);
           if (ex.label && e.type === 'time') first.label = ex.label; // prerellena la variante prescrita en el plan
           e.sets.push(first);
@@ -1157,7 +1257,7 @@ const VSessions = (() => {
         }
       }
       const entry = { exerciseId: ex.id, name: ex.name, type: ex.type, target: '', sets: [emptySet(ex.type)] };
-      if (ex.type === 'time' && Array.isArray(ex.metrics)) entry.metrics = ex.metrics.slice();
+      if ((ex.type === 'time' || ex.type === 'check') && Array.isArray(ex.metrics)) entry.metrics = ex.metrics.slice();
       session.entries.push(entry);
       onAdded();
     } });
@@ -1668,5 +1768,5 @@ const VSessions = (() => {
     });
   }
 
-  return { live, liveBind, list, listBind, detail, detailBind, checkDayAfter, sessionVolume, checkResume, liveHasData, restEnsure, TIME_FIELDS };
+  return { live, liveBind, list, listBind, detail, detailBind, checkDayAfter, sessionVolume, checkResume, liveHasData, restEnsure, TIME_FIELDS, CHECK_FIELDS };
 })();
