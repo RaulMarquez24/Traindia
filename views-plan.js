@@ -17,22 +17,63 @@ const VPlan = (() => {
     return [...new Set(catalog.map(e => e.muscleGroup || 'General'))].sort((a, b) => a.localeCompare(b));
   }
 
-  // Selector de categoría: reusar una existente o crear una nueva.
-  function pickCategory({ categories, used = [], onPick }) {
+  // Nº de ejercicios del catálogo por categoría (para el selector).
+  function catCounts(catalog) {
+    const m = {};
+    (catalog || []).forEach(e => { const g = e.muscleGroup || 'General'; m[g] = (m[g] || 0) + 1; });
+    return m;
+  }
+  // Tono estable por nombre: cada categoría tiene siempre su color.
+  function catHue(name) {
+    let h = 0;
+    for (const ch of UI.norm(name)) h = (h * 31 + ch.charCodeAt(0)) % 360;
+    return h;
+  }
+
+  // Selector de categoría: cuadrícula compacta con buscador que también crea.
+  function pickCategory({ categories, used = [], onPick, current = '', counts = {} }) {
     const avail = categories.filter(c => !used.includes(c));
-    UI.modal({
+    const chip = (c) => `<button type="button" class="catp-chip${c === current ? ' on' : ''}" data-cat="${UI.esc(c)}" data-s="${UI.esc(UI.norm(c))}">
+        <span class="catp-dot" style="--h:${catHue(c)}">${UI.esc((c.trim()[0] || '?').toUpperCase())}</span>
+        <span class="catp-name">${UI.esc(c)}</span>
+        ${c === current ? `<span class="catp-ok">${UI.icon('check', 14)}</span>` : (counts[c] ? `<span class="catp-n">${counts[c]}</span>` : '')}
+      </button>`;
+    let overlay;
+    overlay = UI.modal({
       title: 'Categoría',
-      bodyHTML: `<div class="menu-list">
-        ${avail.length ? avail.map(c => `<button class="menu-row" data-cat="${UI.esc(c)}"><span>${UI.esc(c)}</span><span class="chev">›</span></button>`).join('') : '<p class="dim" style="padding:4px 2px">No quedan categorías sin usar. Crea una nueva.</p>'}
-        <button class="menu-row" data-cat-new="1"><span>${UI.icon('plus', 16)} Nueva categoría…</span></button>
-      </div>`,
+      bodyHTML: `<label class="cat-search catp-search">
+          ${UI.icon('search', 16)}
+          <input type="search" id="catpQ" placeholder="Buscar o crear categoría…" autocomplete="off" enterkeyhint="done" maxlength="30">
+        </label>
+        <button type="button" class="catp-new" id="catpNew" hidden></button>
+        <div class="catp-grid" id="catpGrid">${avail.map(chip).join('')}</div>
+        <p class="dim catp-empty" id="catpEmpty"${avail.length ? ' hidden' : ''}>${avail.length ? 'Ninguna coincide.' : 'Aún no hay categorías.'} Escribe arriba para crear una.</p>`,
       actions: [{ label: 'Cancelar', kind: 'ghost' }],
       onMount: (root) => {
-        root.querySelectorAll('[data-cat]').forEach(b => b.addEventListener('click', () => { UI.closeModal(); onPick(b.dataset.cat); }));
-        root.querySelector('[data-cat-new]').addEventListener('click', async () => {
-          const name = await UI.prompt({ title: 'Nueva categoría', label: 'Nombre de la categoría', placeholder: 'Ej: Cardio', confirmLabel: 'Crear' });
-          if (name && name.trim()) { UI.closeModal(); onPick(name.trim()); }
+        const q = root.querySelector('#catpQ');
+        const btnNew = root.querySelector('#catpNew');
+        const empty = root.querySelector('#catpEmpty');
+        const pick = (c) => { UI.closeModal(overlay); onPick(c); };
+        const filter = () => {
+          const raw = q.value.trim(), s = UI.norm(raw);
+          let shown = 0;
+          root.querySelectorAll('.catp-chip').forEach(b => { const ok = !s || b.dataset.s.includes(s); b.hidden = !ok; if (ok) shown++; });
+          const exact = raw && categories.some(c => UI.norm(c) === s);
+          btnNew.hidden = !raw || exact;
+          btnNew.innerHTML = `${UI.icon('plus', 16)} Crear «${UI.esc(raw)}»`;
+          empty.hidden = shown > 0 || !!raw;
+        };
+        q.addEventListener('input', filter);
+        q.addEventListener('keydown', (e) => {
+          if (e.key !== 'Enter') return;
+          e.preventDefault();
+          const raw = q.value.trim(); if (!raw) return;
+          const exact = categories.find(c => UI.norm(c) === UI.norm(raw));
+          const visibles = [...root.querySelectorAll('.catp-chip:not([hidden])')];
+          pick(exact || (visibles.length === 1 ? visibles[0].dataset.cat : raw));
         });
+        btnNew.addEventListener('click', () => { const raw = q.value.trim(); if (raw) pick(raw); });
+        root.querySelectorAll('[data-cat]').forEach(b => b.addEventListener('click', () => pick(b.dataset.cat)));
       },
     });
   }
@@ -449,12 +490,12 @@ const VPlan = (() => {
         sync(root);
         const bi = +b.dataset.blockCat;
         // se permiten categorías repetidas en un mismo día (no se excluye ninguna)
-        pickCategory({ categories, used: [], onPick: (cat) => { draft.blocks[bi].label = cat; if (!categories.includes(cat)) categories.push(cat); rerender(root); } });
+        pickCategory({ categories, used: [], current: draft.blocks[bi].label, counts: catCounts(catalog), onPick: (cat) => { draft.blocks[bi].label = cat; if (!categories.includes(cat)) categories.push(cat); rerender(root); } });
       }));
       const addBlock = root.querySelector('#addBlock');
       if (addBlock) addBlock.addEventListener('click', () => {
         sync(root);
-        pickCategory({ categories, used: [], onPick: (cat) => { draft.blocks.push({ label: cat, optional: false, exercises: [] }); if (!categories.includes(cat)) categories.push(cat); rerender(root); } });
+        pickCategory({ categories, used: [], counts: catCounts(catalog), onPick: (cat) => { draft.blocks.push({ label: cat, optional: false, exercises: [] }); if (!categories.includes(cat)) categories.push(cat); rerender(root); } });
       });
       root.querySelectorAll('[data-del-block]').forEach(b => b.addEventListener('click', () => { sync(root); draft.blocks.splice(+b.dataset.delBlock, 1); rerender(root); }));
       root.querySelectorAll('[data-mv="del"]').forEach(b => b.addEventListener('click', () => {
@@ -1152,7 +1193,7 @@ const VPlan = (() => {
         const catBtn = root.querySelector('#exCatBtn');
         const catHidden = root.querySelector('#exForm input[name="muscleGroup"]');
         catBtn.addEventListener('click', () => {
-          pickCategory({ categories, used: [], onPick: (cat) => { catHidden.value = cat; catBtn.textContent = cat + ' ▾'; if (!categories.includes(cat)) categories.push(cat); } });
+          pickCategory({ categories, used: [], current: catHidden.value, counts: catCounts(catalog), onPick: (cat) => { catHidden.value = cat; catBtn.textContent = cat + ' ▾'; if (!categories.includes(cat)) categories.push(cat); } });
         });
         root.querySelector('#addSub').addEventListener('click', () => {
           const selfId = ex ? ex.id : null;
