@@ -981,7 +981,11 @@ const VPlan = (() => {
     $('#exSearchClear').addEventListener('click', () => { search.value = ''; set({ q: '' }); search.focus(); });
     $('#addEx').addEventListener('click', () => editExercise(app, null, { onSaved: refresh, group: exUI.cat }));
 
-    root.addEventListener('click', async (ev) => {
+    // Delegado en la sección (se recrea en cada render), NO en root: root es
+    // #mainContent, persiste entre pantallas y acumularía un listener por visita
+    // (se abrían varios editores apilados).
+    const host = root.querySelector('.ex-catalog');
+    host.addEventListener('click', async (ev) => {
       const t = ev.target;
       const use = t.closest('[data-use]'); if (use) { set({ use: use.dataset.use }); return; }
       const ty = t.closest('[data-type]'); if (ty) { set({ type: ty.dataset.type }); return; }
@@ -1007,7 +1011,7 @@ const VPlan = (() => {
         if (ex) editExercise(app, ex, { onSaved: refresh });
       }
     });
-    root.addEventListener('keydown', (ev) => {
+    host.addEventListener('keydown', (ev) => {
       if ((ev.key === 'Enter' || ev.key === ' ') && ev.target.classList && ev.target.classList.contains('cat-row')) { ev.preventDefault(); ev.target.click(); }
     });
 
