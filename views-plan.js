@@ -82,7 +82,7 @@ const VPlan = (() => {
       const placeClass = d.placeAccent ? 'parque' : '';
       const metaRight = d.isRest
         ? `<span class="day-place">${UI.esc(d.place || '')}</span>`
-        : `<span class="day-place ${placeClass}">${UI.esc(d.place || '')}${d.duration ? ` · <strong>${UI.esc(d.duration)}</strong>` : ''}</span>`;
+        : `<span class="day-place ${placeClass}">${UI.esc(d.place || '')}${d.duration ? `${d.place ? ' · ' : ''}<strong>${UI.esc(d.duration)}</strong>` : ''}</span>`;
       return `
         <a class="day-card ${d.type || 'untyped'}" data-link="day" data-params='${JSON.stringify({ dayId: d.id })}'>
           <div class="day-row-1">
