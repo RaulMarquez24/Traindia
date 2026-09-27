@@ -474,7 +474,8 @@ const UI = (() => {
           ${field('Tipo', select('type', [
             { value: 'weight', label: 'Peso + repeticiones' },
             { value: 'reps', label: 'Repeticiones (peso corporal)' },
-            { value: 'time', label: 'Tiempo / duración' }], 'weight'))}
+            { value: 'time', label: 'Tiempo / duración' },
+            { value: 'check', label: 'Hecho / no hecho (sin números)' }], 'weight'))}
         </div>`,
         actions: [
           { label: 'Cancelar', kind: 'ghost', onClick: () => resolve(null) },
