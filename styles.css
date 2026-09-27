@@ -677,6 +677,19 @@ body.modal-open { overflow: hidden; }
 .set-row-check .set-vals { align-items: center; }
 .set-check-txt { font-size: 13px; color: var(--ink-dim); }
 .set-wrap.done .set-check-txt { color: var(--strong); font-weight: 600; }
+/* «Hecho / no hecho»: dos opciones excluyentes. Tocar la marcada la quita. */
+.chk-seg { display: inline-flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.chk-opt {
+  display: inline-flex; align-items: center; gap: 5px; padding: 7px 12px;
+  background: transparent; border: 0; font: inherit; font-size: 13px; font-weight: 600;
+  color: var(--ink-dim); cursor: pointer; transition: background .15s ease, color .15s ease;
+}
+.chk-opt + .chk-opt { border-left: 1px solid var(--line); }
+.chk-yes.on { background: var(--strong); color: #fff; }
+.chk-no.on { background: var(--priority-bg); color: var(--priority); }
+/* Sin marcar en pleno entreno: borde de "pendiente" como el resto de series. */
+.set-wrap.pend .chk-seg { border-color: var(--moderate); }
+.set-wrap.chk-skip .set-check-txt { color: var(--priority); font-weight: 600; }
 
 /* ---- Semáforo: respuesta del cuerpo al día siguiente ---- */
 .resp-chip { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 999px; border: 1px solid; }
