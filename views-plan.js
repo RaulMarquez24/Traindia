@@ -878,6 +878,8 @@ const VPlan = (() => {
     const byId = {};
     catalog.forEach(e => { byId[e.id] = e; });
     let subs = (ex && ex.substitutes ? [...ex.substitutes] : []).filter(id => byId[id]);
+    // Lista de vídeos, en vivo: los inputs actualizan estos objetos según se escribe.
+    let vids = DB.exVideos(ex).map(v => ({ url: v.url || '', label: v.label || '' }));
 
     const renderChips = (root) => {
       const box = root.querySelector('#subsBox');
@@ -885,6 +887,22 @@ const VPlan = (() => {
         ? subs.map(id => `<span class="sub-chip">${UI.esc(byId[id].name)}<button type="button" data-rmsub="${id}">×</button></span>`).join('')
         : '<span class="dim" style="font-size:12px">Sin suplentes definidos.</span>';
       box.querySelectorAll('[data-rmsub]').forEach(b => b.addEventListener('click', () => { subs = subs.filter(x => x !== b.dataset.rmsub); renderChips(root); }));
+    };
+
+    const renderVids = (root) => {
+      const box = root.querySelector('#vidsBox');
+      box.innerHTML = vids.length
+        ? vids.map((v, i) => `<div class="vid-row">
+            <input class="inp vid-url" type="url" value="${UI.esc(v.url)}" placeholder="https://youtube.com/…">
+            <input class="inp vid-label" type="text" value="${UI.esc(v.label)}" placeholder="Nombre (opcional)">
+            <button type="button" class="vid-rm" data-rmvid="${i}" aria-label="Quitar vídeo">×</button>
+          </div>`).join('')
+        : '<span class="dim" style="font-size:12px">Sin vídeos.</span>';
+      box.querySelectorAll('.vid-row').forEach((row, i) => {
+        row.querySelector('.vid-url').addEventListener('input', (e) => { vids[i].url = e.target.value; });
+        row.querySelector('.vid-label').addEventListener('input', (e) => { vids[i].label = e.target.value; });
+      });
+      box.querySelectorAll('[data-rmvid]').forEach(b => b.addEventListener('click', () => { vids.splice(+b.dataset.rmvid, 1); renderVids(root); }));
     };
 
     UI.modal({
@@ -908,7 +926,12 @@ const VPlan = (() => {
             <p class="field-hint">Solo se mostrarán estos al registrar. También puedes cambiarlos durante el entreno.</p>
           </div>`;
         })()}
-        ${UI.field('Vídeo · cómo se hace', `<input class="inp" name="videoUrl" type="url" value="${UI.esc(ex ? (ex.videoUrl || '') : '')}" placeholder="https://youtube.com/…">`, 'Se abre desde el entreno, sin buscarlo.')}
+        <div class="field">
+          <span class="field-label">Vídeos · cómo se hace</span>
+          <div class="vids-box" id="vidsBox"></div>
+          <button type="button" class="btn ghost small" id="addVid">+ Añadir vídeo</button>
+          <span class="field-hint">Se abren desde el entreno, sin buscarlos. Ponle nombre a cada uno (técnica, calentamiento, variante…) si quieres.</span>
+        </div>
         ${UI.field('Notas de técnica', UI.textarea('howto', (ex && ex.howto) || '', 'Puntos clave: postura, tempo, hasta dónde bajar…', 3))}
         <span class="field-label">Suplentes (el sustituto de este ejercicio es…)</span>
         <div class="subs-box" id="subsBox"></div>
@@ -927,10 +950,16 @@ const VPlan = (() => {
           const metrics = d.type === 'time'
             ? VSessions.TIME_FIELDS.map(f => f.key).filter(k => root.querySelector(`#exMetrics [data-mk="${k}"]`)?.checked)
             : undefined;
+          const videos = vids
+            .map(v => ({ url: (v.url || '').trim(), label: (v.label || '').trim() }))
+            .filter(v => v.url)
+            .map(v => v.label ? { url: v.url, label: v.label } : { url: v.url });
+          const firstUrl = videos.length ? videos[0].url : undefined; // compat con el campo videoUrl de siempre
+          const videosField = videos.length ? videos : undefined;
           if (isNew) {
-            await DB.put('exercises', { id: DB.uid('ex'), userId: app.activeUser.id, name: d.name.trim(), muscleGroup: d.muscleGroup.trim() || 'General', type: d.type, substitutes: subs, metrics, videoUrl: (d.videoUrl || '').trim() || undefined, howto: (d.howto || '').trim() || undefined, createdAt: Date.now() });
+            await DB.put('exercises', { id: DB.uid('ex'), userId: app.activeUser.id, name: d.name.trim(), muscleGroup: d.muscleGroup.trim() || 'General', type: d.type, substitutes: subs, metrics, videos: videosField, videoUrl: firstUrl, howto: (d.howto || '').trim() || undefined, createdAt: Date.now() });
           } else {
-            await DB.updateExercise(app.activeUser.id, ex.id, { name: d.name.trim(), muscleGroup: d.muscleGroup.trim() || 'General', type: d.type, substitutes: subs, metrics, videoUrl: (d.videoUrl || '').trim() || undefined, howto: (d.howto || '').trim() || undefined });
+            await DB.updateExercise(app.activeUser.id, ex.id, { name: d.name.trim(), muscleGroup: d.muscleGroup.trim() || 'General', type: d.type, substitutes: subs, metrics, videos: videosField, videoUrl: firstUrl, howto: (d.howto || '').trim() || undefined });
             await app.refreshRoutine();
           }
           app.render();
@@ -939,6 +968,8 @@ const VPlan = (() => {
       ],
       onMount: (root) => {
         renderChips(root);
+        renderVids(root);
+        root.querySelector('#addVid').addEventListener('click', () => { vids.push({ url: '', label: '' }); renderVids(root); });
         const typeSel = root.querySelector('#exForm select[name="type"]');
         const exMetrics = root.querySelector('#exMetrics');
         if (typeSel && exMetrics) typeSel.addEventListener('change', () => { exMetrics.style.display = typeSel.value === 'time' ? '' : 'none'; });

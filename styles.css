@@ -523,6 +523,17 @@ textarea.inp { resize: vertical; line-height: 1.4; }
 .subs-box { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; align-items: center; }
 .sub-chip { display: inline-flex; align-items: center; gap: 6px; background: var(--sub-bg); color: var(--sub-accent); border-radius: 16px; padding: 5px 6px 5px 12px; font-size: 13px; font-weight: 500; }
 .sub-chip button { background: var(--sub-accent); color: #fff; border: none; border-radius: 50%; width: 18px; height: 18px; font-size: 13px; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+/* Lista de vídeos del ejercicio (formulario de edición) */
+.vids-box { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
+.vid-row { display: flex; gap: 6px; align-items: center; }
+.vid-row .vid-url { flex: 1 1 auto; min-width: 0; }
+.vid-row .vid-label { flex: 0 0 40%; min-width: 0; }
+.vid-rm { flex: 0 0 auto; background: var(--sub-accent); color: #fff; border: none; border-radius: 50%; width: 26px; height: 26px; font-size: 15px; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+/* Enlaces de vídeo en el modal "cómo se hace" (cuando hay varios) */
+.howto-videos { margin-top: 12px; display: flex; flex-direction: column; gap: 6px; }
+.howto-video { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; color: var(--strong); text-decoration: none; font-weight: 600; font-size: 14px; }
+.howto-video:active { background: var(--strong-bg); }
+
 .catalog-title { font-size: 16px; font-weight: 800; letter-spacing: -0.01em; margin: 18px 0 10px; padding-bottom: 6px; border-bottom: 2px solid var(--line); }
 .catalog-title:first-child { margin-top: 4px; }
 .ex-name-wrap { flex: 1; display: flex; flex-direction: column; gap: 1px; min-width: 0; }

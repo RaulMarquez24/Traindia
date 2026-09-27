@@ -225,6 +225,16 @@ const DB = (() => {
     return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
   }
 
+  // Vídeos de un ejercicio, normalizados. Un ejercicio nuevo lleva `videos` (lista
+  // de {url, label}); los de siempre solo tienen `videoUrl` (un string). Esta función
+  // devuelve una lista única para que el resto del código no distinga entre ambos.
+  function exVideos(ex) {
+    if (ex && Array.isArray(ex.videos) && ex.videos.length) {
+      return ex.videos.filter(v => v && v.url);
+    }
+    return (ex && ex.videoUrl) ? [{ url: ex.videoUrl, label: '' }] : [];
+  }
+
   function todayISO() {
     const d = new Date();
     const off = d.getTimezoneOffset();
@@ -876,7 +886,7 @@ const DB = (() => {
   }
 
   return {
-    open, uid, todayISO,
+    open, uid, todayISO, exVideos,
     get, getAll, put, del, byIndex, clearStore,
     getSettings, saveSettings,
     getPlaces, savePlaces, ensurePlaces,

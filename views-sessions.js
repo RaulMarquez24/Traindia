@@ -337,18 +337,28 @@ const VSessions = (() => {
   async function loadExMeta(app) {
     _exMeta = {};
     (await DB.exercisesOf(app.activeUser.id)).forEach(x => {
-      if (x.videoUrl || x.howto) _exMeta[x.id] = { videoUrl: x.videoUrl, howto: x.howto, name: x.name };
+      const videos = DB.exVideos(x);
+      if (videos.length || x.howto) _exMeta[x.id] = { videos, howto: x.howto, name: x.name };
     });
   }
   function showHowto(entry) {
     const m = entry && entry.exerciseId && _exMeta[entry.exerciseId];
     if (!m) return;
+    const videos = m.videos || [];
     const acts = [{ label: 'Cerrar', kind: 'ghost' }];
-    if (m.videoUrl) acts.push({ label: 'Ver vídeo', kind: 'primary', onClick: () => { window.open(m.videoUrl, '_blank', 'noopener'); return false; } });
+    // Un solo vídeo: botón directo, como siempre. Varios: lista de enlaces en el cuerpo.
+    if (videos.length === 1) {
+      acts.push({ label: 'Ver vídeo', kind: 'primary', onClick: () => { window.open(videos[0].url, '_blank', 'noopener'); return false; } });
+    }
+    const listaVideos = videos.length > 1
+      ? `<div class="howto-videos"><span class="field-label">Vídeos</span>${videos.map((v, i) =>
+          `<a class="howto-video" href="${UI.esc(v.url)}" target="_blank" rel="noopener">${UI.icon('play', 15)}<span>${UI.esc(v.label || ('Vídeo ' + (i + 1)))}</span></a>`).join('')}</div>`
+      : '';
     UI.modal({
       title: entry.name || m.name,
       bodyHTML: `${entry.detail ? `<p class="modal-text"><strong>En este plan:</strong> ${UI.esc(entry.detail)}</p>` : ''}
-        ${m.howto ? `<p class="modal-text prewrap">${UI.esc(m.howto)}</p>` : '<p class="modal-text dim">Sin notas de técnica.</p>'}`,
+        ${m.howto ? `<p class="modal-text prewrap">${UI.esc(m.howto)}</p>` : '<p class="modal-text dim">Sin notas de técnica.</p>'}
+        ${listaVideos}`,
       actions: acts,
     });
   }
