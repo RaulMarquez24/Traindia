@@ -801,7 +801,7 @@ const VData = (() => {
     const local = await DB.exercisesOf(userId);
     const byName = new Map(local.map(e => [e.name.trim().toLowerCase(), e]));
     const idMap = {};
-    const created = [], updated = [];
+    const created = [], updated = [], enriched = [];
     // Campos que son de ESTE catálogo y no se copian del archivo; todo lo demás
     // (vídeos, técnica, métricas y cualquier campo futuro) viaja tal cual.
     const OWN = new Set(['id', 'userId', 'substitutes', 'createdAt', 'isDefault']);
@@ -831,6 +831,7 @@ const VData = (() => {
         if (touched) { ex.videos = mine; ex.videoUrl = mine[0].url; }
         if (ie.howto && !ex.howto) { ex.howto = ie.howto; touched = true; }
         if (touched) await DB.put('exercises', ex);
+        if ((ie.substitutes || []).length) enriched.push({ ex, srcSubs: ie.substitutes });
       }
       idMap[ie.id] = ex.id;
     }
@@ -843,6 +844,12 @@ const VData = (() => {
       const subs = srcSubs.map(sid => idMap[sid]).filter(Boolean);
       if (subs.length) ex.substitutes = subs; // si el import no trae suplentes, conserva los tuyos
       await DB.put('exercises', ex);
+    }
+    // Enriquecer sin pisar: añade los suplentes del archivo que no tengas (conserva los tuyos).
+    for (const { ex, srcSubs } of enriched) {
+      const mine = ex.substitutes || [];
+      const extra = srcSubs.map(sid => idMap[sid]).filter(sid => sid && sid !== ex.id && !mine.includes(sid));
+      if (extra.length) { ex.substitutes = [...mine, ...new Set(extra)]; await DB.put('exercises', ex); }
     }
     return idMap;
   }
