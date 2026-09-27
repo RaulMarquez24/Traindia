@@ -236,9 +236,22 @@ const VSessions = (() => {
 
   function dropHasData(d) { return d && (d.reps || d.weight || d.load); }
   function setHasData(s) {
-    if (s && s.check) return !!s.done; // ejercicios de "hecho / no hecho": el dato es la marca
+    // Ejercicios de "hecho / no hecho": el dato es la marca. «No hecho» (skip) también
+    // se registra; solo lo que se queda sin marcar se considera vacío.
+    if (s && s.check) return !!s.done || !!s.skip;
     return s.reps || s.weight || s.time || s.speed || s.level || s.incline || s.load || s.distance || s.kcal ||
       (s.drops && s.drops.some(dropHasData));
+  }
+  // «Hecho / no hecho»: tocar una opción la marca; tocar la que ya está marcada la
+  // quita (vuelve a «sin marcar»). Son excluyentes: marcar una desmarca la otra.
+  function marcarCheck(set, que) {
+    if (que === 'done') {
+      set.done = !set.done;
+      if (set.done) delete set.skip;
+    } else {
+      if (set.skip) delete set.skip;
+      else { set.skip = true; set.done = false; }
+    }
   }
   function liveHasData(s) { return (s.entries || []).some(e => (e.sets || []).some(setHasData)); }
   // Series con algo apuntado / series planificadas. Con esto se sabe si un
@@ -265,7 +278,7 @@ const VSessions = (() => {
   function setDisplay(type, set) {
     let v;
     if (type === 'check') {
-      v = set.done ? 'Hecho' : '—';
+      v = set.done ? 'Hecho' : set.skip ? 'No hecho' : '—';
       if (set.effort) v += ` · ${set.effort}`;
       return v;
     }
@@ -733,12 +746,21 @@ const VSessions = (() => {
         : `<div class="set-foot">${dupBtn}${dropBtn}</div>`;
 
       if (type === 'check') {
-        // Sin números: solo hecho / no hecho (estiramientos, movilidad…).
-        return `<div class="set-wrap${s.done ? ' done' : ''}${mode === 'live' && !setHasData(s) ? ' pend' : ''}">
+        // Sin números (estiramientos, movilidad…): se marca «Hecho» o «No hecho» y
+        // las dos cosas quedan registradas. Sin marcar = aún sin decidir (no se guarda).
+        const editable = mode === 'live' || mode === 'edit';
+        const estado = s.done ? ' chk-done' : s.skip ? ' chk-skip' : '';
+        const vals = editable
+          ? `<div class="chk-seg" role="group" aria-label="¿Lo has hecho?">
+              <button type="button" class="chk-opt chk-yes${s.done ? ' on' : ''}" data-chk="done" data-ei="${ei}" data-si="${si}" aria-pressed="${s.done ? 'true' : 'false'}">${UI.icon('check', 15)} Hecho</button>
+              <button type="button" class="chk-opt chk-no${s.skip ? ' on' : ''}" data-chk="skip" data-ei="${ei}" data-si="${si}" aria-pressed="${s.skip ? 'true' : 'false'}">${UI.icon('x', 15)} No hecho</button>
+            </div>`
+          : `<span class="set-check-txt">${s.done ? 'Hecho' : s.skip ? 'No hecho' : 'Sin marcar'}</span>`;
+        return `<div class="set-wrap${estado}${mode === 'live' && !setHasData(s) ? ' pend' : ''}">
           <div class="set-row set-row-check">
             <span class="set-n">${si + 1}</span>
-            <div class="set-vals"><span class="set-check-txt">${s.done ? 'Hecho' : 'Sin hacer'}</span></div>
-            <div class="set-acts">${done}${rm}</div>
+            <div class="set-vals">${vals}</div>
+            <div class="set-acts">${rm}</div>
           </div>
         </div>`;
       }
@@ -1028,6 +1050,9 @@ const VSessions = (() => {
       root.querySelectorAll('[data-done]').forEach(b => b.addEventListener('click', () => {
         sync(); const set = s.entries[+b.dataset.ei].sets[+b.dataset.si]; set.done = !set.done; redraw();
       }));
+      root.querySelectorAll('[data-chk]').forEach(b => b.addEventListener('click', () => {
+        sync(); marcarCheck(s.entries[+b.dataset.ei].sets[+b.dataset.si], b.dataset.chk); redraw();
+      }));
       root.querySelectorAll('[data-ai-ex]').forEach(b => b.addEventListener('click', () => {
         sync(); UI.askAI(buildExerciseContext(s, s.entries[+b.dataset.ei]));
       }));
@@ -1085,10 +1110,18 @@ const VSessions = (() => {
     });
     root.querySelector('#liveFinish').addEventListener('click', async () => {
       syncLive(root, s);
+      // Se comprueba ANTES de limpiar nada: si no se puede guardar, el entreno sigue tal cual.
+      const conDatos = (e) => (e.sets || []).filter(setHasData);
+      const algoApuntado = s.entries.some(e => conDatos(e).length);
+      // Un entreno en el que todo es «no hecho» no cuenta como entreno (racha, estadísticas).
+      const algoHecho = s.entries.some(e => conDatos(e).some(st => !st.skip));
+      if (!algoHecho) {
+        UI.toast(algoApuntado ? 'Marca algo como hecho o apunta alguna serie' : 'Registra al menos una serie', 'err');
+        return;
+      }
       // limpiar series vacías y entradas sin series
-      s.entries.forEach(e => { e.sets = (e.sets || []).filter(setHasData); });
+      s.entries.forEach(e => { e.sets = conDatos(e); });
       s.entries = s.entries.filter(e => e.sets.length > 0);
-      if (s.entries.length === 0) { UI.toast('Registra al menos una serie', 'err'); return; }
       s.durationSec = Math.floor((Date.now() - s.startTs) / 1000);
       delete s.startTs;
       delete s.draft;   // ya no es borrador: pasa al historial
@@ -1286,7 +1319,7 @@ const VSessions = (() => {
       <div class="month-group"><div class="month-label">${dayLabel(key)}</div>
       ${groups[key].map(s => {
         const author = app.userById(s.userId);
-        const setCount = (s.entries || []).reduce((n, e) => n + (e.sets ? e.sets.length : 0), 0);
+        const setCount = (s.entries || []).reduce((n, e) => n + (e.sets ? e.sets.filter(st => !st.skip).length : 0), 0); // «no hecho» no es una serie hecha
         return `<button class="session-row" data-link="session" data-params='${JSON.stringify({ sessionId: s.id, ownerId: s.userId })}'>
           <div class="session-main">
             <strong>${UI.esc(s.name || 'Sesión')}</strong>
@@ -1576,6 +1609,9 @@ const VSessions = (() => {
       root.querySelectorAll('[data-howto]').forEach(b => b.addEventListener('click', () => showHowto(draft.entries[+b.dataset.ei])));
       root.querySelectorAll('[data-done]').forEach(b => b.addEventListener('click', () => {
         syncMeta(root); const st = draft.entries[+b.dataset.ei].sets[+b.dataset.si]; st.done = !st.done; render(root);
+      }));
+      root.querySelectorAll('[data-chk]').forEach(b => b.addEventListener('click', () => {
+        syncMeta(root); marcarCheck(draft.entries[+b.dataset.ei].sets[+b.dataset.si], b.dataset.chk); render(root);
       }));
       root.querySelectorAll('[data-rm-set]').forEach(b => b.addEventListener('click', () => { syncMeta(root); draft.entries[+b.dataset.ei].sets.splice(+b.dataset.si, 1); render(root); }));
       root.querySelectorAll('[data-add-drop]').forEach(b => b.addEventListener('click', () => { syncMeta(root); const set = draft.entries[+b.dataset.ei].sets[+b.dataset.si]; (set.drops = set.drops || []).push(emptyDrop(draft.entries[+b.dataset.ei].type)); render(root); }));
