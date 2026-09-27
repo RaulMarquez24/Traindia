@@ -973,10 +973,14 @@
   if ('serviceWorker' in navigator) {
     // Si YA había un SW controlando (no es la primera instalación) y entra uno
     // nuevo, recarga una vez para servir la versión nueva.
+    // Excepción: si se ha abierto por "Compartir" (?shared=1), NO se recarga: el
+    // archivo ya se sacó del buzón y recargar cerraría el modal de importar y se
+    // perdería. El build nuevo queda activo y se ve en la siguiente apertura.
+    if (/[?&]shared=1/.test(location.search)) window.__holdReload = true;
     if (navigator.serviceWorker.controller) {
       let refreshing = false;
       navigator.serviceWorker.addEventListener('controllerchange', () => {
-        if (refreshing) return;
+        if (refreshing || window.__holdReload) return;
         refreshing = true;
         window.location.reload();
       });
