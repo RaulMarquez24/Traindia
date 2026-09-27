@@ -695,6 +695,9 @@ const VSessions = (() => {
   function restEnsure(app) {
     const running = restRunning(app);
     document.body.classList.toggle('rest-running', running);
+    // El botón de empezar se pintó al abrir la vista: refleja la última duración elegida.
+    const lbl = document.querySelector('#restMain .rest-label');
+    if (lbl) lbl.textContent = `Descanso · ${getRestDuration(app)}s`;
     if (!running) {
       if (_restNode) { _restNode.remove(); _restNode = null; }
       if (_restInterval) { clearInterval(_restInterval); _restInterval = null; }
@@ -754,12 +757,13 @@ const VSessions = (() => {
     restEnsure(app);
   }
   function pickRestDuration(app) {
-    const opts = [60, 90, 120, 180];
+    const opts = [45, 60, 90, 120, 180];
+    const cur = getRestDuration(app);
     UI.modal({
       title: 'Tiempo de descanso',
       bodyHTML: `<div class="menu-list">
-        ${opts.map(d => `<button class="menu-row" data-dur="${d}"><span><strong>${fmtClock(d)}</strong> · ${d}s</span><span class="chev">›</span></button>`).join('')}
-        <button class="menu-row" data-dur="custom"><span>Personalizado…</span><span class="chev">›</span></button>
+        ${opts.map(d => `<button class="menu-row" data-dur="${d}"><span><strong>${fmtClock(d)}</strong> · ${d}s</span><span class="chev">${d === cur ? '✓' : '›'}</span></button>`).join('')}
+        <button class="menu-row" data-dur="custom"><span>Personalizado…${opts.includes(cur) ? '' : ` <span class="dim">(${cur}s)</span>`}</span><span class="chev">${opts.includes(cur) ? '›' : '✓'}</span></button>
       </div>`,
       actions: [{ label: 'Cerrar', kind: 'ghost' }],
       onMount: (m) => m.querySelectorAll('[data-dur]').forEach(b => b.addEventListener('click', async () => {
