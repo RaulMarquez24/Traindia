@@ -569,6 +569,20 @@ textarea.inp { resize: vertical; line-height: 1.4; }
 .cat-empty { text-align: center; padding: 26px 10px; color: var(--ink-dim); font-size: 14px; }
 .cat-empty-actions { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-top: 12px; }
 .cat-help { margin-top: 18px; }
+/* Selector de categoría: buscador que crea + cuadrícula compacta */
+.catp-search { margin-bottom: 10px; }
+.catp-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.catp-chip { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 9px 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg-card); color: var(--ink); font: inherit; text-align: left; cursor: pointer; transition: border-color .15s ease, background .15s ease; }
+.catp-chip:active { background: var(--line-soft); }
+.catp-chip.on { border-color: var(--strong); background: var(--strong-bg); }
+.catp-chip[hidden], .catp-new[hidden], .catp-empty[hidden] { display: none; }
+.catp-dot { flex: none; display: flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 9px; font-weight: 800; font-size: 13px; color: #fff; background: hsl(var(--h) 55% 48%); }
+.catp-name { flex: 1; min-width: 0; font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.catp-n { flex: none; font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: var(--ink-dim); }
+.catp-ok { flex: none; display: flex; color: var(--strong); }
+.catp-new { display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; margin-bottom: 10px; padding: 11px; border: 1.5px dashed var(--strong); border-radius: 12px; background: var(--strong-bg); color: var(--strong); font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; }
+.catp-empty { padding: 8px 2px; font-size: 13px; }
+@media (max-width: 340px) { .catp-grid { grid-template-columns: 1fr; } }
 .catalog-title { font-size: 16px; font-weight: 800; letter-spacing: -0.01em; margin: 18px 0 10px; padding-bottom: 6px; border-bottom: 2px solid var(--line); }
 .catalog-title:first-child { margin-top: 4px; }
 .ex-name-wrap { flex: 1; display: flex; flex-direction: column; gap: 1px; min-width: 0; }
