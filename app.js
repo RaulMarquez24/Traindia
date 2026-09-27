@@ -83,12 +83,13 @@ const app = {
       if (location.search) history.replaceState(null, '', location.pathname + location.hash);
     };
     if (!('caches' in window)) { clean(); return false; }
-    let buf = null, type = '', name = 'archivo';
+    let buf = null, type = '', name = 'archivo', kind = '';
     try {
       const cache = await caches.open('traindia-share-inbox');
       const res = await cache.match('./__shared-import');
       if (res) {
         type = res.headers.get('Content-Type') || '';
+        kind = res.headers.get('X-Share-Kind') || '';
         try { name = decodeURIComponent(res.headers.get('X-Share-Name') || 'archivo'); } catch (e) {}
         buf = await res.arrayBuffer();
         await cache.delete('./__shared-import');
@@ -99,13 +100,58 @@ const app = {
     window.__holdReload = true; // no auto-recargar por actualización: perdería el modal (ver index.html)
 
     // ¿Es un export de Traindía? Entonces se importa. Si no, se guarda como documento.
-    let parsed = null;
-    try { parsed = JSON.parse(new TextDecoder().decode(buf)); } catch (e) { /* no es texto JSON */ }
-    if (parsed && (parsed.format === 'traindia-export' || parsed.format === 'cnp-export') && parsed.data) {
-      VData.routeImport(this, parsed);
-      return true;
-    }
+    const text = this.decodeShared(buf);
+    const parsed = this.parseExport(text);
+    if (parsed) { VData.routeImport(this, parsed); return true; }
+    // Parece texto (JSON, .txt, o solo llegó el texto del mensaje) pero no es un
+    // export: decir QUÉ ha llegado en vez de ofrecer guardarlo como documento.
+    const pareceTexto = kind === 'text' || /json|text/i.test(type) || /\.(json|txt)$/i.test(name)
+      || (text && !/[\u0000�]/.test(text.slice(0, 2000)));
+    if (pareceTexto) { this.explainSharedText({ kind, type, name, text, size: buf.byteLength }); return true; }
     return await this.offerSaveSharedDoc({ buf, type, name });
+  },
+
+  // Texto del archivo compartido: UTF-8 (o UTF-16 si lo parece), sin BOM.
+  decodeShared(buf) {
+    try {
+      const b = new Uint8Array(buf.slice(0, 400));
+      let zeros = 0; for (let i = 1; i < b.length; i += 2) if (b[i] === 0) zeros++;
+      const enc = (b[0] === 0xFF && b[1] === 0xFE) || zeros > b.length / 4 ? 'utf-16le' : 'utf-8';
+      return new TextDecoder(enc).decode(buf).replace(/^﻿/, '');
+    } catch (e) { return ''; }
+  },
+  // Export de Traindía dentro de un texto: tolera espacios, texto alrededor del
+  // JSON (p. ej. un pie de mensaje) y JSON metido como string.
+  parseExport(text) {
+    const ok = (o) => o && typeof o === 'object' && (o.format === 'traindia-export' || o.format === 'cnp-export') && o.data ? o : null;
+    const tryParse = (s) => { try { let o = JSON.parse(s); if (typeof o === 'string') o = JSON.parse(o); return ok(o); } catch (e) { return null; } };
+    const t = (text || '').trim();
+    if (!t) return null;
+    const a = t.indexOf('{'), z = t.lastIndexOf('}');
+    return tryParse(t) || (a >= 0 && z > a ? tryParse(t.slice(a, z + 1)) : null);
+  },
+  explainSharedText({ kind, type, name, text, size }) {
+    const soloTexto = kind === 'text';
+    const muestra = (text || '').trim().slice(0, 160);
+    UI.modal({
+      title: 'No se puede importar',
+      bodyHTML: soloTexto
+        ? `<p class="modal-text">Ha llegado <strong>solo el texto del mensaje</strong>, sin el archivo.</p>
+           <p class="modal-text dim">Pasa a veces al compartir desde un chat. Prueba a abrir el documento (tócalo para verlo) y compartirlo desde ahí, o en Traindía: <strong>Compartir → Importar → elegir archivo</strong>.</p>`
+        : `<p class="modal-text">Ha llegado <strong>${UI.esc(name)}</strong>, pero no es un archivo exportado de Traindía (o está incompleto).</p>
+           <p class="modal-text dim">Si es el plan que te pasaron, en Traindía usa <strong>Compartir → Importar → elegir archivo</strong>.</p>`,
+      actions: [
+        { label: 'Cerrar', kind: 'ghost' },
+        { label: 'Importar a mano', kind: 'primary', onClick: () => { setTimeout(() => VData.openShare(this), 50); } },
+      ],
+      onMount: (root) => {
+        // Datos técnicos plegados, por si hay que averiguar qué pasó.
+        const det = document.createElement('details');
+        det.className = 'det';
+        det.innerHTML = `<summary>Detalles</summary><p class="field-hint">Tipo: ${UI.esc(type || '—')} · ${size} bytes · ${soloTexto ? 'solo texto' : 'archivo'}</p>${muestra ? `<pre class="field-hint" style="white-space:pre-wrap;word-break:break-all">${UI.esc(muestra)}</pre>` : ''}`;
+        root.querySelector('.modal-body').appendChild(det);
+      },
+    });
   },
 
   // Un archivo compartido que NO es un export: se ofrece guardarlo como documento
@@ -728,7 +774,7 @@ const app = {
                 tipo: d.tipo,
                 mensaje: d.mensaje.trim(),
                 contacto: (d.contacto || '').trim() || '(no indicado)',
-                version: 'v2.36.4',
+                version: 'v2.36.5',
                 perfil: (this.mainUser && this.mainUser.name) || '',
                 navegador: navigator.userAgent,
               }),
@@ -764,7 +810,7 @@ const app = {
     return `<div class="section">
       ${rows.map(r => `<button class="big-row" ${r.modal ? 'data-share' : r.landing ? 'data-landing' : `data-link="${r.v}"`}><span class="big-row-icon tile" style="background:${r.color}">${UI.icon(r.icon, 20)}</span><span class="big-row-text"><strong>${r.label}</strong><span class="dim">${r.sub}</span></span><span class="chev">›</span></button>`).join('')}
       <button class="big-row" data-feedback><span class="big-row-icon tile" style="background:var(--strong)">${UI.icon('chat', 20)}</span><span class="big-row-text"><strong>Sugerencias y reportes</strong><span class="dim">Envíame ideas o fallos</span></span><span class="chev">›</span></button>
-      <p class="version-foot">Traindía · v2.36.4 · ${Object.keys(this.usersById).length} perfil(es)<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
+      <p class="version-foot">Traindía · v2.36.5 · ${Object.keys(this.usersById).length} perfil(es)<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
     </div>`;
   },
   bindMore(root) {
@@ -1046,7 +1092,7 @@ const app = {
         <button class="btn danger block" id="resetApp">Borrar todos los datos</button>
         <p class="field-hint">Restablece la app al estado inicial (se borran todos los perfiles, sesiones y progreso).</p>
       </div>
-      <p class="version-foot">Traindía · v2.36.4</p>
+      <p class="version-foot">Traindía · v2.36.5</p>
     </div>`;
   },
 

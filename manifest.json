@@ -48,7 +48,8 @@
             ".txt",
             "application/pdf",
             ".pdf",
-            "image/*"
+            "image/*",
+            "*/*"
           ]
         }
       ]
