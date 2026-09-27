@@ -646,7 +646,7 @@ const VPlan = (() => {
   }
 
   // ---------- CATÁLOGO DE EJERCICIOS ----------
-  const TYPE_NAME = { weight: 'Peso+reps', reps: 'Reps', time: 'Tiempo' };
+  const TYPE_NAME = { weight: 'Peso+reps', reps: 'Reps', time: 'Tiempo', check: 'Hecho/no' };
 
   // Mapa de uso: qué días de la rutina usan cada ejercicio (por id y por nombre).
   function buildUsage(routine) {
@@ -776,9 +776,18 @@ const VPlan = (() => {
     });
   }
 
-  async function exercises(app) {
+  // Filtros del catálogo: viven fuera de la vista para que sigan puestos al editar
+  // un ejercicio, al navegar y volver, y al recargar (sessionStorage).
+  const EX_UI_KEY = 'traindia.exCatalog';
+  const exUI = (() => {
+    const def = { q: '', use: 'all', type: '', cat: '' };
+    try { return Object.assign(def, JSON.parse(sessionStorage.getItem(EX_UI_KEY) || '{}')); } catch (e) { return def; }
+  })();
+  function saveExUI() { try { sessionStorage.setItem(EX_UI_KEY, JSON.stringify(exUI)); } catch (e) {} }
+
+  // Datos del catálogo ya preparados para pintar: uso en los días, vídeos, suplentes.
+  async function catalogData(app) {
     const list = (await DB.exercisesOf(app.activeUser.id)).sort((a, b) => a.name.localeCompare(b.name));
-    const removableDup = await dedupeRemovable(app);
     const usage = buildUsage(app.routine);
     const byId = {};
     list.forEach(e => { byId[e.id] = e; });
@@ -797,66 +806,212 @@ const VPlan = (() => {
       return [...s];
     };
 
-    const inUse = [], unused = [];
-    list.forEach(e => { (daysUsing(e).length ? inUse : unused).push(e); });
-
-    const item = (e, deletable) => {
+    const items = list.map(e => {
       const days = daysUsing(e);
-      const sub = days.length ? 'en ' + days.join(', ') : (e.muscleGroup || 'General');
-      return `<li data-search="${UI.esc(UI.norm(e.name + ' ' + (e.muscleGroup || '')))}">
-        <span class="ex-name-wrap">
-          <span class="ex-name">${UI.esc(e.name)}${e.isDefault ? ' <span class="badge def">def</span>' : ''}</span>
-          <span class="ex-sub">${UI.esc(sub)}</span>
-        </span>
-        <span class="ex-actions">
-          <span class="ex-type">${TYPE_NAME[e.type] || e.type}</span>
-          <button class="icon-btn" data-edit="${e.id}">${UI.icon('edit', 17)}</button>
-          ${deletable ? `<button class="icon-btn danger" data-del="${e.id}">${UI.icon('trash', 17)}</button>` : ''}
-        </span></li>`;
-    };
+      return {
+        e, days, used: days.length > 0,
+        group: e.muscleGroup || 'General',
+        type: e.type || 'weight',
+        vids: DB.exVideos(e).length,
+        subs: (e.substitutes || []).filter(id => byId[id]).length,
+        search: UI.norm([e.name, e.muscleGroup || '', ...(e.substitutes || []).map(id => byId[id] ? byId[id].name : '')].join(' ')),
+      };
+    });
+    return { items, removableDup: await dedupeRemovable(app) };
+  }
 
-    // "En uso" agrupado por bloques (grupo muscular) para encontrarlos fácil
-    const groups = {};
-    inUse.forEach(e => { const g = e.muscleGroup || 'General'; (groups[g] = groups[g] || []).push(e); });
-    const inUseHTML = Object.keys(groups).sort().map(g =>
-      `<div class="block"><div class="block-label">${UI.esc(g)}</div><ul class="ex-list">${groups[g].map(e => item(e, false)).join('')}</ul></div>`
-    ).join('');
-
-    return `<div class="section">
-      <p class="section-intro">Catálogo de <strong>${UI.esc(app.activeUser.name)}</strong>. Los ejercicios están vinculados a los días de tu rutina: si quitas uno de todos tus días pasa a <strong>desuso</strong>. Los predefinidos <span class="badge def">def</span> no se pueden borrar (siempre están disponibles); los tuyos en desuso sí.</p>
-      <input class="inp" id="exCatalogSearch" placeholder="Buscar ejercicio…" autocomplete="off" style="margin-bottom:14px">
-      <div id="catalogBody">
-      <div class="catalog-title">En uso (${inUse.length})</div>
-      ${inUse.length ? inUseHTML : '<p class="dim" style="padding:2px 0 14px">Ningún ejercicio en uso.</p>'}
-      <div class="catalog-title">En desuso (${unused.length})</div>
-      ${unused.length ? `<ul class="ex-list">${unused.map(e => item(e, !e.isDefault)).join('')}</ul>` : '<p class="dim" style="padding:2px 0">No hay ejercicios en desuso.</p>'}
+  async function exercises(app) {
+    const { removableDup } = await catalogData(app);
+    return `<div class="section ex-catalog">
+      <div class="cat-bar" id="catBar">
+        <div class="cat-search-row">
+          <label class="cat-search">
+            ${UI.icon('search', 16)}
+            <input type="search" id="exCatalogSearch" placeholder="Buscar ejercicio o suplente…" autocomplete="off" enterkeyhint="search" value="${UI.esc(exUI.q)}">
+            <button type="button" class="cat-clear" id="exSearchClear" aria-label="Borrar búsqueda"${exUI.q ? '' : ' hidden'}>${UI.icon('x', 14)}</button>
+          </label>
+          <button class="btn primary cat-new" id="addEx" aria-label="Nuevo ejercicio">${UI.icon('plus', 16)}<span>Nuevo</span></button>
+        </div>
+        <div class="cat-filters"><div>
+          <div class="seg cat-use" id="catUse"></div>
+          <div class="chips-scroll" id="catTypes"></div>
+          <div class="chips-scroll" id="catCats"></div>
+        </div></div>
       </div>
-      <p class="dim" id="catalogNoResults" style="display:none;padding:12px 2px">Sin resultados.</p>
+      <div class="cat-count" id="catCount"></div>
+      <div id="catalogBody"></div>
       ${removableDup.length ? `<button class="btn ghost danger block" id="cleanDups" style="margin-top:16px">${UI.icon('trash', 16)} Eliminar ${removableDup.length} duplicado${removableDup.length === 1 ? '' : 's'} idéntico${removableDup.length === 1 ? '' : 's'}</button>` : ''}
-      <button class="btn primary block" id="addEx" style="margin-top:16px">+ Nuevo ejercicio</button>
+      <details class="det cat-help"><summary>¿Cómo funciona el catálogo?</summary>
+        <p class="field-hint">Catálogo de <strong>${UI.esc(app.activeUser.name)}</strong>. Un ejercicio está <strong>en uso</strong> si aparece en algún día de tu plan (o es suplente de uno que lo está); si lo quitas de todos los días pasa a <strong>sin usar</strong>. Los predefinidos <span class="badge def">def</span> no se borran (siempre están disponibles); los tuyos sin usar, sí. Toca un ejercicio para editarlo.</p>
+      </details>
     </div>`;
   }
 
+  const TYPE_FILTERS = [
+    { v: '', l: 'Todos los tipos' }, { v: 'weight', l: 'Peso+reps' }, { v: 'reps', l: 'Reps' },
+    { v: 'time', l: 'Tiempo' }, { v: 'check', l: 'Hecho/no' },
+  ];
+
   function exercisesBind(app, root) {
-    const search = root.querySelector('#exCatalogSearch');
-    if (search) search.addEventListener('input', () => {
-      const q = UI.norm(search.value);
-      let anyVisible = false;
-      root.querySelectorAll('#catalogBody .ex-list li').forEach(li => {
-        const hay = li.dataset.search || UI.norm(li.textContent);
-        const match = !q || hay.includes(q);
-        li.style.display = match ? '' : 'none';
-        if (match) anyVisible = true;
-      });
-      // ocultar bloques de grupo (En uso) sin resultados, y los títulos de sección si quedan vacíos
-      root.querySelectorAll('#catalogBody .block').forEach(b => {
-        const vis = [...b.querySelectorAll('.ex-list li')].some(li => li.style.display !== 'none');
-        b.style.display = vis ? '' : 'none';
-      });
-      const noRes = root.querySelector('#catalogNoResults');
-      if (noRes) noRes.style.display = anyVisible ? 'none' : '';
+    let items = [];
+    const $ = (sel) => root.querySelector(sel);
+    const search = $('#exCatalogSearch');
+    if (!search) return;
+
+    // La barra de filtros se queda pegada bajo la cabecera al bajar por la lista.
+    const header = document.querySelector('.app-header');
+    const bar = $('#catBar');
+    if (header && bar) bar.style.top = header.offsetHeight + 'px';
+    // Al bajar se recogen los filtros (queda solo el buscador) y al subir vuelven.
+    let lastY = window.scrollY, quietUntil = 0;
+    const onScroll = () => {
+      if (!document.body.contains(bar)) { window.removeEventListener('scroll', onScroll); return; }
+      const y = window.scrollY;
+      if (Date.now() < quietUntil) { lastY = y; return; } // el cambio de alto mueve el scroll: no rebotar
+      if (Math.abs(y - lastY) < 6) return;
+      const compact = y > lastY && y > 120;
+      if (compact !== bar.classList.contains('compact')) { bar.classList.toggle('compact', compact); quietUntil = Date.now() + 350; }
+      lastY = y;
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+
+    const matches = (it, skip) =>
+      (!exUI.q || it.search.includes(UI.norm(exUI.q))) &&
+      (skip === 'use' || exUI.use === 'all' || (exUI.use === 'used' ? it.used : !it.used)) &&
+      (skip === 'type' || !exUI.type || it.type === exUI.type) &&
+      (skip === 'cat' || !exUI.cat || it.group === exUI.cat);
+    const countBy = (skip, key) => {
+      const m = {};
+      items.forEach(it => { if (matches(it, skip)) { const k = key(it); m[k] = (m[k] || 0) + 1; } });
+      return m;
+    };
+    const filtersOn = () => !!(exUI.q || exUI.use !== 'all' || exUI.type || exUI.cat);
+
+    const rowHTML = (it) => {
+      const e = it.e;
+      const realDays = it.days.filter(d => d !== 'suplente');
+      const asSub = realDays.length !== it.days.length;
+      const where = !it.used ? 'Sin usar'
+        : realDays.length ? 'En ' + realDays.join(', ') + (asSub ? ' · como suplente' : '')
+        : 'Como suplente';
+      const extras = [
+        it.vids ? `<span class="cat-ic" title="Vídeos">${UI.icon('play', 9)}${it.vids}</span>` : '',
+        it.subs ? `<span class="cat-ic sub" title="Suplentes">${UI.icon('repeat', 10)}${it.subs}</span>` : '',
+      ].join('');
+      const deletable = !it.used && !e.isDefault;
+      return `<li class="cat-row${it.used ? '' : ' unused'}" data-edit="${e.id}" tabindex="0" role="button">
+        <span class="ex-name-wrap">
+          <span class="ex-name">${UI.esc(e.name)}${e.isDefault ? ' <span class="badge def">def</span>' : ''}</span>
+          <span class="ex-sub"><span class="ex-type">${TYPE_NAME[it.type] || it.type}</span> · ${UI.esc(where)}${extras}</span>
+        </span>
+        <span class="ex-actions">
+          ${deletable ? `<button class="icon-btn danger" data-del="${e.id}" aria-label="Eliminar">${UI.icon('trash', 17)}</button>` : ''}
+          <span class="chev">›</span>
+        </span></li>`;
+    };
+
+    const paint = () => {
+      const all = items.length;
+      const useC = countBy('use', it => it.used ? 'used' : 'unused');
+      const useOpts = [
+        { v: 'all', l: 'Todos', n: (useC.used || 0) + (useC.unused || 0) },
+        { v: 'used', l: 'En uso', n: useC.used || 0 },
+        { v: 'unused', l: 'Sin usar', n: useC.unused || 0 },
+      ];
+      $('#catUse').innerHTML = useOpts.map(o => `<button class="seg-opt${exUI.use === o.v ? ' on' : ''}" data-use="${o.v}">${o.l} <span class="cat-n">${o.n}</span></button>`).join('');
+
+      const typeC = countBy('type', it => it.type);
+      $('#catTypes').innerHTML = TYPE_FILTERS
+        .filter(t => !t.v || typeC[t.v] || exUI.type === t.v)
+        .map(t => `<button class="chip${exUI.type === t.v ? ' on' : ''}" data-type="${t.v}">${t.l}${t.v ? ` <span class="cat-n">${typeC[t.v] || 0}</span>` : ''}</button>`).join('');
+
+      const catC = countBy('cat', it => it.group);
+      const cats = [...new Set(items.map(it => it.group))].sort((a, b) => a.localeCompare(b))
+        .filter(c => catC[c] || exUI.cat === c);
+      $('#catCats').innerHTML = `<button class="chip${exUI.cat ? '' : ' on'}" data-cat="">Todas las categorías</button>` +
+        cats.map(c => `<button class="chip${exUI.cat === c ? ' on' : ''}" data-cat="${UI.esc(c)}">${UI.esc(c)} <span class="cat-n">${catC[c] || 0}</span></button>`).join('');
+
+      const shown = items.filter(it => matches(it));
+      $('#catCount').innerHTML = `<span>${filtersOn() ? `${shown.length} de ${all}` : all} ejercicio${all === 1 ? '' : 's'}</span>` +
+        (filtersOn() ? `<button class="link-btn" data-reset>Quitar filtros</button>` : '');
+
+      let html;
+      if (!shown.length) {
+        html = `<div class="cat-empty"><p>Ningún ejercicio coincide${exUI.q ? ` con «${UI.esc(exUI.q)}»` : ''}.</p>
+          <div class="cat-empty-actions">
+            ${filtersOn() ? '<button class="btn ghost small" data-reset>Quitar filtros</button>' : ''}
+            ${exUI.q.trim() ? `<button class="btn primary small" data-new-q>+ Crear «${UI.esc(exUI.q.trim())}»</button>` : ''}
+          </div></div>`;
+      } else if (exUI.cat) {
+        html = `<ul class="ex-list">${shown.map(rowHTML).join('')}</ul>`;
+      } else {
+        const groups = {};
+        shown.forEach(it => { (groups[it.group] = groups[it.group] || []).push(it); });
+        html = Object.keys(groups).sort((a, b) => a.localeCompare(b)).map(g =>
+          `<div class="block"><div class="block-label">${UI.esc(g)} <span class="cat-n">${groups[g].length}</span></div><ul class="ex-list">${groups[g].map(rowHTML).join('')}</ul></div>`
+        ).join('');
+      }
+      $('#catalogBody').innerHTML = html;
+      $('#exSearchClear').hidden = !exUI.q;
+    };
+
+    const set = (patch) => { Object.assign(exUI, patch); saveExUI(); paint(); };
+
+    // Recarga los datos y repinta SOLO la lista: se conservan filtros, búsqueda y
+    // posición. Si se indica un id, se resalta esa fila.
+    const refresh = async (flashId) => {
+      const y = window.scrollY;
+      items = (await catalogData(app)).items;
+      paint();
+      window.scrollTo(0, y);
+      if (flashId) {
+        const li = root.querySelector(`.cat-row[data-edit="${flashId}"]`);
+        if (li) {
+          const r = li.getBoundingClientRect();
+          const barBottom = bar ? bar.getBoundingClientRect().bottom : 0;
+          if (r.top < barBottom || r.bottom > window.innerHeight) window.scrollBy(0, r.top - barBottom - 80);
+          li.classList.add('flash');
+          setTimeout(() => li.classList.remove('flash'), 1600);
+        }
+      }
+    };
+
+    search.addEventListener('input', () => set({ q: search.value }));
+    search.addEventListener('keydown', (e) => { if (e.key === 'Enter') search.blur(); });
+    $('#exSearchClear').addEventListener('click', () => { search.value = ''; set({ q: '' }); search.focus(); });
+    $('#addEx').addEventListener('click', () => editExercise(app, null, { onSaved: refresh, group: exUI.cat }));
+
+    root.addEventListener('click', async (ev) => {
+      const t = ev.target;
+      const use = t.closest('[data-use]'); if (use) { set({ use: use.dataset.use }); return; }
+      const ty = t.closest('[data-type]'); if (ty) { set({ type: ty.dataset.type }); return; }
+      const cat = t.closest('[data-cat]'); if (cat) { set({ cat: cat.dataset.cat }); return; }
+      if (t.closest('[data-reset]')) { search.value = ''; set({ q: '', use: 'all', type: '', cat: '' }); return; }
+      if (t.closest('[data-new-q]')) { editExercise(app, null, { onSaved: refresh, name: exUI.q.trim(), group: exUI.cat }); return; }
+      const del = t.closest('[data-del]');
+      if (del) {
+        const ex = await DB.get('exercises', del.dataset.del);
+        const msg = ex.isDefault
+          ? 'No se usa en ningún día. Es un ejercicio predefinido: se quitará del catálogo pero podrás recuperarlo con “Restaurar predefinidos”. No afecta a las sesiones ya registradas.'
+          : 'No se usa en ningún día. Se eliminará del catálogo. No afecta a las sesiones ya registradas.';
+        const ok = await UI.confirm({ title: `Eliminar ${ex.name}`, message: msg, confirmLabel: 'Eliminar', danger: true });
+        if (!ok) return;
+        await DB.del('exercises', ex.id);
+        await refresh();
+        UI.toast('Ejercicio eliminado');
+        return;
+      }
+      const row = t.closest('[data-edit]');
+      if (row) {
+        const ex = await DB.get('exercises', row.dataset.edit);
+        if (ex) editExercise(app, ex, { onSaved: refresh });
+      }
     });
-    const cleanBtn = root.querySelector('#cleanDups');
+    root.addEventListener('keydown', (ev) => {
+      if ((ev.key === 'Enter' || ev.key === ' ') && ev.target.classList && ev.target.classList.contains('cat-row')) { ev.preventDefault(); ev.target.click(); }
+    });
+
+    const cleanBtn = $('#cleanDups');
     if (cleanBtn) cleanBtn.addEventListener('click', async () => {
       const rem = await dedupeRemovable(app);
       const ok = await UI.confirm({ title: 'Eliminar duplicados', message: `Se eliminarán ${rem.length} ejercicio(s) idéntico(s) repetido(s) y se conservará uno de cada. Tu plan, tus sesiones y tu progreso se mantienen.`, confirmLabel: 'Eliminar', danger: true });
@@ -864,26 +1019,16 @@ const VPlan = (() => {
       const n = await cleanupDuplicates(app);
       app.render(); UI.toast(`${n} duplicado(s) eliminado(s)`);
     });
-    root.querySelector('#addEx').addEventListener('click', () => editExercise(app, null));
-    root.querySelectorAll('[data-edit]').forEach(b => b.addEventListener('click', async () => {
-      const ex = await DB.get('exercises', b.dataset.edit);
-      editExercise(app, ex);
-    }));
-    root.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', async () => {
-      const ex = await DB.get('exercises', b.dataset.del);
-      const msg = ex.isDefault
-        ? 'Está en desuso. Es un ejercicio predefinido: se quitará del catálogo pero podrás recuperarlo con “Restaurar predefinidos”. No afecta a las sesiones ya registradas.'
-        : 'Está en desuso (no se usa en ningún día). Se eliminará del catálogo. No afecta a las sesiones ya registradas.';
-      const ok = await UI.confirm({ title: `Eliminar ${ex.name}`, message: msg, confirmLabel: 'Eliminar', danger: true });
-      if (!ok) return;
-      await DB.del('exercises', ex.id);
-      app.render();
-      UI.toast('Ejercicio eliminado');
-    }));
+
+    refresh();
   }
 
-  async function editExercise(app, ex) {
+  // opts.onSaved(id): en vez de repintar toda la vista (el catálogo repinta solo su
+  // lista y conserva filtros). opts.name / opts.group: valores iniciales al crear.
+  async function editExercise(app, ex, opts = {}) {
     const isNew = !ex;
+    const initName = ex ? ex.name : (opts.name || '');
+    const initGroup = ex ? (ex.muscleGroup || 'General') : (opts.group || '');
     const catalog = await DB.exercisesOf(app.activeUser.id);
     const categories = categoriesFrom(catalog);
     const byId = {};
@@ -919,10 +1064,10 @@ const VPlan = (() => {
     UI.modal({
       title: isNew ? 'Nuevo ejercicio' : 'Editar ejercicio',
       bodyHTML: `<div id="exForm">
-        ${UI.field('Nombre', UI.input('name', ex ? ex.name : ''))}
+        ${UI.field('Nombre', UI.input('name', initName))}
         <span class="field-label">Categoría (grupo muscular)</span>
-        <button type="button" class="ed-cat-btn" id="exCatBtn" style="width:100%;margin-bottom:14px">${UI.esc(ex ? (ex.muscleGroup || 'General') : 'Elegir categoría')} ▾</button>
-        <input type="hidden" name="muscleGroup" value="${UI.esc(ex ? (ex.muscleGroup || '') : '')}">
+        <button type="button" class="ed-cat-btn" id="exCatBtn" style="width:100%;margin-bottom:14px">${UI.esc(initGroup || 'Elegir categoría')} ▾</button>
+        <input type="hidden" name="muscleGroup" value="${UI.esc(ex ? (ex.muscleGroup || '') : initGroup)}">
         ${UI.field('Tipo', UI.select('type', [
           { value: 'weight', label: 'Peso + repeticiones' },
           { value: 'reps', label: 'Repeticiones (peso corporal)' },
@@ -977,14 +1122,16 @@ const VPlan = (() => {
             .map(v => v.label ? { url: v.url, label: v.label } : { url: v.url });
           const firstUrl = videos.length ? videos[0].url : undefined; // compat con el campo videoUrl de siempre
           const videosField = videos.length ? videos : undefined;
+          let savedId = ex ? ex.id : null;
           if (isNew) {
-            await DB.put('exercises', { id: DB.uid('ex'), userId: app.activeUser.id, name: d.name.trim(), muscleGroup: d.muscleGroup.trim() || 'General', type: d.type, substitutes: subs, metrics, videos: videosField, videoUrl: firstUrl, howto: (d.howto || '').trim() || undefined, createdAt: Date.now() });
+            savedId = DB.uid('ex');
+            await DB.put('exercises', { id: savedId, userId: app.activeUser.id, name: d.name.trim(), muscleGroup: d.muscleGroup.trim() || 'General', type: d.type, substitutes: subs, metrics, videos: videosField, videoUrl: firstUrl, howto: (d.howto || '').trim() || undefined, createdAt: Date.now() });
           } else {
             await DB.updateExercise(app.activeUser.id, ex.id, { name: d.name.trim(), muscleGroup: d.muscleGroup.trim() || 'General', type: d.type, substitutes: subs, metrics, videos: videosField, videoUrl: firstUrl, howto: (d.howto || '').trim() || undefined });
             await app.refreshRoutine();
           }
-          app.render();
-          UI.toast('Ejercicio guardado · cambios aplicados en toda la app');
+          if (opts.onSaved) await opts.onSaved(savedId); else app.render();
+          UI.toast(isNew ? 'Ejercicio creado' : 'Ejercicio guardado · cambios aplicados en toda la app');
         }},
       ],
       onMount: (root) => {

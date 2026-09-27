@@ -534,6 +534,41 @@ textarea.inp { resize: vertical; line-height: 1.4; }
 .howto-video { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; color: var(--strong); text-decoration: none; font-weight: 600; font-size: 14px; }
 .howto-video:active { background: var(--strong-bg); }
 
+/* Catálogo de ejercicios: barra de filtros pegajosa + filas pulsables */
+.cat-bar { position: sticky; top: 56px; z-index: 20; background: var(--bg); margin: -18px -16px 0; padding: 12px 16px 6px; border-bottom: 1px solid var(--line-soft); }
+.cat-search-row { display: flex; gap: 8px; margin-bottom: 10px; }
+.cat-filters { display: grid; grid-template-rows: 1fr; transition: grid-template-rows .22s ease, opacity .18s ease; }
+.cat-filters { margin: 0 -16px; }
+.cat-filters > div { min-height: 0; overflow: hidden; padding: 0 16px; }
+.cat-bar.compact .cat-filters { grid-template-rows: 0fr; opacity: 0; }
+.cat-bar.compact .cat-search-row { margin-bottom: 4px; }
+.cat-search { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; background: var(--bg-card); border: 1px solid var(--line); border-radius: 10px; padding: 0 6px 0 12px; color: var(--ink-dim); }
+.cat-search:focus-within { border-color: var(--strong); }
+.cat-search input { flex: 1; min-width: 0; border: 0; background: transparent; color: var(--ink); font: inherit; font-size: 15px; padding: 11px 0; outline: none; }
+.cat-search input::-webkit-search-cancel-button { display: none; }
+.cat-clear { flex: none; display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; border: 0; border-radius: 50%; background: var(--line-soft); color: var(--ink-soft); cursor: pointer; }
+.cat-clear[hidden] { display: none; }
+.cat-new { flex: none; display: inline-flex; align-items: center; gap: 4px; padding: 0 14px; }
+.cat-use { margin-bottom: 8px; }
+.cat-n { font-family: 'IBM Plex Mono', monospace; font-size: 10px; font-weight: 600; opacity: .7; }
+.chips-scroll { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; margin: 0 -16px 6px; padding: 0 16px 2px; -webkit-overflow-scrolling: touch; }
+.chips-scroll::-webkit-scrollbar { display: none; }
+.chips-scroll .chip { flex: none; white-space: nowrap; }
+.cat-count { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 12px; color: var(--ink-dim); margin: 12px 2px 4px; }
+.link-btn { background: none; border: 0; padding: 4px 0; color: var(--strong); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+.ex-catalog .block-label .cat-n { margin-left: 4px; }
+.ex-list li.cat-row { cursor: pointer; transition: background .15s ease; padding-right: 10px; }
+.ex-list li.cat-row:active, .ex-list li.cat-row:focus-visible { background: var(--line-soft); outline: none; }
+.ex-list li.cat-row.unused .ex-name { color: var(--ink-dim); }
+.cat-row .ex-sub { display: flex; align-items: center; flex-wrap: wrap; gap: 0 5px; }
+.cat-row .ex-sub .ex-type { color: var(--strong); }
+.cat-ic { display: inline-flex; align-items: center; gap: 2px; margin-left: 4px; font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: var(--ink-soft); }
+.cat-ic.sub { color: var(--sub-accent); }
+.cat-row.flash { animation: catFlash 1.6s ease; }
+@keyframes catFlash { 0%, 30% { background: var(--strong-bg); } 100% { background: transparent; } }
+.cat-empty { text-align: center; padding: 26px 10px; color: var(--ink-dim); font-size: 14px; }
+.cat-empty-actions { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-top: 12px; }
+.cat-help { margin-top: 18px; }
 .catalog-title { font-size: 16px; font-weight: 800; letter-spacing: -0.01em; margin: 18px 0 10px; padding-bottom: 6px; border-bottom: 2px solid var(--line); }
 .catalog-title:first-child { margin-top: 4px; }
 .ex-name-wrap { flex: 1; display: flex; flex-direction: column; gap: 1px; min-width: 0; }
