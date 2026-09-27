@@ -20,6 +20,7 @@ const VData = (() => {
         sessions: (await DB.sessionsOf(userId)).filter(s => !s.draft),
         progress: await DB.progressOf(userId),
         nutrition: await DB.nutritionOf(userId),
+        places: await DB.getPlaces(),
       },
     };
   }
@@ -27,6 +28,46 @@ const VData = (() => {
   function exercisesByIds(allExercises, ids) {
     const set = new Set(ids.filter(Boolean));
     return allExercises.filter(e => set.has(e.id));
+  }
+  // Ejercicios que usan unos días + sus suplentes (y los suplentes de esos, etc.),
+  // para que al importar no falte ninguno. Van completos: vídeos, técnica, métricas…
+  function exercisesForDays(allExercises, days) {
+    const byId = Object.fromEntries(allExercises.map(e => [e.id, e]));
+    const ids = new Set();
+    const add = (id) => {
+      if (!id || ids.has(id) || !byId[id]) return;
+      ids.add(id);
+      (byId[id].substitutes || []).forEach(add);
+    };
+    (days || []).forEach(d => (d.blocks || []).forEach(b => (b.exercises || []).forEach(x => add(x.exerciseId))));
+    return allExercises.filter(e => ids.has(e.id));
+  }
+  // Lugares que usan unos días, con su marca de "especial" (de la lista de lugares).
+  async function placesForDays(days) {
+    const known = await DB.getPlaces();
+    const out = new Map();
+    (days || []).forEach(d => {
+      const name = (d.place || '').trim();
+      if (!name || out.has(name.toLowerCase())) return;
+      const k = known.find(p => (p.name || '').trim().toLowerCase() === name.toLowerCase());
+      out.set(name.toLowerCase(), { name, special: k ? !!k.special : !!d.placeAccent });
+    });
+    return [...out.values()];
+  }
+  // Al importar: añade a tu lista los lugares del archivo que no tengas (por nombre).
+  // Archivos antiguos no traen `places`: se sacan de los días.
+  async function importPlaces(places, days) {
+    const incoming = [...(places || [])];
+    (days || []).forEach(d => { const n = (d.place || '').trim(); if (n) incoming.push({ name: n, special: !!d.placeAccent }); });
+    if (!incoming.length) return;
+    const list = await DB.getPlaces();
+    let changed = false;
+    incoming.forEach(p => {
+      const n = (p.name || '').trim();
+      if (!n || n === '— libre —' || list.some(x => (x.name || '').trim().toLowerCase() === n.toLowerCase())) return;
+      list.push({ name: n, special: !!p.special }); changed = true;
+    });
+    if (changed) await DB.savePlaces(list);
   }
 
   // Todo lo que exporta la app pasa por aquí: se guarda en Descargas y, si el
@@ -262,17 +303,17 @@ const VData = (() => {
     if (!routine) { UI.toast('No hay plan activo', 'err'); return; }
     doExportPlan(app, routine);
   }
+  // El plan activo es del perfil ACTIVO (puede ser un invitado): su catálogo y su nombre.
+  function routineOwner(app, routine) {
+    return (routine && routine.userId && app.userById(routine.userId)) || app.activeUser || app.mainUser;
+  }
   async function doExportPlan(app, routine) {
-    const allEx = await DB.exercisesOf(app.mainUser.id);
-    const byId = Object.fromEntries(allEx.map(e => [e.id, e]));
-    const ids = new Set();
-    (routine.days || []).forEach(d => (d.blocks || []).forEach(bl => bl.exercises.forEach(x => {
-      if (x.exerciseId) { ids.add(x.exerciseId); (byId[x.exerciseId]?.substitutes || []).forEach(sid => ids.add(sid)); }
-    })));
+    const owner = routineOwner(app, routine);
+    const allEx = await DB.exercisesOf(owner.id);
     download({
       format: FORMAT, version: 2, kind: 'plan', exportedAt: new Date().toISOString(),
-      user: { name: app.mainUser.name, color: app.mainUser.color },
-      data: { routine, exercises: exercisesByIds(allEx, [...ids]) },
+      user: { name: owner.name, color: owner.color },
+      data: { routine, exercises: exercisesForDays(allEx, routine.days), places: await placesForDays(routine.days) },
     }, `traindia-plan-${stamp()}.json`);
     UI.toast('Plan exportado');
   }
@@ -287,7 +328,8 @@ const VData = (() => {
       d.id = DB.uid('day'); // id propio para el nuevo plan
       (d.blocks || []).forEach(b => (b.exercises || []).forEach(e => { if (e.exerciseId && idMap[e.exerciseId]) e.exerciseId = idMap[e.exerciseId]; }));
     });
-    await DB.put('routines', { id: DB.uid('rt'), userId: targetUserId, planType: (routine.planType === 'cnp' ? 'guided' : routine.planType) || 'guided', name, days: newDays, order: Date.now(), createdAt: Date.now(), isPrimary: false });
+    const { id: _i, userId: _u, isPrimary: _p, days: _d, ...rest } = routine; // resto de datos del plan, tal cual
+    await DB.put('routines', { ...rest, id: DB.uid('rt'), userId: targetUserId, planType: (routine.planType === 'cnp' ? 'guided' : routine.planType) || 'guided', name, days: newDays, order: Date.now(), createdAt: Date.now(), isPrimary: false });
   }
   // Fusiona los días elegidos del plan del archivo DENTRO del plan activo del destino:
   // sustituye el día con el mismo nombre (conserva su id/orden) o lo añade si no existe.
@@ -346,6 +388,7 @@ const VData = (() => {
           if (!chosen.size) { UI.toast('Marca al menos un día', 'err'); return false; }
           const name = root.querySelector('input[name="planName"]').value.trim() || `Plan de ${sender}`;
           await createImportedPlan(app.mainUser.id, routine, chosen, name, payload.data.exercises);
+          await importPlaces(payload.data.places, (routine.days || []).filter(d => chosen.has(d.id)));
           await app.refreshRoutine();
           app.render();
           UI.toast('Plan añadido · actívalo en "El plan"');
@@ -458,11 +501,11 @@ const VData = (() => {
           const ids = [...root.querySelectorAll('[data-rt]:checked')].map(c => c.dataset.rt);
           const selected = routines.filter(r => ids.includes(r.id));
           if (!selected.length) { UI.toast('Selecciona al menos una', 'err'); return false; }
-          const refIds = selected.flatMap(r => (r.days || []).flatMap(d => (d.blocks || []).flatMap(b => (b.exercises || []).map(e => e.exerciseId))));
+          const allDays = selected.flatMap(r => r.days || []);
           download({
             format: FORMAT, version: 2, kind: 'routines', exportedAt: new Date().toISOString(),
             user: { name: app.mainUser.name, color: app.mainUser.color },
-            data: { exercises: exercisesByIds(allEx, refIds), routines: selected, sessions: [], progress: [] },
+            data: { exercises: exercisesForDays(allEx, allDays), routines: selected, sessions: [], progress: [], places: await placesForDays(allDays) },
           }, `traindia-rutinas-${stamp()}.json`);
           UI.toast(`${selected.length} rutina(s) exportadas`);
         }},
@@ -487,6 +530,9 @@ const VData = (() => {
     const routines = counts.routines || [];
     const planRoutine = routines.find(r => r.isPrimary) || routines[0] || null; // el plan del archivo
     const hasPlan = !!planRoutine;
+    // El resto de planes del archivo (una copia completa puede traer varios): se
+    // añaden como planes aparte, sin activar. Marcados por defecto: que no se pierdan.
+    const otherPlans = routines.filter(r => r !== planRoutine);
     const DATA_SECTIONS = [
       { key: 'exercises', label: 'Ejercicios' },
       { key: 'sessions', label: 'Sesiones' },
@@ -517,6 +563,11 @@ const VData = (() => {
         ${dayChecksHTML(planRoutine.days)}
       </div>
     </div>` : '';
+    const otherPlansSection = otherPlans.length ? `<div class="imp-sec">
+      <label class="check-row imp-sec-head"><input type="checkbox" data-sec="otherplans" checked><span>Otros planes <span class="dim">(${otherPlans.length})</span></span>${otherPlans.length > 1 ? '<button type="button" class="imp-toggle" data-toggle="otherplans">editar</button>' : ''}</label>
+      <p class="field-hint" style="margin:0 0 6px 30px">Se añaden como planes aparte, sin activarlos${otherPlans.length === 1 ? `: <strong>${UI.esc(otherPlans[0].name || 'Plan')}</strong>` : ''}.</p>
+      ${otherPlans.length > 1 ? `<div class="imp-items" data-items="otherplans" style="display:none">${otherPlans.map(r => `<label class="check-row sub"><input type="checkbox" data-item="otherplans" data-id="${UI.esc(String(r.id))}" checked><span>${UI.esc(r.name || 'Plan')} <span class="dim">· ${(r.days || []).length} días</span></span></label>`).join('')}</div>` : ''}
+    </div>` : '';
 
     UI.modal({
       title: 'Importar', size: 'wide',
@@ -536,7 +587,7 @@ const VData = (() => {
           <span class="field-label">Qué importar</span>
           <p class="field-hint" style="margin-top:0;margin-bottom:8px">Marca lo que quieras. En "Días" pulsa <em>editar</em> para elegir días sueltos y si van a tu plan o a uno nuevo.</p>
           <div style="margin-bottom:12px">
-            ${daysSection}${DATA_SECTIONS.map(sectionHTML).join('')}
+            ${daysSection}${otherPlansSection}${DATA_SECTIONS.map(sectionHTML).join('')}
             ${(!hasPlan && !hasData) ? '<p class="dim" style="padding:2px">El archivo no tiene datos.</p>' : ''}
           </div>
           ${hasData ? `<span class="field-label">Si ya tienes esos datos</span>
@@ -574,7 +625,16 @@ const VData = (() => {
             if (sel.length) { filtered[s.key] = sel; chosen.add(s.key); }
           }
 
-          if (!wantDays && !chosen.size) { UI.toast('Marca al menos algo que importar', 'err'); return false; }
+          // Otros planes
+          let extraPlans = [];
+          const opChk = root.querySelector('[data-sec="otherplans"]');
+          if (opChk && opChk.checked) {
+            const box = root.querySelector('[data-items="otherplans"]');
+            if (box) { const ids = new Set([...root.querySelectorAll('[data-item="otherplans"]:checked')].map(c => c.dataset.id)); extraPlans = otherPlans.filter(r => ids.has(String(r.id))); }
+            else extraPlans = otherPlans;
+          }
+
+          if (!wantDays && !chosen.size && !extraPlans.length) { UI.toast('Marca al menos algo que importar', 'err'); return false; }
 
           if (newGuest) {
             const name = (root.querySelector('input[name="guestName"]').value || '').trim();
@@ -594,6 +654,23 @@ const VData = (() => {
               if (daysDest === 'new') await createImportedPlan(tid, planRoutine, dayIds, planName, counts.exercises || []);
               else await mergeDaysIntoPlan(tid, planRoutine, dayIds, counts.exercises || []);
             }
+            for (const rt of extraPlans) {
+              // "Reemplazar" sobre el mismo perfil: si ya tienes ese plan (mismo id), se
+              // actualiza en su sitio (restaurar tu copia no lo duplica).
+              const existing = policy === 'overwrite' ? await DB.get('routines', rt.id) : null;
+              if (existing && existing.userId === tid) {
+                const idMap = await mapExercisesToCatalog(tid, counts.exercises || []);
+                const days = JSON.parse(JSON.stringify(rt.days || []));
+                days.forEach(d => (d.blocks || []).forEach(b => (b.exercises || []).forEach(e => { if (e.exerciseId && idMap[e.exerciseId]) e.exerciseId = idMap[e.exerciseId]; })));
+                await DB.put('routines', { ...rt, userId: tid, days, isPrimary: !!existing.isPrimary });
+              } else {
+                await createImportedPlan(tid, rt, new Set((rt.days || []).map(d => d.id)), rt.name || `Plan de ${sender}`, counts.exercises || []);
+              }
+            }
+          }
+          if (wantDays || extraPlans.length) {
+            const usedDays = [...(wantDays ? (planRoutine.days || []).filter(d => dayIds.has(d.id)) : []), ...extraPlans.flatMap(r => r.days || [])];
+            await importPlaces(counts.places, usedDays);
           }
 
           await app.loadUsers();
@@ -688,17 +765,12 @@ const VData = (() => {
 
   // ---------- EXPORTAR UN DÍA ----------
   async function doExportDay(app, day) {
-    const allEx = await DB.exercisesOf(app.mainUser.id);
-    const byId = Object.fromEntries(allEx.map(e => [e.id, e]));
-    const ids = new Set();
-    (day.blocks || []).forEach(bl => bl.exercises.forEach(x => {
-      if (x.exerciseId) { ids.add(x.exerciseId); (byId[x.exerciseId]?.substitutes || []).forEach(sid => ids.add(sid)); }
-    }));
-    const exercises = [...ids].map(id => byId[id]).filter(Boolean);
+    const owner = routineOwner(app, app.routine);
+    const allEx = await DB.exercisesOf(owner.id);
     download({
       format: FORMAT, version: 2, kind: 'day', exportedAt: new Date().toISOString(),
-      user: { name: app.mainUser.name, color: app.mainUser.color },
-      data: { day: JSON.parse(JSON.stringify(day)), exercises },
+      user: { name: owner.name, color: owner.color },
+      data: { day: JSON.parse(JSON.stringify(day)), exercises: exercisesForDays(allEx, [day]), places: await placesForDays([day]) },
     }, `traindia-dia-${day.name}-${stamp()}.json`);
     UI.toast('Día exportado');
   }
@@ -730,32 +802,33 @@ const VData = (() => {
     const byName = new Map(local.map(e => [e.name.trim().toLowerCase(), e]));
     const idMap = {};
     const created = [], updated = [];
+    // Campos que son de ESTE catálogo y no se copian del archivo; todo lo demás
+    // (vídeos, técnica, métricas y cualquier campo futuro) viaja tal cual.
+    const OWN = new Set(['id', 'userId', 'substitutes', 'createdAt', 'isDefault']);
+    const payloadOf = (ie) => Object.fromEntries(Object.entries(ie).filter(([k, v]) => !OWN.has(k) && v !== undefined));
     for (const ie of (importedExercises || [])) {
       const key = (ie.name || '').trim().toLowerCase();
+      if (!key) continue;
       let ex = byName.get(key);
+      const vids = DB.exVideos(ie); // vídeos "cómo se hace" (formato nuevo y el antiguo videoUrl)
       if (!ex) {
-        ex = { id: DB.uid('ex'), userId, name: (ie.name || '').trim(), muscleGroup: ie.muscleGroup || 'General', type: ie.type || 'weight', substitutes: [], createdAt: Date.now() };
-        if (Array.isArray(ie.metrics)) ex.metrics = ie.metrics.slice(); // conservar datos a registrar (tiempo)
-        const vids = DB.exVideos(ie); // vídeos "cómo se hace" (formato nuevo y el antiguo videoUrl)
-        if (vids.length) { ex.videos = vids; ex.videoUrl = vids[0].url; }
-        if (ie.howto) ex.howto = ie.howto;             // notas de técnica
+        ex = { ...payloadOf(ie), id: DB.uid('ex'), userId, name: (ie.name || '').trim(), muscleGroup: ie.muscleGroup || 'General', type: ie.type || 'weight', substitutes: [], createdAt: Date.now() };
+        if (vids.length) { ex.videos = vids.map(v => ({ ...v })); ex.videoUrl = vids[0].url; }
         await DB.put('exercises', ex); byName.set(key, ex); created.push({ ex, srcSubs: ie.substitutes || [] });
       } else if (overwrite) {
-        // reemplazar: vuelca los datos importados en tu ejercicio (mantiene id y createdAt)
-        const vids = DB.exVideos(ie);
-        if (vids.length) { ex.videos = vids; ex.videoUrl = vids[0].url; }
-        if (ie.howto) ex.howto = ie.howto;
-        if (ie.muscleGroup) ex.muscleGroup = ie.muscleGroup;
-        if (ie.type) ex.type = ie.type;
-        if (Array.isArray(ie.metrics)) ex.metrics = ie.metrics.slice();
-        else if (ie.type && ie.type !== 'time') delete ex.metrics; // un no-cardio no lleva métricas
+        // reemplazar: vuelca los datos importados en tu ejercicio (mantiene id, nombre y createdAt)
+        Object.assign(ex, payloadOf(ie), { name: ex.name });
+        if (vids.length) { ex.videos = vids.map(v => ({ ...v })); ex.videoUrl = vids[0].url; }
+        if (!Array.isArray(ie.metrics) && ie.type && ie.type !== 'time' && ie.type !== 'check') delete ex.metrics; // sin datos extra
         updated.push({ ex, srcSubs: ie.substitutes || [] });
       }
-      // Enriquecer SIN pisar: si el ejercicio ya existía y no tenía vídeo/técnica, se rellenan.
+      // Enriquecer SIN pisar: añade los vídeos que no tengas (por URL) y la técnica si no había.
       if (!overwrite && !created.some(c => c.ex.id === ex.id)) {
         let touched = false;
-        const vids = DB.exVideos(ie);
-        if (vids.length && !DB.exVideos(ex).length) { ex.videos = vids; ex.videoUrl = vids[0].url; touched = true; }
+        const mine = DB.exVideos(ex).map(v => ({ ...v }));
+        const urls = new Set(mine.map(v => (v.url || '').trim()));
+        vids.forEach(v => { if (!urls.has((v.url || '').trim())) { mine.push({ ...v }); urls.add((v.url || '').trim()); touched = true; } });
+        if (touched) { ex.videos = mine; ex.videoUrl = mine[0].url; }
         if (ie.howto && !ex.howto) { ex.howto = ie.howto; touched = true; }
         if (touched) await DB.put('exercises', ex);
       }
@@ -786,7 +859,7 @@ const VData = (() => {
     const target = rt.days.find(d => d.id === day.id) || rt.days.find(d => (d.name || '').toLowerCase() === (day.name || '').toLowerCase());
     const exCount = (src.blocks || []).reduce((n, b) => n + (b.exercises ? b.exercises.length : 0), 0);
 
-    const persist = async (dayId) => { await DB.put('routines', rt); await app.refreshRoutine(); app.go('day', { dayId }, true); };
+    const persist = async (dayId) => { await DB.put('routines', rt); await importPlaces(payload.data.places, [day]); await app.refreshRoutine(); app.go('day', { dayId }, true); };
 
     const actions = [{ label: 'Cancelar', kind: 'ghost' }];
     if (target) {
