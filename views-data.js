@@ -736,12 +736,14 @@ const VData = (() => {
       if (!ex) {
         ex = { id: DB.uid('ex'), userId, name: (ie.name || '').trim(), muscleGroup: ie.muscleGroup || 'General', type: ie.type || 'weight', substitutes: [], createdAt: Date.now() };
         if (Array.isArray(ie.metrics)) ex.metrics = ie.metrics.slice(); // conservar datos a registrar (tiempo)
-        if (ie.videoUrl) ex.videoUrl = ie.videoUrl;   // vídeo "cómo se hace"
+        const vids = DB.exVideos(ie); // vídeos "cómo se hace" (formato nuevo y el antiguo videoUrl)
+        if (vids.length) { ex.videos = vids; ex.videoUrl = vids[0].url; }
         if (ie.howto) ex.howto = ie.howto;             // notas de técnica
         await DB.put('exercises', ex); byName.set(key, ex); created.push({ ex, srcSubs: ie.substitutes || [] });
       } else if (overwrite) {
         // reemplazar: vuelca los datos importados en tu ejercicio (mantiene id y createdAt)
-        if (ie.videoUrl) ex.videoUrl = ie.videoUrl;
+        const vids = DB.exVideos(ie);
+        if (vids.length) { ex.videos = vids; ex.videoUrl = vids[0].url; }
         if (ie.howto) ex.howto = ie.howto;
         if (ie.muscleGroup) ex.muscleGroup = ie.muscleGroup;
         if (ie.type) ex.type = ie.type;
@@ -752,7 +754,8 @@ const VData = (() => {
       // Enriquecer SIN pisar: si el ejercicio ya existía y no tenía vídeo/técnica, se rellenan.
       if (!overwrite && !created.some(c => c.ex.id === ex.id)) {
         let touched = false;
-        if (ie.videoUrl && !ex.videoUrl) { ex.videoUrl = ie.videoUrl; touched = true; }
+        const vids = DB.exVideos(ie);
+        if (vids.length && !DB.exVideos(ex).length) { ex.videos = vids; ex.videoUrl = vids[0].url; touched = true; }
         if (ie.howto && !ex.howto) { ex.howto = ie.howto; touched = true; }
         if (touched) await DB.put('exercises', ex);
       }
