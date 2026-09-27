@@ -393,33 +393,143 @@ const UI = (() => {
   }
 
   // ---- Selector de ejercicios con buscador (móvil-friendly) ----
-  // pickExercise({ exercises, title, allowNew, onPick }) → onPick(ex) o onPick({isNew, name, muscleGroup, type})
-  const TYPE_SHORT = { weight: 'peso+reps', reps: 'reps', time: 'tiempo' };
-  function pickExercise({ exercises, title = 'Elegir ejercicio', allowNew = true, onPick, lockGroup = null, categories = null }) {
+  // pickExercise({ exercises, title, allowNew, onPick, lockGroup, categories, others, withSets })
+  //   → onPick(ex) para uno existente, u onPick({ isNew, name, muscleGroup, type, sets, notes }) al crear.
+  // others: ejercicios de OTRAS categorías (se ofrecen al buscar, en su propia sección).
+  // withSets: el formulario de crear pide también series y detalle (para un día del plan).
+  // known: TODO el catálogo, para avisar de duplicados (con inDay: true si ya está en el día).
+  const TYPE_SHORT = { weight: 'peso+reps', reps: 'reps', time: 'tiempo', check: 'hecho/no' };
+  const NEW_TYPES = [
+    { v: 'weight', l: 'Peso + reps', ej: 'Press, sentadilla, remo…', ph: '4×10' },
+    { v: 'reps', l: 'Repeticiones', ej: 'Dominadas, flexiones…', ph: '3×12' },
+    { v: 'time', l: 'Tiempo', ej: 'Plancha, carrera, colgado…', ph: '3×30s' },
+    { v: 'check', l: 'Hecho / no hecho', ej: 'Movilidad, estiramientos…', ph: '' },
+  ];
+  // Tipo probable por el nombre (o la categoría): el usuario lo puede cambiar.
+  function guessType(name, group) {
+    const n = norm(name || ''), g = norm(group || '');
+    if (/estir|movilidad|activacion|articular|calentamiento|foam|rodillo/.test(n) || /estiramiento|movilidad|calentamiento/.test(g)) return 'check';
+    if (/plancha|carrera|correr|cinta|bici|eliptica|remo ergo|comba|colgad|suspension|hang|hold|isometric|sentadilla isometrica|\bmin\b|km/.test(n) || /carrera|cardio|isometric/.test(g)) return 'time';
+    if (/dominad|flexion|fondos|burpee|abdominal|crunch|zancada sin|salto|jump|push ?up|pull ?up|chin ?up/.test(n)) return 'reps';
+    return 'weight';
+  }
+  function pickExercise({ exercises, title = 'Elegir ejercicio', allowNew = true, onPick, lockGroup = null, categories = null, others = [], withSets = false, known = null }) {
     const sorted = [...exercises].sort((a, b) => a.name.localeCompare(b.name));
-    modal({
+    const rest = [...(others || [])].sort((a, b) => a.name.localeCompare(b.name));
+    const everyone = [...sorted, ...rest];
+    const pool = known || everyone; // para detectar duplicados
+    const cats = Array.isArray(categories) ? categories : null;
+    const row = (e) => `<button class="picker-row" data-id="${esc(e.id)}"><span class="picker-name">${esc(e.name)}</span><span class="picker-tag">${esc(e.muscleGroup || 'General')} · ${TYPE_SHORT[e.type] || e.type}</span></button>`;
+    let overlay;
+    overlay = modal({
       title, size: 'wide',
-      bodyHTML: `<input class="inp picker-search" id="exSearch" placeholder="🔎 Buscar ejercicio…" autocomplete="off">
-        <div class="picker-list" id="pickerList"></div>`,
+      bodyHTML: `<div id="pkList">
+          <input class="inp picker-search" id="exSearch" placeholder="🔎 Buscar ejercicio…" autocomplete="off">
+          ${allowNew ? `<button type="button" class="picker-new" id="pkNewBtn">${icon('plus', 16)} <span>Nuevo ejercicio</span></button>` : ''}
+          <div class="picker-list" id="pickerList"></div>
+        </div>
+        <div id="pkNew" hidden></div>`,
       actions: [{ label: 'Cerrar', kind: 'ghost' }],
       onMount: (root) => {
         const search = root.querySelector('#exSearch');
         const listEl = root.querySelector('#pickerList');
+        const listBox = root.querySelector('#pkList');
+        const newBox = root.querySelector('#pkNew');
+        const newBtn = root.querySelector('#pkNewBtn');
+        const done = (v) => { closeModal(overlay); onPick(v); };
+
         const draw = (q) => {
           const ql = norm(q);
-          const items = sorted.filter(e => !ql || norm(e.name).includes(ql) || norm(e.muscleGroup || '').includes(ql));
-          let html = items.map(e => `<button class="picker-row" data-id="${esc(e.id)}"><span class="picker-name">${esc(e.name)}</span><span class="picker-tag">${esc(e.muscleGroup || '')} · ${TYPE_SHORT[e.type] || e.type}</span></button>`).join('');
-          const exact = sorted.some(e => norm(e.name) === norm(q));
-          if (allowNew && ql && !exact) html += `<button class="picker-row new" data-new="1"><span class="picker-name">➕ Crear “${esc(q.trim())}”</span></button>`;
-          listEl.innerHTML = html || '<div class="empty-state"><p class="dim">Sin resultados.</p></div>';
-          listEl.querySelectorAll('[data-id]').forEach(b => b.addEventListener('click', () => { closeModal(root); onPick(sorted.find(e => e.id === b.dataset.id)); }));
-          const nb = listEl.querySelector('[data-new]');
-          if (nb) nb.addEventListener('click', async () => {
-            const nu = await newExercisePrompt(q.trim(), lockGroup, categories);
-            if (nu) { closeModal(root); onPick({ isNew: true, ...nu }); } // cierra el picker concreto (no el de arriba por la carrera de microtareas)
-          });
+          const match = (e) => !ql || norm(e.name).includes(ql) || norm(e.muscleGroup || '').includes(ql);
+          const mine = sorted.filter(match);
+          const fuera = ql ? rest.filter(match) : [];
+          let html = mine.map(row).join('');
+          if (fuera.length) html += `<div class="picker-sec">En otras categorías</div>` + fuera.map(row).join('');
+          listEl.innerHTML = html || `<div class="empty-state"><p class="dim">${ql ? 'Ningún ejercicio con ese nombre.' : 'No hay ejercicios en esta categoría todavía.'}</p></div>`;
+          listEl.querySelectorAll('[data-id]').forEach(b => b.addEventListener('click', () => done(everyone.find(e => e.id === b.dataset.id))));
+          if (newBtn) {
+            const exact = everyone.some(e => norm(e.name) === ql);
+            newBtn.querySelector('span').textContent = q.trim() && !exact ? `Crear «${q.trim()}»` : 'Nuevo ejercicio';
+            newBtn.classList.toggle('hot', !!q.trim() && !exact && !mine.length && !fuera.length);
+          }
         };
+
+        // ---- Formulario de crear, dentro del mismo modal ----
+        const openNew = () => {
+          const name0 = search.value.trim();
+          let type = guessType(name0, lockGroup);
+          const catHTML = lockGroup
+            ? `<div class="pk-cat"><span class="field-label">Categoría</span><span class="pk-cat-chip">${esc(lockGroup)}</span></div>`
+            : (cats && cats.length
+              ? field('Categoría', `<select class="inp" name="muscleGroup" id="pkCat">${cats.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('')}<option value="__new__">➕ Otra categoría…</option></select>`)
+                + `<div id="pkNewCat" hidden>${field('Nueva categoría', input('newCat', '', { placeholder: 'Ej: Movilidad' }))}</div>`
+              : field('Categoría', input('muscleGroup', '', { placeholder: 'Ej: Pecho, Cardio…' })));
+          newBox.innerHTML = `
+            <button type="button" class="pk-back" id="pkBack">‹ Volver a la lista</button>
+            <div id="pkForm">
+              ${field('Nombre', `<input class="inp" name="name" id="pkName" value="${esc(name0)}" placeholder="Ej: Remo con mancuerna" autocomplete="off" maxlength="60">`)}
+              <div class="pk-dup" id="pkDup" hidden></div>
+              ${catHTML}
+              <span class="field-label">Tipo</span>
+              <div class="pk-types" id="pkTypes">${NEW_TYPES.map(t => `<button type="button" class="pk-type" data-type="${t.v}"><strong>${t.l}</strong><span>${t.ej}</span></button>`).join('')}</div>
+              ${withSets ? `<div class="pk-row2">
+                ${field('Series', `<input class="inp" name="sets" id="pkSets" autocomplete="off" maxlength="20">`)}
+                ${field('Detalle (opcional)', `<input class="inp" name="notes" placeholder="Descanso, tempo, carga…" autocomplete="off" maxlength="90">`)}
+              </div>` : ''}
+              <button type="button" class="btn primary block" id="pkCreate">${withSets ? 'Crear y añadir' : 'Crear'}</button>
+              <p class="field-hint" style="text-align:center">Vídeos, técnica y suplentes: luego, desde <strong>Ejercicios</strong>.</p>
+            </div>`;
+          const nameIn = newBox.querySelector('#pkName');
+          const dup = newBox.querySelector('#pkDup');
+          const setsIn = newBox.querySelector('#pkSets');
+          let setsTouched = false;
+          if (setsIn) setsIn.addEventListener('input', () => { setsTouched = true; });
+          const paintType = () => {
+            newBox.querySelectorAll('.pk-type').forEach(b => b.classList.toggle('on', b.dataset.type === type));
+            if (setsIn) setsIn.placeholder = (NEW_TYPES.find(t => t.v === type) || {}).ph || '';
+          };
+          let typeTouched = false;
+          newBox.querySelectorAll('.pk-type').forEach(b => b.addEventListener('click', () => { type = b.dataset.type; typeTouched = true; paintType(); }));
+          const checkDup = () => {
+            const n = norm(nameIn.value.trim());
+            const same = n && pool.find(e => norm(e.name) === n);
+            dup.hidden = !same;
+            if (same && same.inDay) {
+              dup.innerHTML = `<span><strong>${esc(same.name)}</strong> ya está en este día.</span>`;
+            } else if (same) {
+              dup.innerHTML = `<span>Ya tienes <strong>${esc(same.name)}</strong> (${esc(same.muscleGroup || 'General')}).</span><button type="button" class="btn small primary" data-use>Usar ese</button>`;
+              dup.querySelector('[data-use]').addEventListener('click', () => done(same));
+            }
+            if (!typeTouched) { type = guessType(nameIn.value, lockGroup); paintType(); }
+          };
+          nameIn.addEventListener('input', checkDup);
+          const catSel = newBox.querySelector('#pkCat');
+          if (catSel) catSel.addEventListener('change', () => { newBox.querySelector('#pkNewCat').hidden = catSel.value !== '__new__'; });
+          newBox.querySelector('#pkBack').addEventListener('click', () => { newBox.hidden = true; listBox.hidden = false; search.value = nameIn.value; draw(search.value); });
+          newBox.querySelector('#pkCreate').addEventListener('click', () => {
+            const d = readForm(newBox.querySelector('#pkForm'));
+            const name = (d.name || '').trim();
+            if (!name) { toast('Escribe un nombre', 'err'); nameIn.focus(); return; }
+            const same = pool.find(e => norm(e.name) === norm(name));
+            if (same && same.inDay) { toast('Ese ejercicio ya está en este día', 'err'); return; }
+            if (same) { done(same); return; } // ya existe: se usa ese, nunca se duplica
+            let group = lockGroup || d.muscleGroup || 'General';
+            if (!lockGroup && cats && d.muscleGroup === '__new__') group = (d.newCat || '').trim() || 'General';
+            done({ isNew: true, name, muscleGroup: String(group).trim() || 'General', type, sets: (d.sets || '').trim(), notes: (d.notes || '').trim() || undefined });
+          });
+          paintType(); checkDup();
+          listBox.hidden = true; newBox.hidden = false;
+          setTimeout(() => { (name0 ? (setsIn || nameIn) : nameIn).focus(); }, 80);
+        };
+        if (newBtn) newBtn.addEventListener('click', openNew);
         search.addEventListener('input', () => draw(search.value));
+        search.addEventListener('keydown', (e) => {
+          if (e.key !== 'Enter') return;
+          e.preventDefault();
+          const first = listEl.querySelector('[data-id]');
+          if (first && listEl.querySelectorAll('[data-id]').length === 1) first.click();
+          else if (allowNew && search.value.trim() && !listEl.querySelector('[data-id]')) openNew();
+        });
         draw('');
         setTimeout(() => search.focus(), 120);
       },
@@ -452,47 +562,6 @@ const UI = (() => {
   // Botón con aspecto de select que abre el buscador.
   function selectButton(id, label) {
     return `<button type="button" class="select-btn" id="${esc(id)}">${esc(label)}<span class="select-caret">▾</span></button>`;
-  }
-
-  function newExercisePrompt(name, lockedGroup, categories) {
-    const cats = Array.isArray(categories) ? categories : null;
-    let groupHTML;
-    if (lockedGroup) {
-      groupHTML = `<p class="field-hint" style="margin-top:0">Categoría: <strong>${esc(lockedGroup)}</strong></p>`;
-    } else if (cats && cats.length) {
-      groupHTML = field('Categoría', `<select class="inp" name="muscleGroup" id="npCat">${cats.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('')}<option value="__new__">➕ Otra categoría…</option></select>`)
-        + `<div id="npNewCat" style="display:none">${field('Nueva categoría', input('newCat', '', { placeholder: 'Ej: Cardio' }))}</div>`;
-    } else {
-      groupHTML = field('Grupo muscular', input('muscleGroup', '', { placeholder: 'Ej: Pecho, Cardio…' }));
-    }
-    return new Promise((resolve) => {
-      modal({
-        title: 'Nuevo ejercicio',
-        bodyHTML: `<div id="npForm">
-          ${field('Nombre', input('name', name))}
-          ${groupHTML}
-          ${field('Tipo', select('type', [
-            { value: 'weight', label: 'Peso + repeticiones' },
-            { value: 'reps', label: 'Repeticiones (peso corporal)' },
-            { value: 'time', label: 'Tiempo / duración' },
-            { value: 'check', label: 'Hecho / no hecho (sin números)' }], 'weight'))}
-        </div>`,
-        actions: [
-          { label: 'Cancelar', kind: 'ghost', onClick: () => resolve(null) },
-          { label: 'Crear', kind: 'primary', onClick: (root) => {
-            const d = readForm(root.querySelector('#npForm'));
-            if (!d.name.trim()) { toast('Escribe un nombre', 'err'); return false; }
-            let group = lockedGroup || d.muscleGroup || 'General';
-            if (!lockedGroup && cats && d.muscleGroup === '__new__') group = (d.newCat || '').trim() || 'General';
-            resolve({ name: d.name.trim(), muscleGroup: group.trim ? group.trim() : group, type: d.type });
-          }},
-        ],
-        onMount: (cats && !lockedGroup) ? (root) => {
-          const sel = root.querySelector('#npCat'); const box = root.querySelector('#npNewCat');
-          sel.addEventListener('change', () => { box.style.display = sel.value === '__new__' ? '' : 'none'; });
-        } : undefined,
-      });
-    });
   }
 
   // ---- Formato de fecha legible ----
@@ -670,7 +739,7 @@ const UI = (() => {
     esc, norm, toast, modal, closeModal, confirm,
     field, input, textarea, select, readForm,
     colorPicker, bindColorPicker, avatar, COLORS, ESSENTIALS,
-    pickExercise, newExercisePrompt, prompt, askAI, icon, pickFromList, selectButton,
+    pickExercise, prompt, askAI, icon, pickFromList, selectButton,
     lineChart, fmtDate, fmtDateShort, makeSortable,
   };
 })();
