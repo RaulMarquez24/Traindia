@@ -690,6 +690,13 @@ body.modal-open { overflow: hidden; }
 /* Sin marcar en pleno entreno: borde de "pendiente" como el resto de series. */
 .set-wrap.pend .chk-seg { border-color: var(--moderate); }
 .set-wrap.chk-skip .set-check-txt { color: var(--priority); font-weight: 600; }
+/* Datos opcionales bajo la marca: el tiempo va como min:seg en un solo bloque. */
+.set-row-check + .set-extra { margin-top: 6px; }
+.chk-time { display: inline-flex; align-items: center; gap: 4px; flex: 1 1 110px; }
+.chk-time .set-f { flex: 1 1 46px; }
+.chk-f { display: inline-flex; align-items: center; gap: 4px; flex: 1 1 80px; }
+.chk-f .set-f { flex: 1 1 46px; }
+.chk-f .set-x { font-size: 12px; }
 
 /* ---- Semáforo: respuesta del cuerpo al día siguiente ---- */
 .resp-chip { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 999px; border: 1px solid; }

@@ -919,11 +919,19 @@ const VPlan = (() => {
           { value: 'check', label: 'Hecho / no hecho (sin números)' }], ex ? ex.type : 'weight'),
           'Determina qué campos verás al registrar la sesión.')}
         ${(() => {
+          const tipo = ex ? ex.type : 'weight';
           const chosen = (ex && Array.isArray(ex.metrics)) ? ex.metrics : [];
-          return `<div id="exMetrics" style="${(ex ? ex.type : 'weight') === 'time' ? '' : 'display:none'}">
+          const opts = (fields, attr) => fields.map(f => `<label class="metric-opt"><input type="checkbox" ${attr}="${f.key}"${chosen.includes(f.key) ? ' checked' : ''}><span>${f.label}${f.unit ? ` <em>(${f.unit})</em>` : ''}</span></label>`).join('');
+          // Un bloque por tipo que admite datos extra; se enseña el del tipo elegido.
+          return `<div id="exMetrics" style="${tipo === 'time' ? '' : 'display:none'}">
             <span class="field-label">Datos a registrar (además del tiempo)</span>
-            <div class="metric-opts">${VSessions.TIME_FIELDS.map(f => `<label class="metric-opt"><input type="checkbox" data-mk="${f.key}"${chosen.includes(f.key) ? ' checked' : ''}><span>${f.label}${f.unit ? ` <em>(${f.unit})</em>` : ''}</span></label>`).join('')}</div>
+            <div class="metric-opts">${opts(VSessions.TIME_FIELDS, 'data-mk')}</div>
             <p class="field-hint">Solo se mostrarán estos al registrar. También puedes cambiarlos durante el entreno.</p>
+          </div>
+          <div id="exMetricsChk" style="${tipo === 'check' ? '' : 'display:none'}">
+            <span class="field-label">Datos a registrar (además de la marca)</span>
+            <div class="metric-opts">${opts(VSessions.CHECK_FIELDS, 'data-mkc')}</div>
+            <p class="field-hint">Opcional: cuánto duró, con qué peso… Si no eliges ninguno, solo se marca hecho o no hecho.</p>
           </div>`;
         })()}
         <div class="field">
@@ -949,7 +957,9 @@ const VPlan = (() => {
           }
           const metrics = d.type === 'time'
             ? VSessions.TIME_FIELDS.map(f => f.key).filter(k => root.querySelector(`#exMetrics [data-mk="${k}"]`)?.checked)
-            : undefined;
+            : d.type === 'check'
+              ? VSessions.CHECK_FIELDS.map(f => f.key).filter(k => root.querySelector(`#exMetricsChk [data-mkc="${k}"]`)?.checked)
+              : undefined;
           const videos = vids
             .map(v => ({ url: (v.url || '').trim(), label: (v.label || '').trim() }))
             .filter(v => v.url)
@@ -972,7 +982,11 @@ const VPlan = (() => {
         root.querySelector('#addVid').addEventListener('click', () => { vids.push({ url: '', label: '' }); renderVids(root); });
         const typeSel = root.querySelector('#exForm select[name="type"]');
         const exMetrics = root.querySelector('#exMetrics');
-        if (typeSel && exMetrics) typeSel.addEventListener('change', () => { exMetrics.style.display = typeSel.value === 'time' ? '' : 'none'; });
+        const exMetricsChk = root.querySelector('#exMetricsChk');
+        if (typeSel && exMetrics) typeSel.addEventListener('change', () => {
+          exMetrics.style.display = typeSel.value === 'time' ? '' : 'none';
+          if (exMetricsChk) exMetricsChk.style.display = typeSel.value === 'check' ? '' : 'none';
+        });
         const catBtn = root.querySelector('#exCatBtn');
         const catHidden = root.querySelector('#exForm input[name="muscleGroup"]');
         catBtn.addEventListener('click', () => {
