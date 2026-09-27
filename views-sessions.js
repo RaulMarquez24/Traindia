@@ -1193,8 +1193,10 @@ const VSessions = (() => {
       pintarEstado(root, s);
     };
 
-    // Autoguardado inmediato en cada tecla (delegado en root: sobrevive al redibujado).
-    root.addEventListener('input', () => { syncLive(root, s); app.persistLive(); updateTotalTimes(root); pintarEstado(root, s); });
+    // Autoguardado inmediato en cada tecla (delegado en la vista: sobrevive al
+    // redibujado de la lista). En .view y no en root: root (#mainContent) persiste
+    // entre pantallas y se acumularía un listener por cada visita.
+    (root.querySelector('.view') || root).addEventListener('input', () => { syncLive(root, s); app.persistLive(); updateTotalTimes(root); pintarEstado(root, s); });
 
     bindEntries();
     pintarEstado(root, s);
