@@ -656,6 +656,24 @@ textarea.inp { resize: vertical; line-height: 1.4; }
 .select-btn:active { background: var(--line-soft); }
 .select-caret { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: var(--ink-dim); pointer-events: none; }
 .picker-name { font-size: 15px; font-weight: 600; color: var(--ink); }
+/* Crear ejercicio dentro del selector */
+.picker-new { display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; margin-top: 10px; padding: 11px; border: 1.5px dashed var(--strong); border-radius: 10px; background: transparent; color: var(--strong); font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; }
+.picker-new.hot { background: var(--strong-bg); border-style: solid; }
+.picker-new span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.picker-sec { margin: 12px 2px 2px; font-family: 'IBM Plex Mono', monospace; font-size: 10px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-dim); }
+#pkList[hidden], #pkNew[hidden], .pk-dup[hidden], #pkNewCat[hidden] { display: none; }
+.pk-back { background: none; border: 0; padding: 2px 0 12px; color: var(--strong); font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
+.pk-dup { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: -6px 0 14px; padding: 9px 12px; border-radius: 10px; background: var(--moderate-bg); color: var(--ink); font-size: 13px; }
+.pk-cat { margin-bottom: 14px; }
+.pk-cat .field-label { display: block; }
+.pk-cat-chip { display: inline-block; padding: 6px 12px; border-radius: 999px; background: var(--strong-bg); color: var(--strong); font-weight: 700; font-size: 13px; }
+.pk-types { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-bottom: 14px; }
+.pk-type { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg-card); color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
+.pk-type strong { font-size: 14px; }
+.pk-type span { font-size: 11.5px; color: var(--ink-dim); line-height: 1.3; }
+.pk-type.on { border-color: var(--strong); background: var(--strong-bg); box-shadow: inset 0 0 0 1px var(--strong); }
+.pk-type.on strong { color: var(--strong); }
+.pk-row2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr); gap: 10px; }
 .picker-tag { font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: var(--ink-dim); letter-spacing: 0.04em; text-transform: uppercase; }
 
 /* ---- Toast ---- */

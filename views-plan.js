@@ -456,24 +456,28 @@ const VPlan = (() => {
     };
     const syncSafe = (root) => { try { sync(root); } catch (e) { readMeta(root); } };
 
-    // Abre el buscador filtrado a una categoría: solo ejercicios de ese grupo y no
-    // presentes ya en el día. Crear uno nuevo lo fija a esa categoría.
+    // Abre el buscador de una categoría: sus ejercicios (no presentes ya en el día)
+    // y, al buscar, también los de otras categorías. Crear uno nuevo lo fija a esa
+    // categoría y trae ya series y detalle. cb(ex, { sets, notes }).
     const openPicker = (category, cb) => {
       const inDay = new Set();
       draft.blocks.forEach(bl => (bl.exercises || []).forEach(x => { if (x.exerciseId) inDay.add(x.exerciseId); }));
       const opts = catalog.filter(e => (e.muscleGroup || 'General') === category && !inDay.has(e.id));
-      UI.pickExercise({ exercises: opts, title: `Añadir a ${category}`, lockGroup: category, onPick: async (picked) => {
+      const others = catalog.filter(e => (e.muscleGroup || 'General') !== category && !inDay.has(e.id));
+      const known = catalog.map(e => ({ ...e, inDay: inDay.has(e.id) }));
+      UI.pickExercise({ exercises: opts, others, known, withSets: true, title: `Añadir a ${category}`, lockGroup: category, onPick: async (picked) => {
         let ex = picked;
         if (picked.isNew) {
           const clash = catalog.find(e => (e.name || '').trim().toLowerCase() === picked.name.trim().toLowerCase());
           if (clash) { ex = clash; UI.toast('Ese ejercicio ya existe; se ha usado el existente'); }
           else {
-            ex = { id: DB.uid('ex'), userId: app.activeUser.id, name: picked.name, muscleGroup: category, type: picked.type, createdAt: Date.now() };
+            ex = { id: DB.uid('ex'), userId: app.activeUser.id, name: picked.name, muscleGroup: category, type: picked.type, substitutes: [], createdAt: Date.now() };
             await DB.put('exercises', ex); catalog.push(ex);
             if (!categories.includes(category)) categories.push(category);
+            UI.toast(`«${ex.name}» creado y añadido`);
           }
         }
-        cb(ex);
+        cb(ex, { sets: picked.sets || '', notes: picked.notes });
       } });
     };
 
@@ -484,7 +488,7 @@ const VPlan = (() => {
         sync(root);
         const bi = +b.dataset.addEx;
         const cat = draft.blocks[bi].label || 'General';
-        openPicker(cat, (ex) => { draft.blocks[bi].exercises.push({ exerciseId: ex.id, name: ex.name, type: ex.type, sets: '', notes: '', priority: false, optional: false }); rerender(root); });
+        openPicker(cat, (ex, extra = {}) => { draft.blocks[bi].exercises.push({ exerciseId: ex.id, name: ex.name, type: ex.type, sets: extra.sets || '', notes: extra.notes || '', priority: false, optional: false }); rerender(root); });
       }));
       root.querySelectorAll('[data-block-cat]').forEach(b => b.addEventListener('click', () => {
         sync(root);
@@ -521,7 +525,12 @@ const VPlan = (() => {
         sync(root);
         const w = b.closest('.ed-ex'); const bi = +w.dataset.bi, ei = +w.dataset.ei;
         const cat = draft.blocks[bi].label || 'General';
-        openPicker(cat, (ex) => { const row = draft.blocks[bi].exercises[ei]; row.name = ex.name; row.exerciseId = ex.id; row.type = ex.type; rerender(root); });
+        openPicker(cat, (ex, extra = {}) => {
+          const row = draft.blocks[bi].exercises[ei]; row.name = ex.name; row.exerciseId = ex.id; row.type = ex.type;
+          if (extra.sets && !row.sets) row.sets = extra.sets;       // solo rellena lo que estaba vacío
+          if (extra.notes && !row.notes) row.notes = extra.notes;
+          rerender(root);
+        });
       }));
       const placeBtn = root.querySelector('#dayPlaceBtn');
       if (placeBtn) placeBtn.addEventListener('click', () => {
