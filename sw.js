@@ -1,10 +1,10 @@
 // Service Worker - Traindía
-// La versión visible de la app es v2.36.4 (ver pie en la app).
+// La versión visible de la app es v2.36.5 (ver pie en la app).
 // CACHE_NAME es solo la clave de caché: súbele el número de build en cada deploy
 // (build-6, build-7, …) para que los cambios lleguen a las apps ya instaladas.
 // Los fetch usan {cache:'reload'} para saltarse la caché HTTP del navegador/Pages
 // y traer SIEMPRE la última versión con red (offline tira de CACHE_NAME).
-const CACHE_NAME = 'traindia-build-179';
+const CACHE_NAME = 'traindia-build-180';
 // Buzón temporal para archivos que llegan por "Compartir" desde otra app
 // (WhatsApp, Archivos…). No se borra al activar: lo lee y vacía la app.
 const SHARE_CACHE = 'traindia-share-inbox';
@@ -66,7 +66,10 @@ self.addEventListener('fetch', (event) => {
     event.respondWith((async () => {
       try {
         const fd = await req.formData();
-        const file = fd.get('file');
+        // El archivo puede venir en 'file' o (según la app que comparte) en otro
+        // campo: se coge el primer File que haya.
+        let file = fd.get('file');
+        if (!(file && file.arrayBuffer)) { for (const [, v] of fd.entries()) { if (v && v.arrayBuffer) { file = v; break; } } }
         const cache = await caches.open(SHARE_CACHE);
         if (file && file.arrayBuffer) {
           // Se guarda el binario tal cual + su nombre/tipo: la app decide si es un
@@ -76,11 +79,13 @@ self.addEventListener('fetch', (event) => {
             headers: {
               'Content-Type': file.type || 'application/octet-stream',
               'X-Share-Name': encodeURIComponent(file.name || 'archivo'),
+              'X-Share-Kind': 'file',
             },
           }));
         } else {
-          const text = fd.get('text') || '';
-          if (text) await cache.put(SHARE_KEY, new Response(text, { headers: { 'Content-Type': 'text/plain' } }));
+          // Solo llegó texto (título/texto del mensaje), sin archivo.
+          const text = [fd.get('title'), fd.get('text')].filter(Boolean).join('\n');
+          if (text) await cache.put(SHARE_KEY, new Response(text, { headers: { 'Content-Type': 'text/plain', 'X-Share-Kind': 'text' } }));
         }
       } catch (e) { /* si algo falla, entra igual y avisa la app */ }
       return Response.redirect(new URL('./?shared=1', self.location).href, 303);
