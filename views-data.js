@@ -284,7 +284,7 @@ const VData = (() => {
           });
           inp.click();
         });
-        setTimeout(() => root.querySelector('#impText').focus(), 120);
+        UI.autoFocus(root.querySelector('#impText')); // en móvil no: el teclado tapaba el botón de elegir archivo
       },
     });
   }

@@ -72,6 +72,16 @@ const UI = (() => {
     toastTimer = setTimeout(() => { el.className = 'toast'; }, 2600);
   }
 
+  // Enfocar un campo al abrir un modal. En móvil (pantalla táctil) NO se hace en
+  // los selectores con lista: abrir el teclado solo tapaba la lista y movía el modal
+  // mientras aún subía. Con { touch: true } se enfoca también en móvil (diálogos
+  // cuyo único sentido es escribir). preventScroll: que el navegador no desplace nada.
+  const isTouch = () => !!(window.matchMedia && matchMedia('(pointer: coarse)').matches);
+  function autoFocus(el, delay = 120, { touch = false } = {}) {
+    if (!el || (!touch && isTouch())) return;
+    setTimeout(() => { try { el.focus({ preventScroll: true }); } catch (e) { el.focus(); } }, delay);
+  }
+
   // ---- Modal genérico (con pila para anidar) ----
   // open({ title, bodyHTML, actions:[{label,kind,onClick→puede devolver false p/ no cerrar}], onMount })
   const modalStack = [];
@@ -110,11 +120,27 @@ const UI = (() => {
       overlay.addEventListener('click', (e) => { if (e.target === overlay) closeModal(overlay); });
     }
 
+    // Con el teclado abierto, el campo en el que escribes se mantiene a la vista
+    // desplazando SOLO el cuerpo del modal (nunca la página: eso lo hacía saltar).
+    const keepFocusVisible = () => {
+      const a = document.activeElement;
+      const body = overlay.querySelector('.modal-body');
+      if (!a || !body || !body.contains(a)) return;
+      const br = body.getBoundingClientRect(), ar = a.getBoundingClientRect(), pad = 14;
+      if (ar.bottom > br.bottom - pad) body.scrollTop += ar.bottom - br.bottom + pad;
+      else if (ar.top < br.top + pad) body.scrollTop -= br.top + pad - ar.top;
+    };
+    overlay.addEventListener('focusin', () => setTimeout(keepFocusVisible, 350)); // tras la animación del teclado
+
     // Ajusta el overlay al viewport VISIBLE: cuando se abre el teclado, el modal
-    // se encoge y se queda por encima de él (no queda nada tapado).
+    // se encoge y se queda por encima de él (no queda nada tapado). En Android la
+    // página ya se encoge sola (interactive-widget=resizes-content en el viewport);
+    // esto cubre iOS, que en vez de encoger desplaza el viewport visible.
     const vv = window.visualViewport;
     if (vv) {
-      const fit = () => {
+      let raf = 0;
+      const apply = () => {
+        raf = 0;
         const top = vv.offsetTop || 0;
         const h = Math.min(vv.height, window.innerHeight - top); // clamp: nunca excede el viewport
         if (!h || h < 1) { // viewport no fiable: usar el CSS por defecto
@@ -124,11 +150,15 @@ const UI = (() => {
         overlay.style.height = h + 'px';
         overlay.style.top = top + 'px';
         overlay.style.bottom = 'auto';
+        keepFocusVisible();
       };
+      // Un ajuste por fotograma: durante la animación del teclado llegan decenas de
+      // eventos y aplicarlos todos hacía temblar el modal.
+      const fit = () => { if (!raf) raf = requestAnimationFrame(apply); };
       overlay._fit = fit;
       vv.addEventListener('resize', fit);
       vv.addEventListener('scroll', fit);
-      fit();
+      apply();
     }
 
     if (onMount) onMount(overlay);
@@ -173,7 +203,7 @@ const UI = (() => {
           };
           refresh();
           inp.addEventListener('input', refresh);
-          setTimeout(() => inp.focus(), 120);
+          autoFocus(inp, 120, { touch: true });
         } : undefined,
       });
     });
@@ -233,7 +263,7 @@ const UI = (() => {
           });
           box.appendChild(b);
         });
-        setTimeout(() => { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }, 120);
+        if (!isTouch()) setTimeout(() => { ta.focus({ preventScroll: true }); ta.setSelectionRange(ta.value.length, ta.value.length); }, 120);
       },
     });
   }
@@ -248,7 +278,7 @@ const UI = (() => {
           { label: 'Cancelar', kind: 'ghost', onClick: () => resolve(null) },
           { label: confirmLabel, kind: 'primary', onClick: (root) => { resolve(root.querySelector('input[name="v"]').value); } },
         ],
-        onMount: (root) => { const i = root.querySelector('input[name="v"]'); setTimeout(() => i.focus(), 100); },
+        onMount: (root) => { autoFocus(root.querySelector('input[name="v"]'), 100, { touch: true }); },
       });
     });
   }
@@ -519,7 +549,7 @@ const UI = (() => {
           });
           paintType(); checkDup();
           listBox.hidden = true; newBox.hidden = false;
-          setTimeout(() => { (name0 ? (setsIn || nameIn) : nameIn).focus(); }, 80);
+          if (name0) autoFocus(setsIn || nameIn, 80); else autoFocus(nameIn, 80, { touch: true });
         };
         if (newBtn) newBtn.addEventListener('click', openNew);
         search.addEventListener('input', () => draw(search.value));
@@ -531,7 +561,7 @@ const UI = (() => {
           else if (allowNew && search.value.trim() && !listEl.querySelector('[data-id]')) openNew();
         });
         draw('');
-        setTimeout(() => search.focus(), 120);
+        autoFocus(search);
       },
     });
   }
@@ -554,7 +584,7 @@ const UI = (() => {
           listEl.querySelectorAll('[data-val]').forEach(b => b.addEventListener('click', () => { closeModal(); onPick(b.dataset.val, opts.find(o => String(o.value) === b.dataset.val)); }));
         };
         const search = root.querySelector('#listSearch');
-        if (search) { search.addEventListener('input', () => draw(search.value)); setTimeout(() => search.focus(), 120); }
+        if (search) { search.addEventListener('input', () => draw(search.value)); autoFocus(search); }
         draw('');
       },
     });
@@ -739,7 +769,7 @@ const UI = (() => {
     esc, norm, toast, modal, closeModal, confirm,
     field, input, textarea, select, readForm,
     colorPicker, bindColorPicker, avatar, COLORS, ESSENTIALS,
-    pickExercise, prompt, askAI, icon, pickFromList, selectButton,
+    pickExercise, prompt, askAI, icon, autoFocus, pickFromList, selectButton,
     lineChart, fmtDate, fmtDateShort, makeSortable,
   };
 })();
