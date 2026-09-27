@@ -453,11 +453,10 @@ const DB = (() => {
   function routineName() { return PLAN_NAME; }
 
   const WEEKDAYS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
-  const TYPE_LABELS_DB = { strong: 'Día fuerte', moderate: 'Día moderado', light: 'Día ligero', rest: 'Descanso' };
   // 7 días vacíos editables para un plan personalizado (sin guías ni contenido).
   function buildEmptyDays() {
     return WEEKDAYS.map((name, i) => ({
-      id: uid('day'), name, type: 'moderate', typeLabel: TYPE_LABELS_DB.moderate,
+      id: uid('day'), name, type: '', typeLabel: '', // sin tipo: lo marca el usuario
       focus: '', place: '', placeAccent: false, duration: '', isRest: false,
       order: i, blocks: [], substitutes: [], substitutesTitle: '', planB: [], relatedGuides: [],
     }));

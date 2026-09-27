@@ -84,10 +84,10 @@ const VPlan = (() => {
         ? `<span class="day-place">${UI.esc(d.place || '')}</span>`
         : `<span class="day-place ${placeClass}">${UI.esc(d.place || '')}${d.duration ? ` · <strong>${UI.esc(d.duration)}</strong>` : ''}</span>`;
       return `
-        <a class="day-card ${d.type}" data-link="day" data-params='${JSON.stringify({ dayId: d.id })}'>
+        <a class="day-card ${d.type || 'untyped'}" data-link="day" data-params='${JSON.stringify({ dayId: d.id })}'>
           <div class="day-row-1">
             <span class="day-name">${UI.esc(d.name)}</span>
-            <span class="day-tag tag-${d.type}">${UI.esc(d.typeLabel || TYPE_LABELS[d.type] || '')}</span>
+            ${d.type ? `<span class="day-tag tag-${d.type}">${UI.esc(d.typeLabel || TYPE_LABELS[d.type] || '')}</span>` : ''}
           </div>
           <div class="day-focus">${UI.esc(d.focus || '')}</div>
           <div class="day-meta">${metaRight}<span class="day-arrow">›</span></div>
@@ -194,7 +194,7 @@ const VPlan = (() => {
     const placeClass = d.placeAccent ? 'parque' : '';
     return `
       <div class="detail-hero">
-        <span class="day-tag tag-${d.type}">${UI.esc(d.typeLabel || '')}</span>
+        ${d.type ? `<span class="day-tag tag-${d.type}">${UI.esc(d.typeLabel || TYPE_LABELS[d.type] || '')}</span>` : ''}
         <h2>${UI.esc(d.name)}</h2>
         <div class="focus">${UI.esc(d.focus || '')}</div>
         <div class="meta">
@@ -258,10 +258,19 @@ const VPlan = (() => {
   };
   function normalizeDayTypes(routine) {
     let changed = false;
+    // Una vez: los planes personalizados nacían con todos los días en «moderado»
+    // aunque nadie lo eligiera. Los días aún vacíos vuelven a quedar sin marcar.
+    if (routine && routine.planType === 'custom' && !routine.dayTypeUnset) {
+      routine.dayTypeUnset = true; changed = true;
+      (routine.days || []).forEach(d => {
+        const vacio = !d.focus && !(d.blocks || []).some(b => (b.exercises || []).length);
+        if (vacio && d.type === 'moderate' && d.typeLabel === 'Día moderado') { d.type = ''; d.typeLabel = ''; }
+      });
+    }
     (routine && routine.days || []).forEach(d => {
       const canon = DAY_TYPE_ALIAS[String(d.type || '').toLowerCase()];
       if (canon && canon !== d.type) { d.type = canon; changed = true; }
-      if (!d.type) { d.type = d.isRest ? 'rest' : 'moderate'; changed = true; }
+      // Sin tipo se queda sin tipo (el usuario lo marca si quiere); solo el descanso es implícito.
       if (d.isRest && d.type !== 'rest') { d.type = 'rest'; changed = true; }
     });
     return changed;
@@ -336,7 +345,7 @@ const VPlan = (() => {
       const meta = `<div class="editor-meta" id="dayMeta">
         ${UI.field('Nombre', UI.input('name', draft.name))}
         ${UI.field('Tipo de día', UI.select('type', [
-          { value: 'strong', label: 'Día fuerte' }, { value: 'moderate', label: 'Día moderado' },
+          { value: '', label: 'Sin marcar' }, { value: 'strong', label: 'Día fuerte' }, { value: 'moderate', label: 'Día moderado' },
           { value: 'light', label: 'Día ligero' }, { value: 'rest', label: 'Descanso' }], draft.type))}
         ${UI.field('Enfoque', UI.input('focus', draft.focus || ''))}
         <span class="field-label">Lugar</span>
@@ -497,8 +506,10 @@ const VPlan = (() => {
           sync(root);
           (draft.blocks || []).forEach(b => { b.exercises = (b.exercises || []).filter(e => e.name && e.name.trim()); });
           draft.planB = (draft.planB || []).filter(p => (p.orig && p.orig.trim()) || (p.sub && p.sub.trim()));
+          const prevType = d.type;
           Object.assign(d, draft);
-          d.typeLabel = TYPE_LABELS[d.type] || d.typeLabel;
+          // Conserva una etiqueta propia (p. ej. «Día moderado-ligero») si el tipo no cambia.
+          d.typeLabel = !d.type ? '' : (d.type === prevType && d.typeLabel) ? d.typeLabel : TYPE_LABELS[d.type];
           d.isRest = d.type === 'rest';
           await saveRoutine(app);
           app.render();
