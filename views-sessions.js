@@ -885,7 +885,7 @@ const VSessions = (() => {
         <button class="menu-row" data-dur="custom"><span>Personalizado…${opts.includes(cur) ? '' : ` <span class="dim">(${cur}s)</span>`}</span><span class="chev">${opts.includes(cur) ? '›' : '✓'}</span></button>
       </div>
       ${notifSupported() ? `<label class="check-row rest-notif"><input type="checkbox" id="restNotif"${restNotifyOn() ? ' checked' : ''}>
-        <span><strong>Avisar con notificación</strong><span class="dim">Te avisa al acabar el descanso aunque salgas de la app o bloquees el móvil. Para eso, al servidor de avisos de Traindía solo le llega cuándo acaba el descanso; nada de tus entrenos.</span></span></label>` : ''}`,
+        <span><strong>Avisar con notificación</strong><span class="dim">Si sales de la app (a WhatsApp, la música…) te avisa al acabar el descanso.</span></span></label>` : ''}`,
       actions: [{ label: 'Cerrar', kind: 'ghost' }],
       onMount: (m) => {
         const chk = m.querySelector('#restNotif');
