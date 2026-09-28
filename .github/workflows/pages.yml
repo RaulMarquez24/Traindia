@@ -36,6 +36,10 @@ jobs:
 
       - uses: actions/configure-pages@v5
 
+      # push-server/ es el servidor de avisos del homelab, no parte de la web.
+      - name: Quitar lo que no es la web
+        run: rm -rf push-server
+
       - name: Empaquetar el sitio
         uses: actions/upload-pages-artifact@v3
         with:

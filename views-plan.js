@@ -654,7 +654,7 @@ const VPlan = (() => {
     const days = t.days.map(d => d.isRest
       ? `<div class="tp-day rest"><strong>${UI.esc(d.name)}</strong><span class="dim">Descanso</span></div>`
       : `<div class="tp-day"><strong>${UI.esc(d.name)}</strong><span class="tp-focus">${UI.esc(d.focus || '')}${d.duration ? ` · ${UI.esc(d.duration)}` : ''}</span>
-          <ul>${d.blocks.filter(b => !/calentamiento|vuelta a la calma/i.test(b.label)).flatMap(b => b.exercises).map(x => `<li class="${x.priority ? 'prio' : ''}${x.optional ? ' opt' : ''}"><span>${UI.esc(x.name)}</span><span class="dim">${UI.esc(x.sets || '')}</span></li>`).join('')}</ul>
+          <ul>${d.blocks.filter(b => !/calentamiento|estiramientos|vuelta a la calma/i.test(b.label)).flatMap(b => b.exercises).map(x => `<li class="${x.priority ? 'prio' : ''}${x.optional ? ' opt' : ''}"><span>${UI.esc(x.name)}</span><span class="dim">${UI.esc(x.sets || '')}</span></li>`).join('')}</ul>
         </div>`).join('');
     UI.modal({
       title: t.name, size: 'wide',
