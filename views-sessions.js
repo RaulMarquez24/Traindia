@@ -1254,8 +1254,8 @@ const VSessions = (() => {
       <button class="btn ghost block" id="liveAddEx">+ Añadir ejercicio</button>
       <label class="field"><span class="field-label">Notas</span><textarea class="inp" id="liveNotes" rows="2" placeholder="Sensaciones, ajustes…">${UI.esc(s.notes)}</textarea></label>
       <div class="live-actions">
-        <button class="btn danger" id="liveCancel">Descartar</button>
-        <button class="btn primary" id="liveFinish">Finalizar y guardar</button>
+        <button class="btn primary block" id="liveFinish">Finalizar y guardar</button>
+        <button class="live-discard" id="liveCancel">Descartar entreno</button>
       </div>
       <div class="live-rest-spacer"></div>
       ${restTimerHTML(app)}`;
@@ -1398,7 +1398,13 @@ const VSessions = (() => {
       app._restEndTs = null;
       const id = s.id; app._live = null;
       app.go('session', { sessionId: id }, true);
-      if (prs.length) celebratePRs(prs); else UI.toast('Sesión guardada');
+      // Primer entreno: a partir de aquí sí tiene sentido proponer instalar la app.
+      try { localStorage.setItem('traindia-first-workout', '1'); } catch (e) {}
+      if (window.showInstallPrompt) setTimeout(() => window.showInstallPrompt(), 1500);
+      const batidos = prs.filter(p => !p.first);
+      if (batidos.length) celebratePRs(batidos);
+      else if (prs.length) UI.toast('Sesión guardada · primeras marcas apuntadas: la próxima vez, a superarlas');
+      else UI.toast('Sesión guardada');
     });
   }
 
@@ -1589,7 +1595,7 @@ const VSessions = (() => {
         return `<button class="session-row" data-link="session" data-params='${JSON.stringify({ sessionId: s.id, ownerId: s.userId })}'>
           <div class="session-main">
             <strong>${UI.esc(s.name || 'Sesión')}</strong>
-            <span class="dim">${responseDot(s)}${(s.entries || []).length} ejercicios · ${setCount} series${s.durationSec ? ' · ' + fmtClock(s.durationSec) : ''}</span>
+            <span class="dim">${responseDot(s)}${(s.entries || []).length} ejercicio${(s.entries || []).length === 1 ? '' : 's'} · ${setCount} serie${setCount === 1 ? '' : 's'}${s.durationSec ? ' · ' + fmtClock(s.durationSec) : ''}</span>
           </div>
           ${filter === 'all' && author ? UI.avatar(author, 26) : '<span class="chev">›</span>'}
         </button>`;
@@ -1785,6 +1791,7 @@ const VSessions = (() => {
 
     const entries = sessionEntriesHTML(s, { ai: true });
 
+    const prsBatidos = (s.prs || []).filter(p => !p.first); // la primera marca no es un récord
     return `<div class="section">
       <div class="detail-hero">
         <div class="session-author">${author ? UI.avatar(author, 24) + `<span>${UI.esc(author.name)}</span>` : ''}</div>
@@ -1794,9 +1801,9 @@ const VSessions = (() => {
           ${s.durationSec ? `<span>${UI.icon('clock', 13)} ${fmtClock(s.durationSec)}</span>` : ''}
           ${vol ? `<span>${UI.icon('dumbbell', 13)} ${vol} kg vol.</span>` : ''}
         </div>
-        <div class="detail-resp">${responseChip(s) || '<span class="dim">Sin anotar cómo amaneciste</span>'}<button class="btn ghost small" data-act="resp">${UI.icon('edit', 13)} ${s.response ? 'Cambiar' : 'Anotar'}</button></div>
+        ${(s.response || (s.date || '') < DB.todayISO()) ? `<div class="detail-resp">${responseChip(s) || '<span class="dim">Sin anotar cómo amaneciste</span>'}<button class="btn ghost small" data-act="resp">${UI.icon('edit', 13)} ${s.response ? 'Cambiar' : 'Anotar'}</button></div>` : ''}
       </div>
-      ${(s.prs && s.prs.length) ? `<div class="pr-banner">${UI.icon('star', 16)}<div><strong>Récord${s.prs.length > 1 ? 's' : ''} personal${s.prs.length > 1 ? 'es' : ''}</strong>${s.prs.map(p => `<span class="pr-chip">${UI.esc(p.name)}: <b>${UI.esc(prValueText(p.type, p.value))}</b></span>`).join('')}</div></div>` : ''}
+      ${prsBatidos.length ? `<div class="pr-banner">${UI.icon('star', 16)}<div><strong>Récord${prsBatidos.length > 1 ? 's' : ''} personal${prsBatidos.length > 1 ? 'es' : ''}</strong>${prsBatidos.map(p => `<span class="pr-chip">${UI.esc(p.name)}: <b>${UI.esc(prValueText(p.type, p.value))}</b></span>`).join('')}</div></div>` : ''}
       ${entries || '<p class="dim">Sin ejercicios.</p>'}
       ${s.notes ? `<div class="note-box"><div class="block-label">Notas</div><p>${UI.esc(s.notes)}</p></div>` : ''}
       <div class="detail-toolbar">
