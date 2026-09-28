@@ -116,7 +116,7 @@ const VNutrition = (() => {
       }
       return _plan.nombre || 'Nutrición';
     }
-    return 'Mis planes';
+    return 'Nutrición';
   }
   let _abierta = {};    // idToma -> idOpcion (para "usar hoy" de un plato)
 
@@ -227,7 +227,7 @@ const VNutrition = (() => {
 
   function listaPlanesHTML(planes) {
     return `<div class="section">
-      <div class="sec-label">Mis planes</div>
+      <div class="sec-label">Mis pautas</div>
       ${planes.map(p => `<button class="big-row" data-plan="${UI.esc(p.id)}">
           <span class="big-row-icon tile" style="background:var(--strong)">${UI.icon('book', 20)}</span>
           <span class="big-row-text"><strong>${UI.esc(p.nombre || 'Pauta')}</strong><span class="dim">${(p.tomas || []).length} comidas${p.isPrimary ? ' · en uso' : ''}</span></span>
@@ -300,7 +300,7 @@ const VNutrition = (() => {
         <button class="btn ghost" id="nutShare">${UI.icon('upload', 15)} Compartir</button>
         <button class="btn ghost danger" id="nutDel">${UI.icon('trash', 15)} Borrar plan</button>
       </div>
-      <p class="field-hint">Para crear otro plan, vuelve atrás a <strong>Mis planes</strong>.</p>
+      <p class="field-hint">Para crear otro plan, vuelve atrás a <strong>Mis pautas</strong>.</p>
     </div>`;
   }
 

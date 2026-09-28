@@ -150,10 +150,26 @@ const VPlan = (() => {
       }
     } catch (e) {}
 
-    return `${welcome}<div class="week-days">${days}</div>`;
+    // Plan sin ningún ejercicio (p. ej. recién creado en blanco): decir qué hacer.
+    const planVacio = r.days.every(d => d.isRest || !(d.blocks || []).some(b => (b.exercises || []).length));
+    const empty = planVacio ? `<div class="week-empty" id="weekEmpty">
+        <strong>Tu plan está vacío</strong>
+        <span>Toca un día para añadirle ejercicios, o empieza con una plantilla ya montada.</span>
+        <div class="week-empty-actions">
+          <button class="btn primary" data-we-tpl>Usar una plantilla</button>
+          <button class="btn ghost" data-we-free>Entrenar sin plan</button>
+        </div>
+      </div>` : '';
+
+    return `${welcome}${empty}<div class="week-days">${days}</div>`;
   }
 
   function weekBind(app, root) {
+    const we = root && root.querySelector('#weekEmpty');
+    if (we) {
+      we.querySelector('[data-we-tpl]').addEventListener('click', () => createPlanModal(app));
+      we.querySelector('[data-we-free]').addEventListener('click', () => app.go('live', {}));
+    }
     const ww = root && root.querySelector('#weekWelcome');
     if (ww) {
       // Ver la presentación NO descarta el aviso: sigue ahí hasta que se pulsa la ✕.
@@ -196,6 +212,26 @@ const VPlan = (() => {
         </div>
         <div class="detail-toolbar">
           <button class="btn ghost" data-act="edit-day">${UI.icon('edit', 16)} Editar día</button>
+          <button class="btn ghost" data-act="swap-day">${UI.icon('swap', 16)} Intercambiar</button>
+          ${restoreBtn}
+        </div>`;
+    }
+
+    const exCount = (d.blocks || []).reduce((n, b) => n + (b.exercises || []).length, 0);
+    if (!exCount) {
+      return `
+        <div class="detail-hero">
+          ${d.type ? `<span class="day-tag tag-${d.type}">${UI.esc(d.typeLabel || TYPE_LABELS[d.type] || '')}</span>` : ''}
+          <h2>${UI.esc(d.name)}</h2>
+          <div class="focus">${UI.esc(d.focus || '')}</div>
+        </div>
+        <div class="day-empty">
+          <div class="day-empty-ic">${UI.icon('dumbbell', 26)}</div>
+          <strong>Este día aún no tiene ejercicios</strong>
+          <span>Añádelos una vez y, cada vez que entrenes, Traindía te enseñará qué hiciste la última vez.</span>
+          <button class="btn primary block" data-act="edit-day">${UI.icon('plus', 16)} Añadir ejercicios</button>
+        </div>
+        <div class="detail-toolbar">
           <button class="btn ghost" data-act="swap-day">${UI.icon('swap', 16)} Intercambiar</button>
           ${restoreBtn}
         </div>`;
@@ -368,7 +404,7 @@ const VPlan = (() => {
         <div class="ed-ex-top">
           <button type="button" class="drag-handle" data-drag="ex" title="Arrastra para reordenar" aria-label="Arrastrar">${UI.icon('grip', 18)}</button>
           <button type="button" class="ed-ex-pick${ex.name ? '' : ' empty'}" data-pick>${ex.name ? UI.esc(ex.name) : UI.icon('plus', 15) + ' Elegir ejercicio'}</button>
-          <input class="inp narrow" data-f="sets" value="${UI.esc(ex.sets || '')}" placeholder="4×8">
+          <input class="inp narrow" data-f="sets" value="${UI.esc(ex.sets || '')}" placeholder="series">
         </div>
         <div class="ed-ex-bottom">
           <span class="ex-type">${EX_TYPE_SHORT[ex.type || 'weight']}</span>
@@ -494,7 +530,10 @@ const VPlan = (() => {
         sync(root);
         const bi = +b.dataset.addEx;
         const cat = draft.blocks[bi].label || 'General';
-        openPicker(cat, (ex, extra = {}) => { draft.blocks[bi].exercises.push({ exerciseId: ex.id, name: ex.name, type: ex.type, sets: extra.sets || '', notes: extra.notes || '', priority: false, optional: false }); rerender(root); });
+        // Si no se indican series (ejercicio elegido de la lista), 3×10 en los de peso o
+        // repeticiones: así el entreno arranca con 3 series y no con una.
+        const defSets = (t) => (t === 'weight' || t === 'reps') ? '3×10' : '';
+        openPicker(cat, (ex, extra = {}) => { draft.blocks[bi].exercises.push({ exerciseId: ex.id, name: ex.name, type: ex.type, sets: extra.sets || defSets(ex.type), notes: extra.notes || '', priority: false, optional: false }); rerender(root); });
       }));
       root.querySelectorAll('[data-block-cat]').forEach(b => b.addEventListener('click', () => {
         sync(root);

@@ -1002,8 +1002,16 @@
     // el aviso saldrá al crear el perfil (la app llama a showInstallPrompt).
     if (document.documentElement.classList.contains('has-profile')) window.showInstallPrompt();
   });
+  // Se propone instalar DESPUÉS del primer entreno (antes no aporta nada) y, si se
+  // cierra, no vuelve en 14 días.
   window.showInstallPrompt = () => {
-    if (deferredPrompt) document.getElementById('installPrompt').classList.add('show');
+    if (!deferredPrompt) return;
+    let ok = false;
+    try {
+      const dismissed = +localStorage.getItem('traindia-install-dismissed') || 0;
+      ok = localStorage.getItem('traindia-first-workout') === '1' && Date.now() - dismissed > 14 * 86400000;
+    } catch (e) {}
+    if (ok) document.getElementById('installPrompt').classList.add('show');
   };
   document.getElementById('installBtn')?.addEventListener('click', async () => {
     if (deferredPrompt) {
@@ -1015,6 +1023,7 @@
   });
   document.getElementById('installClose')?.addEventListener('click', () => {
     document.getElementById('installPrompt').classList.remove('show');
+    try { localStorage.setItem('traindia-install-dismissed', String(Date.now())); } catch (e) {}
   });
 </script>
 
