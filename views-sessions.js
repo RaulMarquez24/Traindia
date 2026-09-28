@@ -653,6 +653,7 @@ const VSessions = (() => {
   // aviso de dentro. Con el móvil bloqueado el navegador congela la página y no
   // llega: eso lo cubrirá el aviso desde el servidor (Web Push, fase 2).
   const REST_NOTIFY_KEY = 'traindia.restNotify';
+  const REST_NOTIFY_TEXT = 'Te avisa al acabar el descanso aunque salgas de la app o bloquees el móvil. Para eso, al servidor de avisos de Traindía solo le llega cuándo acaba el descanso; nada de tus entrenos.';
   const REST_TAG = 'traindia-rest';
   const notifSupported = () => 'Notification' in window && 'serviceWorker' in navigator;
   function restNotifyOn() {
@@ -743,12 +744,36 @@ const VSessions = (() => {
     pushCancel(app);
     if (!restNotifyOn()) return;
     const inMs = Math.max(0, app._restEndTs - Date.now());
-    app._restPush = (async () => {
+    app._restPush = pushPost(inMs).catch(() => null);
+  }
+  // Pide al servidor un aviso dentro de inMs. Devuelve el id; guarda el último
+  // error (o lo borra si fue bien) para enseñarlo en Ajustes → Notificaciones.
+  async function pushPost(inMs) {
+    try {
       const sub = await pushSubscription(true);
-      if (!sub) return null;
+      if (!sub) throw new Error('Este navegador no admite avisos push');
       const { id } = await pushFetch('/rest', { method: 'POST', body: JSON.stringify({ subscription: sub.toJSON(), inMs }) });
+      try { localStorage.removeItem('traindia.pushLastError'); } catch (e) {}
       return id;
-    })().catch(() => null);
+    } catch (e) {
+      const msg = (e && (e.name === 'AbortError' ? 'El servidor de avisos no respondió a tiempo' : (e.message || e.name))) || 'error';
+      try { localStorage.setItem('traindia.pushLastError', JSON.stringify({ msg, at: Date.now() })); } catch (x) {}
+      throw e;
+    }
+  }
+  // Estado para Ajustes: permiso, suscripción, servidor y último error.
+  async function notifStatus() {
+    const st = { supported: notifSupported(), permission: notifSupported() ? Notification.permission : 'unsupported', on: restNotifyOn(), subscribed: false, server: null, lastError: null };
+    try { st.lastError = JSON.parse(localStorage.getItem('traindia.pushLastError') || 'null'); } catch (e) {}
+    try { st.subscribed = !!(await pushSubscription(false)); } catch (e) {}
+    try { await pushFetch('/health'); st.server = true; } catch (e) { st.server = false; }
+    return st;
+  }
+  // Aviso de prueba por el servidor (para comprobarlo con el móvil bloqueado).
+  async function testPush(inMs = 10000) {
+    if (!restNotifyOn() && !(await setRestNotify(true))) return false;
+    await pushPost(inMs);
+    return true;
   }
   function pushReschedule(app) {
     const p = app._restPush; if (!p) return;
@@ -885,7 +910,7 @@ const VSessions = (() => {
         <button class="menu-row" data-dur="custom"><span>Personalizado…${opts.includes(cur) ? '' : ` <span class="dim">(${cur}s)</span>`}</span><span class="chev">${opts.includes(cur) ? '›' : '✓'}</span></button>
       </div>
       ${notifSupported() ? `<label class="check-row rest-notif"><input type="checkbox" id="restNotif"${restNotifyOn() ? ' checked' : ''}>
-        <span><strong>Avisar con notificación</strong><span class="dim">Te avisa al acabar el descanso aunque salgas de la app o bloquees el móvil. Para eso, al servidor de avisos de Traindía solo le llega cuándo acaba el descanso; nada de tus entrenos.</span></span></label>` : ''}`,
+        <span><strong>Avisar con notificación</strong><span class="dim">${REST_NOTIFY_TEXT}</span></span></label>` : ''}`,
       actions: [{ label: 'Cerrar', kind: 'ghost' }],
       onMount: (m) => {
         const chk = m.querySelector('#restNotif');
@@ -1909,5 +1934,6 @@ const VSessions = (() => {
     });
   }
 
-  return { live, liveBind, list, listBind, detail, detailBind, checkDayAfter, sessionVolume, checkResume, liveHasData, restEnsure, TIME_FIELDS, CHECK_FIELDS };
+  return { live, liveBind, list, listBind, detail, detailBind, checkDayAfter, sessionVolume, checkResume, liveHasData, restEnsure, TIME_FIELDS, CHECK_FIELDS,
+    notifStatus, setRestNotify, restNotifyOn, testPush, REST_NOTIFY_TEXT };
 })();
