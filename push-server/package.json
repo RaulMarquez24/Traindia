@@ -1,0 +1,10 @@
+{
+  "name": "traindia-push",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Avisos de fin de descanso de Traindía (Web Push) para el homelab",
+  "main": "server.js",
+  "scripts": { "start": "node server.js" },
+  "engines": { "node": ">=22" },
+  "dependencies": { "web-push": "^3.6.7" }
+}

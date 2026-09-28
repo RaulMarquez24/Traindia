@@ -1,10 +1,10 @@
 // Service Worker - Traindía
-// La versión visible de la app es v2.39.0 (ver pie en la app).
+// La versión visible de la app es v2.39.1 (ver pie en la app).
 // CACHE_NAME es solo la clave de caché: súbele el número de build en cada deploy
 // (build-6, build-7, …) para que los cambios lleguen a las apps ya instaladas.
 // Los fetch usan {cache:'reload'} para saltarse la caché HTTP del navegador/Pages
 // y traer SIEMPRE la última versión con red (offline tira de CACHE_NAME).
-const CACHE_NAME = 'traindia-build-185';
+const CACHE_NAME = 'traindia-build-186';
 // Buzón temporal para archivos que llegan por "Compartir" desde otra app
 // (WhatsApp, Archivos…). No se borra al activar: lo lee y vacía la app.
 const SHARE_CACHE = 'traindia-share-inbox';
@@ -100,6 +100,8 @@ self.addEventListener('fetch', (event) => {
   // El recuento de visitas va siempre a la red y NUNCA a la caché: si entrase por
   // la rama de externos (cache-first) se guardaría cada ping en el almacén offline.
   if (url.hostname === 'gc.zgo.at' || url.hostname.endsWith('.goatcounter.com')) return;
+  // El servidor de avisos (programar/cancelar, clave pública) siempre en vivo: nunca desde caché.
+  if (url.hostname === 'push.raulmarquez.dev' || (url.hostname === 'localhost' && url.port === '8787')) return;
 
   const sameOrigin = url.origin === self.location.origin;
 
@@ -139,5 +141,29 @@ self.addEventListener('notificationclick', (event) => {
     const mine = wins.find(w => w.url.startsWith(self.registration.scope));
     if (mine) return mine.focus();
     return self.clients.openWindow(url);
+  })());
+});
+
+// Aviso que llega del servidor de avisos (Web Push): se muestra aunque la app esté
+// cerrada o el móvil bloqueado. Si la app ya mostró el suyo (mismo tag), se
+// sustituye sin volver a vibrar. Si la app está delante, se le avisa para quitarlo.
+self.addEventListener('push', (event) => {
+  let d = {};
+  try { d = event.data ? event.data.json() : {}; } catch (e) {}
+  const tag = d.tag || 'traindia-rest';
+  event.waitUntil((async () => {
+    const [ya, wins] = await Promise.all([
+      self.registration.getNotifications({ tag }),
+      self.clients.matchAll({ type: 'window', includeUncontrolled: true }),
+    ]);
+    const delante = wins.some(w => w.visibilityState === 'visible');
+    await self.registration.showNotification(d.title || '⏱ Descanso terminado', {
+      body: d.body || 'A por la siguiente serie.',
+      tag, renotify: !ya.length && !delante, silent: delante,
+      icon: 'icon-192.png', badge: 'icon-192.png',
+      ...(delante ? {} : { vibrate: [220, 110, 220] }), // una silenciosa no puede llevar vibración (la rechaza)
+      data: { url: './' },
+    });
+    if (delante) wins.forEach(w => w.postMessage({ type: 'rest-push' }));
   })());
 });

@@ -660,7 +660,11 @@ const VSessions = (() => {
   }
   // Activa/desactiva. Al activar pide permiso (tiene que ser tras un toque).
   async function setRestNotify(on) {
-    if (!on) { try { localStorage.setItem(REST_NOTIFY_KEY, '0'); } catch (e) {} return false; }
+    if (!on) {
+      try { localStorage.setItem(REST_NOTIFY_KEY, '0'); } catch (e) {}
+      pushSubscription(false).then(s => s && s.unsubscribe()).catch(() => {});
+      return false;
+    }
     if (!notifSupported()) { UI.toast('Este navegador no permite notificaciones', 'err'); return false; }
     let perm = Notification.permission;
     if (perm === 'default') { try { perm = await Notification.requestPermission(); } catch (e) { perm = 'denied'; } }
@@ -670,6 +674,7 @@ const VSessions = (() => {
       return false;
     }
     try { localStorage.setItem(REST_NOTIFY_KEY, '1'); } catch (e) {}
+    pushSubscription(true).catch(() => {}); // prepara el aviso con el móvil bloqueado
     return true;
   }
   async function restNotifications() {
@@ -677,8 +682,9 @@ const VSessions = (() => {
   }
   async function clearRestNotification() { (await restNotifications()).list.forEach(n => n.close()); }
   async function showRestNotification() {
-    const { reg } = await restNotifications();
+    const { reg, list } = await restNotifications();
     if (!reg) return false;
+    if (list.length) return true; // ya lo mostró el aviso del servidor: no vibrar dos veces
     try {
       await reg.showNotification('⏱ Descanso terminado', {
         body: 'A por la siguiente serie.',
@@ -692,6 +698,66 @@ const VSessions = (() => {
   }
   // Al volver a la app, la notificación ya no hace falta.
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && notifSupported()) clearRestNotification(); });
+  // Si el aviso del servidor llega con la app delante, el SW lo dice: se quita.
+  if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', (e) => {
+    if (e.data && e.data.type === 'rest-push' && document.visibilityState === 'visible') setTimeout(clearRestNotification, 1500);
+  });
+
+  // ---- Fase 2: aviso desde el servidor de avisos (Web Push) ----
+  // Llega aunque el móvil esté bloqueado. Al servidor solo va la suscripción push
+  // (la «dirección» del navegador) y cuánto falta para avisar; nada de los entrenos.
+  // Si no hay red o el servidor no responde, queda el aviso local de arriba.
+  const PUSH_URL_DEF = 'https://push.raulmarquez.dev';
+  const pushUrl = () => { try { return localStorage.getItem('traindia.pushUrl') || PUSH_URL_DEF; } catch (e) { return PUSH_URL_DEF; } };
+  async function pushFetch(path, opts = {}) {
+    const ctl = new AbortController();
+    const t = setTimeout(() => ctl.abort(), 5000);
+    try {
+      const r = await fetch(pushUrl() + path, { ...opts, cache: 'no-store', signal: ctl.signal, headers: { 'Content-Type': 'application/json' } });
+      if (!r.ok) throw new Error('push ' + r.status);
+      return await r.json();
+    } finally { clearTimeout(t); }
+  }
+  function b64urlToBytes(b64) {
+    const pad = '='.repeat((4 - b64.length % 4) % 4);
+    const raw = atob((b64 + pad).replace(/-/g, '+').replace(/_/g, '/'));
+    return Uint8Array.from(raw, c => c.charCodeAt(0));
+  }
+  // Suscripción push del navegador. create: crearla si no hay (o si el servidor
+  // cambió de clave, rehacerla).
+  async function pushSubscription(create) {
+    if (!('PushManager' in window)) return null;
+    const reg = await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+    if (!create) return sub;
+    const { publicKey } = await pushFetch('/vapid');
+    let used = ''; try { used = localStorage.getItem('traindia.pushKey') || ''; } catch (e) {}
+    if (sub && used && used !== publicKey) { try { await sub.unsubscribe(); } catch (e) {} sub = null; }
+    if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64urlToBytes(publicKey) });
+    try { localStorage.setItem('traindia.pushKey', publicKey); } catch (e) {}
+    return sub;
+  }
+  // Programa el aviso de ESTE descanso. app._restPush = promesa del id (para que
+  // +15 s o parar funcionen aunque la petición aún no haya vuelto).
+  function pushSchedule(app) {
+    pushCancel(app);
+    if (!restNotifyOn()) return;
+    const inMs = Math.max(0, app._restEndTs - Date.now());
+    app._restPush = (async () => {
+      const sub = await pushSubscription(true);
+      if (!sub) return null;
+      const { id } = await pushFetch('/rest', { method: 'POST', body: JSON.stringify({ subscription: sub.toJSON(), inMs }) });
+      return id;
+    })().catch(() => null);
+  }
+  function pushReschedule(app) {
+    const p = app._restPush; if (!p) return;
+    p.then(id => { if (id && app._restEndTs) pushFetch('/rest/' + id, { method: 'PUT', body: JSON.stringify({ inMs: Math.max(0, app._restEndTs - Date.now()) }) }).catch(() => {}); });
+  }
+  function pushCancel(app) {
+    const p = app._restPush; app._restPush = null;
+    if (p) p.then(id => { if (id) pushFetch('/rest/' + id, { method: 'DELETE' }).catch(() => {}); });
+  }
 
   function restRunning(app) { return !!(app._restEndTs && app._restEndTs > Date.now()); }
 
@@ -758,7 +824,7 @@ const VSessions = (() => {
       _restNode.className = 'rest-timer running';
       _restNode.addEventListener('click', (e) => {
         const b = e.target.closest('[data-rest]'); if (!b) return;
-        if (b.dataset.rest === 'add') { app._restEndTs += 15000; app._restFired = false; restPaint(app); }
+        if (b.dataset.rest === 'add') { app._restEndTs += 15000; app._restFired = false; pushReschedule(app); restPaint(app); }
         else restStop(app);
       });
       document.body.appendChild(_restNode);
@@ -777,12 +843,14 @@ const VSessions = (() => {
     if (!app._restEndTs) { restEnsure(app); return; }
     const rem = Math.round((app._restEndTs - Date.now()) / 1000);
     if (rem > 0) {
+      if (rem <= 2 && app._restPush && document.visibilityState === 'visible') pushCancel(app);
       const c = _restNode && _restNode.querySelector('.rest-count');
       if (c) c.textContent = fmtClock(rem); else restEnsure(app);
       return;
     }
     if (!app._restFired) {
       app._restFired = true;
+      app._restPush = null; // el del servidor ya se está enviando: no cancelarlo
       const fuera = document.visibilityState !== 'visible';
       if (fuera && restNotifyOn()) showRestNotification();
       try { if (navigator.vibrate) navigator.vibrate([220, 110, 220]); } catch (e) {}
@@ -799,9 +867,11 @@ const VSessions = (() => {
     app._restEndTs = Date.now() + dur * 1000;
     app._restFired = false;
     if (notifSupported()) clearRestNotification(); // la del descanso anterior, si seguía ahí
+    pushSchedule(app);
     restEnsure(app);
   }
   function restStop(app) {
+    pushCancel(app);
     app._restEndTs = null; app._restFired = false;
     restEnsure(app);
   }
@@ -815,7 +885,7 @@ const VSessions = (() => {
         <button class="menu-row" data-dur="custom"><span>Personalizado…${opts.includes(cur) ? '' : ` <span class="dim">(${cur}s)</span>`}</span><span class="chev">${opts.includes(cur) ? '›' : '✓'}</span></button>
       </div>
       ${notifSupported() ? `<label class="check-row rest-notif"><input type="checkbox" id="restNotif"${restNotifyOn() ? ' checked' : ''}>
-        <span><strong>Avisar con notificación</strong><span class="dim">Si sales de la app (a WhatsApp, la música…) te avisa al acabar el descanso.</span></span></label>` : ''}`,
+        <span><strong>Avisar con notificación</strong><span class="dim">Te avisa al acabar el descanso aunque salgas de la app o bloquees el móvil. Para eso, al servidor de avisos de Traindía solo le llega cuándo acaba el descanso; nada de tus entrenos.</span></span></label>` : ''}`,
       actions: [{ label: 'Cerrar', kind: 'ghost' }],
       onMount: (m) => {
         const chk = m.querySelector('#restNotif');

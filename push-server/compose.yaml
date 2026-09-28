@@ -1,0 +1,22 @@
+# Traindía · avisos de fin de descanso (Web Push)
+# En el homelab: /home/raul/stacks/webpush/  →  docker compose up -d --build
+# El túnel de Cloudflare (network_mode: host) lo alcanza en http://localhost:8787.
+services:
+  webpush:
+    build: .
+    image: traindia-push:local
+    container_name: webpush
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      TZ: Europe/Madrid
+    ports:
+      - "127.0.0.1:8787:8787"   # solo loopback: ni la LAN llega; solo el túnel
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    mem_limit: 128m
+    logging:
+      driver: json-file
+      options: { max-size: "1m", max-file: "3" }

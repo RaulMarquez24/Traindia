@@ -16,127 +16,127 @@ const TEMPLATES = (() => {
   // subs: suplentes (por nombre; también se crean si faltan) · metrics: datos extra
   const EXERCISES = {
     // Calentamiento y movilidad
-    'Cardio suave de calentamiento': { group: 'Calentamiento', type: 'time', metrics: [],
+    'Cardio suave': { group: 'Calentamiento', type: 'time', metrics: [],
       howto: '5 min en bici, elíptica, remo o andando en cinta inclinada, a un ritmo con el que puedas hablar. Solo sube la temperatura del cuerpo: no debe cansarte.' },
-    'Movilidad general': { group: 'Movilidad', type: 'check', metrics: [],
+    'Movilidad general': { group: 'Calentamiento', type: 'check', metrics: [],
       howto: '5 min de pies a cabeza, sin prisa: 10 círculos de tobillo por lado, 10 sentadillas profundas lentas agarrado a algo, 8 gato-camello, 8 rotaciones torácicas en cuadrupedia por lado y 10 dislocaciones de hombro con banda o palo. El objetivo es llegar con las articulaciones calientes, no cansarte.' },
-    'Activación de glúteo': { group: 'Calentamiento', type: 'check', metrics: [],
+    'Activación de glúteos': { group: 'Calentamiento', type: 'check', metrics: [],
       howto: '2 vueltas: 10 puentes de glúteo con 2 s arriba + 10 pasos laterales con banda por lado. Enciende el glúteo antes de las sentadillas y las bisagras, y ayuda a que las rodillas no se vayan hacia dentro.' },
     'Activación de escápulas': { group: 'Calentamiento', type: 'check', metrics: [],
       howto: '2 vueltas: 12 aperturas con banda (band pull-apart) + 8 retracciones escapulares colgado de la barra, bajando y juntando los hombros sin doblar los codos. Prepara el hombro para presses y tirones.' },
-    'Estiramientos de vuelta a la calma': { group: 'Movilidad', type: 'check', metrics: [],
+    'Estiramientos': { group: 'Estiramientos', type: 'check', metrics: [],
       howto: '5-8 min, 30-45 s por postura respirando lento: flexor de cadera en zancada, isquios, cuádriceps, glúteo (figura 4), pecho en el marco de una puerta y dorsal colgado o en cuadrupedia. Sin rebotes y sin llegar a dolor.' },
     'Cardio Z2': { group: 'Cardio', type: 'time', metrics: ['time', 'distance', 'hr'],
       howto: '30-40 min a intensidad baja-moderada (zona 2): puedes mantener una conversación y respirar por la nariz casi todo el rato. Cinta inclinada, bici, elíptica, remo o caminar rápido. Mejora la recuperación y el corazón sin quitarle energía a las pesas.' },
 
     // Pierna: rodilla dominante
-    'Sentadilla trasera con barra': { group: 'Pierna', type: 'weight', subs: ['Sentadilla goblet', 'Prensa de piernas', 'Sentadilla hack'],
+    'Sentadilla': { group: 'Pierna', type: 'weight', subs: ['Sentadilla goblet', 'Prensa', 'Sentadilla hack'],
       howto: 'Barra sobre los trapecios, codos hacia abajo. Pies a la anchura de los hombros o algo más, puntas un poco abiertas. Coge aire, aprieta el abdomen como si fueran a darte un golpe (bracing) y baja sentándote entre los talones, con las rodillas en la dirección de los pies. Baja al menos hasta muslo paralelo si tu movilidad lo permite, sin que la pelvis se meta hacia dentro abajo. Sube empujando el suelo: pecho y cadera suben a la vez.' },
     'Sentadilla goblet': { group: 'Pierna', type: 'weight',
       howto: 'Mancuerna o kettlebell pegada al pecho. Baja entre las piernas con el tronco muy vertical y los codos por dentro de las rodillas. Es la mejor forma de aprender a sentarse profundo con la espalda neutra.' },
-    'Prensa de piernas': { group: 'Pierna', type: 'weight', subs: ['Sentadilla hack', 'Sentadilla goblet'],
+    'Prensa': { group: 'Pierna', type: 'weight', subs: ['Sentadilla hack', 'Sentadilla goblet'],
       howto: 'Espalda y cadera pegadas al respaldo todo el recorrido. Pies a la anchura de los hombros en el centro de la plataforma. Baja hasta ~90º de rodilla o algo más, sin que la cadera se despegue ni la lumbar se redondee. Empuja con todo el pie y no bloquees las rodillas arriba.' },
     'Sentadilla hack': { group: 'Pierna', type: 'weight',
       howto: 'Espalda pegada al respaldo y pies a media plataforma. Baja controlado hasta ~90º o más y sube sin bloquear las rodillas. Muy estable: ideal para apurar las repeticiones sin preocuparte del equilibrio.' },
-    'Sentadilla búlgara': { group: 'Pierna', type: 'weight', subs: ['Zancadas caminando', 'Step-ups'],
+    'Sentadilla búlgara': { group: 'Pierna', type: 'weight', subs: ['Zancadas', 'Step-ups'],
       howto: 'Empeine trasero sobre un banco, a unos dos pasos. Baja en vertical hasta que la rodilla de atrás casi toque el suelo, con el peso en el talón delantero y el tronco un poco inclinado (así trabaja más el glúteo). La rodilla delantera sigue la línea del pie. Empieza por la pierna más débil y haz lo mismo con la otra.' },
-    'Zancadas caminando': { group: 'Pierna', type: 'weight',
+    'Zancadas': { group: 'Pierna', type: 'weight',
       howto: 'Pasos largos alternando piernas, con una mancuerna en cada mano. La rodilla de atrás casi toca el suelo y el tronco va erguido. Empuja con el talón delantero para avanzar.' },
     'Step-ups': { group: 'Pierna', type: 'weight',
       howto: 'Sube a un banco o cajón (rodilla a ~90º) empujando solo con la pierna de arriba, sin impulsarte con la de abajo. Baja controlado. Con mancuernas cuando te resulte fácil.' },
 
     // Pierna: bisagra de cadera y cadena posterior
-    'Peso muerto convencional': { group: 'Pierna', type: 'weight', subs: ['Peso muerto con barra hexagonal', 'Peso muerto rumano'],
+    'Peso muerto': { group: 'Pierna', type: 'weight', subs: ['Peso muerto trap bar', 'Peso muerto rumano'],
       howto: 'Pies a la anchura de la cadera, barra sobre el medio del pie. Agarra justo por fuera de las piernas y baja la cadera hasta que las espinillas toquen la barra. Pecho arriba, espalda neutra y dorsales activos («esconde las axilas»). Coge aire, aprieta el abdomen y empuja el suelo con las piernas: la barra sube pegada al cuerpo. Arriba, cadera estirada sin echarte hacia atrás. Baja por el mismo camino y empieza cada repetición desde parado.' },
-    'Peso muerto con barra hexagonal': { group: 'Pierna', type: 'weight',
+    'Peso muerto trap bar': { group: 'Pierna', type: 'weight',
       howto: 'Colócate dentro de la barra, con los agarres neutros a los lados. Es más vertical que el convencional: trabaja más el cuádriceps y exige menos a la lumbar. Los mismos pasos: aire, abdomen firme y empuja el suelo.' },
-    'Peso muerto rumano': { group: 'Pierna', type: 'weight', subs: ['Peso muerto rumano con mancuernas', 'Hiperextensión 45º'],
+    'Peso muerto rumano': { group: 'Pierna', type: 'weight', subs: ['Peso muerto rumano con mancuernas', 'Hiperextensión en banco'],
       howto: 'De pie con la barra, rodillas un poco flexionadas y fijas. Lleva la cadera atrás deslizando la barra pegada a los muslos hasta notar tensión fuerte en los isquios (suele ser justo bajo la rodilla). Espalda neutra todo el recorrido. Sube empujando la cadera adelante y apretando el glúteo, sin arquear la lumbar arriba.' },
     'Peso muerto rumano con mancuernas': { group: 'Pierna', type: 'weight',
       howto: 'Igual que con barra: mancuernas pegadas a los muslos, cadera atrás y rodillas fijas. Útil si la barra está ocupada o para aprender el movimiento.' },
-    'Hiperextensión 45º': { group: 'Glúteo', type: 'weight',
+    'Hiperextensión en banco': { group: 'Glúteo', type: 'weight',
       howto: 'En el banco de 45º, con la cadera justo en el borde del apoyo. Baja doblando por la cadera con la espalda neutra y sube apretando el glúteo hasta quedar en línea, sin arquear la lumbar. Añade un disco al pecho cuando 15 repeticiones te sobren.' },
-    'Hip thrust': { group: 'Glúteo', type: 'weight', subs: ['Puente de glúteo con barra', 'Hiperextensión 45º'],
+    'Hip thrust': { group: 'Glúteo', type: 'weight', subs: ['Puente de glúteo', 'Hiperextensión en banco'],
       howto: 'Espalda alta apoyada en el banco (el borde justo bajo las escápulas) y barra sobre la cadera con almohadilla. Pies a la anchura de la cadera, con las espinillas verticales arriba. Empuja con los talones hasta que el tronco quede paralelo al suelo, barbilla recogida y costillas abajo. Aprieta el glúteo 1-2 s sin arquear la lumbar.' },
-    'Puente de glúteo con barra': { group: 'Glúteo', type: 'weight',
+    'Puente de glúteo': { group: 'Glúteo', type: 'weight',
       howto: 'Tumbado en el suelo con la barra sobre la cadera. Menos recorrido que el hip thrust, pero muy buen sustituto si no hay banco libre. Aprieta 2 s arriba.' },
     'Femoral tumbado': { group: 'Pierna', type: 'weight', subs: ['Femoral sentado', 'Peso muerto rumano'],
       howto: 'Tumbado boca abajo, rodillas justo fuera del borde del banco y el rodillo sobre los tobillos. Flexiona hasta ~90º o más sin levantar la cadera, aguanta 1 s y baja en 3 s: la bajada es donde más trabaja.' },
     'Femoral sentado': { group: 'Pierna', type: 'weight',
       howto: 'El mismo gesto sentado. Como el isquio trabaja estirado, suele dar incluso mejor resultado. Ajusta el respaldo para que la rodilla quede alineada con el eje de la máquina.' },
-    'Gemelo': { group: 'Pierna', type: 'weight', subs: ['Gemelo prensa'],
+    'Gemelos': { group: 'Pierna', type: 'weight', subs: ['Gemelos en prensa'],
       howto: 'Elevación de talones de pie (en máquina, en un escalón con mancuerna o en la prensa). Baja hasta estirar del todo, pausa 1 s abajo y sube lo más alto que puedas, con las rodillas estiradas. Sin rebotes.' },
-    'Gemelo prensa': { group: 'Pierna', type: 'weight',
+    'Gemelos en prensa': { group: 'Pierna', type: 'weight',
       howto: 'En la prensa, con solo la punta de los pies en el borde bajo de la plataforma. Estira del todo abajo y empuja con los dedos. Rodillas estiradas pero sin bloquear.' },
 
     // Pecho
-    'Press banca con barra': { group: 'Pecho', type: 'weight', subs: ['Press banca con mancuernas', 'Press de pecho en máquina', 'Flexiones'],
+    'Press banca': { group: 'Pecho', type: 'weight', subs: ['Press con mancuernas', 'Press de pecho en máquina', 'Flexiones'],
       howto: 'Tumbado con los ojos bajo la barra. Junta las escápulas y llévalas hacia abajo, con un ligero arco en la espalda alta, el glúteo en el banco y los pies firmes. Agarre algo más ancho que los hombros y muñecas rectas. Baja controlado hasta la parte baja del pecho, con los codos a unos 45-70º del cuerpo (nunca en cruz), y empuja hacia arriba y un poco hacia atrás. Con peso serio, usa los topes de seguridad o pide que te ayuden.' },
-    'Press banca con mancuernas': { group: 'Pecho', type: 'weight',
+    'Press con mancuernas': { group: 'Pecho', type: 'weight',
       howto: 'Más recorrido que con barra, y cada brazo trabaja por su cuenta. Escápulas atrás y abajo. Baja hasta que las mancuernas lleguen a los lados del pecho y sube sin chocarlas.' },
     'Press de pecho en máquina': { group: 'Pecho', type: 'weight',
       howto: 'Ajusta el asiento para que los agarres queden a la altura del medio del pecho y pega las escápulas al respaldo. Muy buena opción para apurar las series sin ayudante.' },
     'Flexiones': { group: 'Pecho', type: 'reps',
       howto: 'Manos algo más anchas que los hombros, cuerpo en bloque (glúteo y abdomen apretados) y codos a unos 45º. Baja hasta casi tocar el suelo con el pecho. Si te salen más de 20, pon los pies en alto o usa lastre.' },
-    'Press inclinado mancuerna': { group: 'Pecho', type: 'weight', subs: ['Press inclinado máquina', 'Press inclinado con barra'],
+    'Press inclinado con mancuernas': { group: 'Pecho', type: 'weight', subs: ['Press inclinado en máquina', 'Press inclinado con barra'],
       howto: 'Banco a 30º (con más inclinación trabaja sobre todo el hombro). Escápulas atrás y abajo. Baja las mancuernas a los lados del pecho con los codos a unos 45º y sube acercándolas sin chocarlas.' },
-    'Press inclinado máquina': { group: 'Pecho', type: 'weight',
+    'Press inclinado en máquina': { group: 'Pecho', type: 'weight',
       howto: 'Asiento a la altura en la que los agarres queden a la altura de la parte alta del pecho. Escápulas pegadas al respaldo y empuje controlado.' },
     'Press inclinado con barra': { group: 'Pecho', type: 'weight',
       howto: 'Banco a 30º. Baja la barra a la parte alta del pecho, con los codos algo por debajo de la barra, y empuja en línea recta.' },
 
     // Espalda
-    'Remo con barra': { group: 'Espalda', type: 'weight', subs: ['Remo con apoyo en pecho', 'Remo mancuerna', 'Remo bajo polea'],
+    'Remo con barra': { group: 'Espalda', type: 'weight', subs: ['Remo con apoyo en pecho', 'Remo con mancuerna', 'Remo sentado'],
       howto: 'Inclínate doblando por la cadera hasta unos 45º, con la espalda neutra y las rodillas algo flexionadas. Tira de la barra hacia el ombligo llevando los codos atrás y juntando las escápulas, y baja controlado sin perder la postura. Si la lumbar se queja, sobre todo cerca del día de peso muerto, cámbialo por el remo con apoyo en el pecho.' },
     'Remo con apoyo en pecho': { group: 'Espalda', type: 'weight',
       howto: 'Boca abajo en un banco inclinado, o en una máquina con apoyo. Como no tienes que sujetar el tronco, la lumbar descansa y todo el esfuerzo va a la espalda. Tira con los codos, junta las escápulas y baja estirando del todo.' },
-    'Remo mancuerna': { group: 'Espalda', type: 'weight',
+    'Remo con mancuerna': { group: 'Espalda', type: 'weight',
       howto: 'Rodilla y mano en el banco, con la espalda plana. Tira de la mancuerna hacia la cadera (no hacia el hombro) y baja estirando para notar el dorsal.' },
-    'Remo bajo polea': { group: 'Espalda', type: 'weight', subs: ['Remo máquina o sentado', 'Remo mancuerna'],
+    'Remo sentado': { group: 'Espalda', type: 'weight', subs: ['Remo en máquina', 'Remo con mancuerna'],
       howto: 'Sentado, con el pecho alto y las rodillas un poco flexionadas. Tira del agarre hacia el ombligo con los codos pegados al cuerpo y junta las escápulas. Vuelve estirando los brazos y deja que las escápulas se separen, sin balancear el tronco.' },
-    'Remo máquina o sentado': { group: 'Espalda', type: 'weight',
+    'Remo en máquina': { group: 'Espalda', type: 'weight',
       howto: 'Pecho contra el apoyo y agarre a la altura del ombligo. Tira con los codos y junta las escápulas; vuelve controlado hasta estirar.' },
-    'Dominadas': { group: 'Espalda', type: 'reps', subs: ['Dominadas asistidas prono', 'Jalón al pecho prono', 'Negativas de dominada'],
+    'Dominadas': { group: 'Espalda', type: 'reps', subs: ['Dominadas asistidas', 'Jalón al pecho', 'Negativas de dominada'],
       howto: 'Agarre prono algo más ancho que los hombros (supino si quieres más bíceps). Empieza colgado con los brazos estirados, baja y junta los hombros y tira llevando los codos hacia las costillas hasta pasar la barbilla. Baja controlado hasta estirar del todo. Si no llegas a 6, hazlas asistidas; si pasas de 10, añade lastre.' },
-    'Dominadas asistidas prono': { group: 'Espalda', type: 'weight',
+    'Dominadas asistidas': { group: 'Espalda', type: 'weight',
       howto: 'En máquina asistida o con goma. Elige la asistencia justa para completar las repeticiones con buena técnica y ve reduciéndola semana a semana.' },
-    'Jalón al pecho prono': { group: 'Espalda', type: 'weight',
+    'Jalón al pecho': { group: 'Espalda', type: 'weight',
       howto: 'Agarre algo más ancho que los hombros, pecho alto y ligera inclinación hacia atrás. Tira de la barra hacia la parte alta del pecho llevando los codos abajo y atrás, y sube controlado hasta estirar los brazos.' },
     'Negativas de dominada': { group: 'Espalda', type: 'reps',
       howto: 'Sube a la posición de arriba con un salto o un cajón, con la barbilla por encima de la barra, y baja lo más lento que puedas (4-6 s). Es el puente hacia tu primera dominada.' },
 
     // Hombro
-    'Press militar con barra': { group: 'Hombro', type: 'weight', subs: ['Press militar mancuerna', 'Press máquina hombro', 'Landmine'],
+    'Press militar': { group: 'Hombro', type: 'weight', subs: ['Press militar con mancuernas', 'Press de hombro en máquina', 'Landmine press'],
       howto: 'De pie, barra a la altura de las clavículas, agarre algo más ancho que los hombros y antebrazos verticales. Glúteo y abdomen apretados para no arquear la espalda. Empuja la barra en línea recta apartando la cara y, cuando pase la frente, mete la cabeza «por la ventana» hasta bloquear arriba con la barra sobre el medio del pie.' },
-    'Press militar mancuerna': { group: 'Hombro', type: 'weight',
+    'Press militar con mancuernas': { group: 'Hombro', type: 'weight',
       howto: 'Sentado con respaldo o de pie. Mancuernas a la altura de las orejas y codos un poco por delante del cuerpo. Empuja hacia arriba sin arquear la lumbar.' },
-    'Press máquina hombro': { group: 'Hombro', type: 'weight',
+    'Press de hombro en máquina': { group: 'Hombro', type: 'weight',
       howto: 'Ajusta el asiento para que los agarres queden a la altura de los hombros. Espalda pegada al respaldo y empuje controlado sin bloquear los codos de golpe.' },
-    'Landmine': { group: 'Hombro', type: 'weight',
+    'Landmine press': { group: 'Hombro', type: 'weight',
       howto: 'Barra anclada en una esquina o en un soporte. Empuja el extremo hacia arriba y adelante con una mano: el recorrido en diagonal es muy amable con el hombro.' },
-    'Elevación lateral': { group: 'Hombro', type: 'weight', subs: ['Elev. polea'],
+    'Elevación lateral': { group: 'Hombro', type: 'weight', subs: ['Elevación lateral en polea'],
       howto: 'Mancuernas a los lados y el cuerpo un poco inclinado hacia delante. Sube los brazos hasta la altura de los hombros, con los codos apenas flexionados y ligeramente por delante del cuerpo. Baja en 2-3 s. Si tienes que balancearte, sobra peso.' },
-    'Elev. polea': { group: 'Hombro', type: 'weight',
+    'Elevación lateral en polea': { group: 'Hombro', type: 'weight',
       howto: 'Elevación lateral con la polea baja por delante del cuerpo. La polea mantiene la tensión también abajo. Ligero y controlado.' },
-    'Face pull polea': { group: 'Hombro', type: 'weight', subs: ['Pájaro con mancuernas', 'Aperturas con banda'],
+    'Face pull': { group: 'Hombro', type: 'weight', subs: ['Pájaro', 'Aperturas con banda'],
       howto: 'Polea a la altura de la cara y cuerda con agarre neutro. Tira hacia la frente separando las manos y girando los antebrazos hacia arriba, con los codos altos. Aguanta 1 s y vuelve controlado. Ligero y estricto: es salud del hombro, no fuerza bruta.' },
-    'Pájaro con mancuernas': { group: 'Hombro', type: 'weight',
+    'Pájaro': { group: 'Hombro', type: 'weight',
       howto: 'Inclinado hacia delante con la espalda plana, abre los brazos hacia los lados con los codos un poco flexionados, llevando el movimiento con la parte de atrás del hombro. Muy ligero.' },
     'Aperturas con banda': { group: 'Hombro', type: 'reps',
       howto: 'Banda a la altura del pecho con los brazos estirados. Ábrela hasta que toque el pecho juntando las escápulas. Perfecta para casa o para calentar.' },
 
     // Brazos
-    'Curl bíceps barra': { group: 'Bíceps', type: 'weight', subs: ['Curl mancuerna', 'Curl cuerda polea'],
+    'Curl con barra': { group: 'Bíceps', type: 'weight', subs: ['Curl con mancuernas', 'Curl en polea'],
       howto: 'De pie y con los codos pegados al cuerpo. Sube la barra sin adelantar los codos ni balancear el tronco, aprieta arriba y baja en 2-3 s hasta estirar.' },
-    'Curl mancuerna': { group: 'Bíceps', type: 'weight',
+    'Curl con mancuernas': { group: 'Bíceps', type: 'weight',
       howto: 'Alternando brazos o a la vez, girando la palma hacia arriba mientras subes. Codos quietos junto al cuerpo.' },
-    'Curl cuerda polea': { group: 'Bíceps', type: 'weight',
+    'Curl en polea': { group: 'Bíceps', type: 'weight',
       howto: 'Polea baja con cuerda. La tensión constante de la polea hace que cada repetición cuente de principio a fin.' },
-    'Tríceps pushdown cuerda': { group: 'Tríceps', type: 'weight', subs: ['Tríceps cuerda overhead', 'Press francés mancuerna'],
+    'Extensión de tríceps en polea': { group: 'Tríceps', type: 'weight', subs: ['Extensión de tríceps sobre la cabeza', 'Press francés'],
       howto: 'Polea alta con cuerda y codos pegados a los costados. Estira los brazos separando la cuerda abajo y vuelve hasta ~90º sin despegar los codos.' },
-    'Tríceps cuerda overhead': { group: 'Tríceps', type: 'weight',
+    'Extensión de tríceps sobre la cabeza': { group: 'Tríceps', type: 'weight',
       howto: 'De espaldas a la polea, con la cuerda por detrás de la cabeza. Estira los brazos hacia delante y arriba: con el brazo por encima de la cabeza trabaja la cabeza larga del tríceps.' },
-    'Press francés mancuerna': { group: 'Tríceps', type: 'weight',
+    'Press francés': { group: 'Tríceps', type: 'weight',
       howto: 'Tumbado, mancuernas sobre los hombros. Dobla solo los codos hasta llevarlas junto a la cabeza y estira sin mover los brazos.' },
 
     // Core
@@ -146,13 +146,13 @@ const TEMPLATES = (() => {
       howto: 'Boca arriba, con los brazos al techo y las rodillas a 90º. Pega la lumbar al suelo y estira a la vez un brazo y la pierna contraria sin que la espalda se despegue. Lento: unos 3 s por repetición.' },
     'Rueda abdominal': { group: 'Core', type: 'reps',
       howto: 'De rodillas, rueda hacia delante con el glúteo apretado y la pelvis metida, y vuelve antes de que la lumbar se hunda. Aumenta el recorrido poco a poco.' },
-    'Pallof press polea': { group: 'Core', type: 'time', metrics: [], subs: ['Plancha lateral'],
+    'Pallof press': { group: 'Core', type: 'time', metrics: [], subs: ['Plancha lateral'],
       howto: 'De lado a la polea, que está a la altura del pecho. Lleva el agarre al esternón y estira los brazos al frente sin dejar que la polea te gire: el abdomen trabaja resistiendo la rotación. Aguanta con los brazos estirados el tiempo indicado y cambia de lado.' },
     'Plancha lateral': { group: 'Core', type: 'time', metrics: [],
       howto: 'Apoyado en un antebrazo, con el cuerpo en línea y la cadera alta. Aguanta sin dejar que la cadera caiga. Para hacerla más fácil, apoya la rodilla de abajo.' },
-    'Paseo del granjero': { group: 'Core', type: 'time', metrics: ['weight', 'distance'], subs: ['Static hold mancuernas'],
+    'Paseo del granjero': { group: 'Core', type: 'time', metrics: ['weight', 'distance'], subs: ['Aguante con mancuernas'],
       howto: 'Una mancuerna o kettlebell pesada en cada mano, hombros abajo y atrás, tronco erguido. Camina con pasos cortos y firmes sin dejar que el cuerpo se incline. Trabaja agarre, core y postura a la vez.' },
-    'Static hold mancuernas': { group: 'Agarre', type: 'time', metrics: ['weight'],
+    'Aguante con mancuernas': { group: 'Agarre', type: 'time', metrics: ['weight'],
       howto: 'De pie y quieto, con una mancuerna pesada en cada mano y la postura del paseo del granjero. Aguanta el tiempo indicado sin encoger los hombros.' },
   };
 
@@ -195,33 +195,37 @@ const TEMPLATES = (() => {
         focus: 'Full body A · Sentadilla y press banca',
         blocks: [
           block('Calentamiento', [
-            ex('Cardio suave de calentamiento', '5 min'),
+            ex('Cardio suave', '5 min'),
             ex('Movilidad general', ''),
-            ex('Activación de glúteo', ''),
+            ex('Activación de glúteos', ''),
           ]),
-          block('Fuerza principal', [
-            ex('Sentadilla trasera con barra', '4×6-8', { rir: 'RIR 2', rest: '2-3 min', note: 'Antes, 2-3 series de aproximación', priority: true }),
-            ex('Press banca con barra', '4×6-8', { rir: 'RIR 2', rest: '2-3 min', note: 'Aproximación como en la sentadilla', priority: true }),
+          block('Pierna', [
+            ex('Sentadilla', '4×6-8', { rir: 'RIR 2', rest: '2-3 min', note: 'Antes, 2-3 series de aproximación', priority: true }),
           ]),
-          block('Fuerza secundaria', [
+          block('Pecho', [
+            ex('Press banca', '4×6-8', { rir: 'RIR 2', rest: '2-3 min', note: 'Aproximación como en la sentadilla', priority: true }),
+          ]),
+          block('Espalda', [
             ex('Remo con barra', '3×8-10', { rir: 'RIR 1-2', rest: '2 min', note: 'Tronco fijo, sin tirones' }),
+          ]),
+          block('Pierna', [
             ex('Peso muerto rumano', '3×8-10', { rir: 'RIR 2', rest: '2 min', note: 'Baja en 3 s' }),
           ]),
-          block('Accesorios', [
+          block('Hombro', [
             ex('Elevación lateral', '3×12-15', { rir: 'RIR 1', rest: '1 min', note: 'Baja en 2-3 s' }),
           ]),
           block('Core', [
             ex('Plancha frontal', '3×30-45 s', { rest: '45 s', note: 'Glúteo y abdomen apretados' }),
           ]),
-          block('Vuelta a la calma', [
-            ex('Estiramientos de vuelta a la calma', ''),
+          block('Estiramientos', [
+            ex('Estiramientos', ''),
           ]),
         ],
         planB: [
           { orig: 'Rack de sentadilla ocupado', sub: 'Prensa o sentadilla goblet pesada, mismas series' },
-          { orig: 'Banco ocupado', sub: 'Press banca con mancuernas en banco plano' },
-          { orig: 'Molestia lumbar', sub: 'Remo con apoyo en pecho e hiperextensión 45º en vez de rumano' },
-          { orig: 'Solo tienes 40 min', sub: 'Sentadilla, banca y remo a 3 series; fuera accesorios' },
+          { orig: 'Banco ocupado', sub: 'Press con mancuernas en banco plano' },
+          { orig: 'Molestia lumbar', sub: 'Remo con apoyo en pecho e hiperextensión en banco en vez de rumano' },
+          { orig: 'Solo tienes 40 min', sub: 'Sentadilla, banca y remo a 3 series; fuera laterales' },
           ...REGLAS_CARGA,
         ],
         relatedGuides: ['fb-como-funciona', 'fb-calentamiento', 'fb-tecnica'],
@@ -232,35 +236,41 @@ const TEMPLATES = (() => {
         focus: 'Full body B · Peso muerto y press militar',
         blocks: [
           block('Calentamiento', [
-            ex('Cardio suave de calentamiento', '5 min'),
+            ex('Cardio suave', '5 min'),
             ex('Movilidad general', ''),
             ex('Activación de escápulas', ''),
           ]),
-          block('Fuerza principal', [
-            ex('Peso muerto convencional', '3×5', { rir: 'RIR 2-3', rest: '3 min', note: 'Aproximación progresiva · Cada rep desde parado', priority: true }),
-            ex('Press militar con barra', '4×6-8', { rir: 'RIR 2', rest: '2-3 min', note: 'Glúteo apretado, sin arquear', priority: true }),
+          block('Pierna', [
+            ex('Peso muerto', '3×5', { rir: 'RIR 2-3', rest: '3 min', note: 'Aproximación progresiva · Cada rep desde parado', priority: true }),
           ]),
-          block('Fuerza secundaria', [
+          block('Hombro', [
+            ex('Press militar', '4×6-8', { rir: 'RIR 2', rest: '2-3 min', note: 'Glúteo apretado, sin arquear', priority: true }),
+          ]),
+          block('Espalda', [
             ex('Dominadas', '4×6-10', { rir: 'RIR 1-2', rest: '2 min', note: 'Asistidas o jalón si no llegas a 6' }),
+          ]),
+          block('Pierna', [
             ex('Sentadilla búlgara', '3×8-10', { rir: 'RIR 2', rest: '1:30 min', note: 'Por pierna · Empieza por la más débil' }),
           ]),
-          block('Accesorios', [
-            ex('Face pull polea', '3×15', { rir: 'RIR 2', rest: '1 min', note: 'Ligero y estricto' }),
-            ex('Curl bíceps barra', '3×10-12', { rir: 'RIR 1', rest: '1 min', note: 'Si vas justo de tiempo, fuera', optional: true }),
+          block('Hombro', [
+            ex('Face pull', '3×15', { rir: 'RIR 2', rest: '1 min', note: 'Ligero y estricto' }),
+          ]),
+          block('Bíceps', [
+            ex('Curl con barra', '3×10-12', { rir: 'RIR 1', rest: '1 min', note: 'Si vas justo de tiempo, fuera', optional: true }),
           ]),
           block('Core', [
-            ex('Pallof press polea', '3×20-30 s', { rest: '45 s', note: 'Por lado · Que la polea no te gire' }),
+            ex('Pallof press', '3×20-30 s', { rest: '45 s', note: 'Por lado · Que la polea no te gire' }),
           ]),
-          block('Vuelta a la calma', [
-            ex('Estiramientos de vuelta a la calma', ''),
+          block('Estiramientos', [
+            ex('Estiramientos', ''),
           ]),
         ],
         planB: [
           { orig: 'Aún no haces 6 dominadas', sub: 'Dominadas asistidas o jalón al pecho, 4×8-10' },
-          { orig: 'Molestia de hombro en el press', sub: 'Landmine o press con mancuernas sentado' },
-          { orig: 'Sin plataforma para peso muerto', sub: 'Barra hexagonal o rumano 3×6-8' },
+          { orig: 'Molestia de hombro en el press', sub: 'Landmine press o press militar con mancuernas sentado' },
+          { orig: 'Sin plataforma para peso muerto', sub: 'Peso muerto trap bar o rumano 3×6-8' },
           { orig: 'Molestia lumbar', sub: 'Hip thrust 4×8 en vez de peso muerto' },
-          { orig: 'Solo tienes 40 min', sub: 'Peso muerto, militar y dominadas; fuera accesorios' },
+          { orig: 'Solo tienes 40 min', sub: 'Peso muerto, militar y dominadas; fuera face pull y curl' },
           ...REGLAS_CARGA,
         ],
         relatedGuides: ['fb-como-funciona', 'fb-progresion', 'fb-tecnica'],
@@ -271,35 +281,41 @@ const TEMPLATES = (() => {
         focus: 'Full body C · Volumen y cadena posterior',
         blocks: [
           block('Calentamiento', [
-            ex('Cardio suave de calentamiento', '5 min'),
+            ex('Cardio suave', '5 min'),
             ex('Movilidad general', ''),
-            ex('Activación de glúteo', ''),
+            ex('Activación de glúteos', ''),
           ]),
-          block('Fuerza principal', [
-            ex('Prensa de piernas', '3×10-12', { rir: 'RIR 1-2', rest: '2 min', note: 'Cadera pegada al respaldo', priority: true }),
-            ex('Press inclinado mancuerna', '3×8-12', { rir: 'RIR 1-2', rest: '2 min', note: 'Banco a 30º', priority: true }),
+          block('Pierna', [
+            ex('Prensa', '3×10-12', { rir: 'RIR 1-2', rest: '2 min', note: 'Cadera pegada al respaldo', priority: true }),
           ]),
-          block('Fuerza secundaria', [
-            ex('Remo bajo polea', '3×10-12', { rir: 'RIR 1-2', rest: '1:30 min', note: 'Pecho alto, sin balanceo' }),
+          block('Pecho', [
+            ex('Press inclinado con mancuernas', '3×8-12', { rir: 'RIR 1-2', rest: '2 min', note: 'Banco a 30º', priority: true }),
+          ]),
+          block('Espalda', [
+            ex('Remo sentado', '3×10-12', { rir: 'RIR 1-2', rest: '1:30 min', note: 'Pecho alto, sin balanceo' }),
+          ]),
+          block('Glúteo', [
             ex('Hip thrust', '3×8-12', { rir: 'RIR 1-2', rest: '1:30 min', note: 'Aguanta 1-2 s arriba' }),
-            ex('Femoral tumbado', '3×10-12', { rir: 'RIR 1', rest: '1 min', note: 'Baja en 3 s' }),
           ]),
-          block('Accesorios', [
-            ex('Tríceps pushdown cuerda', '2×12-15', { rir: 'RIR 1', rest: '1 min', optional: true }),
-            ex('Gemelo', '3×12-15', { rir: 'RIR 1', rest: '1 min', note: 'Pausa 1 s abajo', optional: true }),
+          block('Pierna', [
+            ex('Femoral tumbado', '3×10-12', { rir: 'RIR 1', rest: '1 min', note: 'Baja en 3 s' }),
+            ex('Gemelos', '3×12-15', { rir: 'RIR 1', rest: '1 min', note: 'Pausa 1 s abajo', optional: true }),
+          ]),
+          block('Tríceps', [
+            ex('Extensión de tríceps en polea', '2×12-15', { rir: 'RIR 1', rest: '1 min', optional: true }),
           ]),
           block('Core', [
             ex('Paseo del granjero', '3×30-40 m', { rest: '1 min', note: 'Lo más pesado que lleves erguido' }),
           ]),
-          block('Vuelta a la calma', [
-            ex('Estiramientos de vuelta a la calma', ''),
+          block('Estiramientos', [
+            ex('Estiramientos', ''),
           ]),
         ],
         planB: [
           { orig: 'Prensa ocupada', sub: 'Sentadilla hack o goblet, mismas series' },
-          { orig: 'Sin banco para hip thrust', sub: 'Puente de glúteo con barra en el suelo' },
+          { orig: 'Sin banco para hip thrust', sub: 'Puente de glúteo en el suelo' },
           { orig: 'Piernas cargadas del miércoles', sub: 'Prensa con RIR 3 y sin apurar el femoral' },
-          { orig: 'Solo tienes 40 min', sub: 'Salta accesorios y deja 2 series en los secundarios' },
+          { orig: 'Solo tienes 40 min', sub: 'Salta los opcionales y deja 2 series en remo, hip thrust y femoral' },
           ...REGLAS_CARGA,
         ],
         relatedGuides: ['fb-como-funciona', 'fb-progresion', 'fb-adaptar'],
@@ -308,12 +324,14 @@ const TEMPLATES = (() => {
         name: 'Sábado', type: 'light', typeLabel: 'Día ligero', duration: '30-45 min',
         focus: 'Opcional · Cardio Z2 y movilidad',
         blocks: [
+          block('Calentamiento', [
+            ex('Movilidad general', ''),
+          ], true),
           block('Cardio', [
             ex('Cardio Z2', '30-40 min', { note: 'Puedes hablar mientras lo haces' }),
           ], true),
-          block('Movilidad', [
-            ex('Movilidad general', ''),
-            ex('Estiramientos de vuelta a la calma', ''),
+          block('Estiramientos', [
+            ex('Estiramientos', ''),
           ], true),
         ],
         planB: [
@@ -368,10 +386,11 @@ const TEMPLATES = (() => {
         <p>Hay <strong>más tirón que empuje</strong> a propósito: compensa las horas de ordenador y el móvil, y protege el hombro a largo plazo.</p>
 
         <h3>El orden importa</h3>
+        <p>Cada día está ordenado por partes del cuerpo <strong>en el orden en que se hacen</strong>, por eso una misma categoría (Pierna, por ejemplo) puede salir dos veces.</p>
         <ul>
-          <li><strong>Principales</strong> primero, frescos y con la mejor técnica: son los que más se progresan.</li>
-          <li><strong>Secundarios</strong> después, con algo más de repeticiones.</li>
-          <li><strong>Accesorios y core</strong> al final. Los marcados como opcionales son los primeros que se quitan si vas justo.</li>
+          <li><strong>Los principales</strong> (en rojo) van primero, frescos y con la mejor técnica: son los que más se progresan.</li>
+          <li>Después, <strong>el resto de ejercicios grandes</strong>, con algo más de repeticiones.</li>
+          <li><strong>Los pequeños y el core</strong> al final. Los opcionales (en cursiva) son los primeros que se quitan si vas justo.</li>
         </ul>
         <p class="note">Los ejercicios en rojo son los prioritarios del día. El chip de cada ejercicio (RIR 2, RIR 1-2…) te dice cuánto esfuerzo dejar en la recámara; lo explica la guía de progresión.</p>`,
       },
@@ -429,7 +448,7 @@ const TEMPLATES = (() => {
 
         <h3>2. Movilidad y activación (5 min)</h3>
         <ul>
-          <li><strong>Movilidad general</strong>: tobillo, cadera, columna y hombro. Vienen detallados en la técnica del ejercicio.</li>
+          <li><strong>Movilidad general</strong>: tobillo, cadera, columna y hombro. Viene detallada en la técnica del ejercicio.</li>
           <li><strong>Activación</strong>: glúteo los días de sentadilla o bisagra, y escápulas el día del press militar y las dominadas.</li>
         </ul>
 
@@ -523,7 +542,7 @@ const TEMPLATES = (() => {
         <table>
           <tr><th>Zona</th><th>Cambios</th></tr>
           <tr><td>Hombro</td><td>Press con mancuernas o máquina en vez de barra, landmine en vez de militar, y más face pull</td></tr>
-          <tr><td>Lumbar</td><td>Remo con apoyo en pecho, barra hexagonal o hip thrust en vez de peso muerto, y prensa en vez de sentadilla</td></tr>
+          <tr><td>Lumbar</td><td>Remo con apoyo en pecho, peso muerto trap bar o hip thrust en vez de peso muerto, y prensa en vez de sentadilla</td></tr>
           <tr><td>Rodilla</td><td>Prensa con un recorrido cómodo, step-ups bajos en vez de búlgara, y más femoral y glúteo</td></tr>
         </table>
 
