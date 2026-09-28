@@ -351,8 +351,8 @@ const VSessions = (() => {
       v = `${set.reps || 0} reps${loadSuffix(set)}`;
       (set.drops || []).filter(dropHasData).forEach(d => { v += ` → ${d.reps || 0}${d.load ? ` (${d.load}kg)` : ''}`; });
     } else {
-      v = `${set.reps || 0} × ${set.weight || 0} kg`;
-      (set.drops || []).filter(dropHasData).forEach(d => { v += ` → ${d.reps || 0}×${d.weight || 0}`; });
+      v = `${set.weight || 0} kg × ${set.reps || 0}`; // peso × repeticiones, como en Progreso
+      (set.drops || []).filter(dropHasData).forEach(d => { v += ` → ${d.weight || 0} kg × ${d.reps || 0}`; });
     }
     if (set.effort) v += ` · ${set.effort}`;
     return v;

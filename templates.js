@@ -30,7 +30,7 @@ const TEMPLATES = (() => {
       howto: '30-40 min a intensidad baja-moderada (zona 2): puedes mantener una conversación y respirar por la nariz casi todo el rato. Cinta inclinada, bici, elíptica, remo o caminar rápido. Mejora la recuperación y el corazón sin quitarle energía a las pesas.' },
 
     // Pierna: rodilla dominante
-    'Sentadilla': { group: 'Pierna', type: 'weight', subs: ['Sentadilla goblet', 'Prensa', 'Sentadilla hack'],
+    'Sentadilla': { videos: [{ url: 'https://www.youtube.com/watch?v=qsAkuNORgmk', label: 'Técnica · Jeremy Ethier' }], group: 'Pierna', type: 'weight', subs: ['Sentadilla goblet', 'Prensa', 'Sentadilla hack'],
       howto: 'Barra sobre los trapecios, codos hacia abajo. Pies a la anchura de los hombros o algo más, puntas un poco abiertas. Coge aire, aprieta el abdomen como si fueran a darte un golpe (bracing) y baja sentándote entre los talones, con las rodillas en la dirección de los pies. Baja al menos hasta muslo paralelo si tu movilidad lo permite, sin que la pelvis se meta hacia dentro abajo. Sube empujando el suelo: pecho y cadera suben a la vez.' },
     'Sentadilla goblet': { group: 'Pierna', type: 'weight',
       howto: 'Mancuerna o kettlebell pegada al pecho. Baja entre las piernas con el tronco muy vertical y los codos por dentro de las rodillas. Es la mejor forma de aprender a sentarse profundo con la espalda neutra.' },
@@ -38,7 +38,7 @@ const TEMPLATES = (() => {
       howto: 'Espalda y cadera pegadas al respaldo todo el recorrido. Pies a la anchura de los hombros en el centro de la plataforma. Baja hasta ~90º de rodilla o algo más, sin que la cadera se despegue ni la lumbar se redondee. Empuja con todo el pie y no bloquees las rodillas arriba.' },
     'Sentadilla hack': { group: 'Pierna', type: 'weight',
       howto: 'Espalda pegada al respaldo y pies a media plataforma. Baja controlado hasta ~90º o más y sube sin bloquear las rodillas. Muy estable: ideal para apurar las repeticiones sin preocuparte del equilibrio.' },
-    'Sentadilla búlgara': { group: 'Pierna', type: 'weight', subs: ['Zancadas', 'Step-ups'],
+    'Sentadilla búlgara': { videos: [{ url: 'https://www.youtube.com/shorts/5gRn1lr8vYk', label: 'Técnica · Jeremy Ethier' }], group: 'Pierna', type: 'weight', subs: ['Zancadas', 'Step-ups'],
       howto: 'Empeine trasero sobre un banco, a unos dos pasos. Baja en vertical hasta que la rodilla de atrás casi toque el suelo, con el peso en el talón delantero y el tronco un poco inclinado (así trabaja más el glúteo). La rodilla delantera sigue la línea del pie. Empieza por la pierna más débil y haz lo mismo con la otra.' },
     'Zancadas': { group: 'Pierna', type: 'weight',
       howto: 'Pasos largos alternando piernas, con una mancuerna en cada mano. La rodilla de atrás casi toca el suelo y el tronco va erguido. Empuja con el talón delantero para avanzar.' },
@@ -46,17 +46,17 @@ const TEMPLATES = (() => {
       howto: 'Sube a un banco o cajón (rodilla a ~90º) empujando solo con la pierna de arriba, sin impulsarte con la de abajo. Baja controlado. Con mancuernas cuando te resulte fácil.' },
 
     // Pierna: bisagra de cadera y cadena posterior
-    'Peso muerto': { group: 'Pierna', type: 'weight', subs: ['Peso muerto trap bar', 'Peso muerto rumano'],
+    'Peso muerto': { videos: [{ url: 'https://www.youtube.com/watch?v=7Sjfm61-HC4', label: 'Técnica · Jeremy Ethier' }], group: 'Pierna', type: 'weight', subs: ['Peso muerto trap bar', 'Peso muerto rumano'],
       howto: 'Pies a la anchura de la cadera, barra sobre el medio del pie. Agarra justo por fuera de las piernas y baja la cadera hasta que las espinillas toquen la barra. Pecho arriba, espalda neutra y dorsales activos («esconde las axilas»). Coge aire, aprieta el abdomen y empuja el suelo con las piernas: la barra sube pegada al cuerpo. Arriba, cadera estirada sin echarte hacia atrás. Baja por el mismo camino y empieza cada repetición desde parado.' },
     'Peso muerto trap bar': { group: 'Pierna', type: 'weight',
       howto: 'Colócate dentro de la barra, con los agarres neutros a los lados. Es más vertical que el convencional: trabaja más el cuádriceps y exige menos a la lumbar. Los mismos pasos: aire, abdomen firme y empuja el suelo.' },
-    'Peso muerto rumano': { group: 'Pierna', type: 'weight', subs: ['Peso muerto rumano con mancuernas', 'Hiperextensión en banco'],
+    'Peso muerto rumano': { videos: [{ url: 'https://www.youtube.com/shorts/8qNrTuZ0rXM', label: 'Técnica · ATHLEAN-X' }], group: 'Pierna', type: 'weight', subs: ['Peso muerto rumano con mancuernas', 'Hiperextensión en banco'],
       howto: 'De pie con la barra, rodillas un poco flexionadas y fijas. Lleva la cadera atrás deslizando la barra pegada a los muslos hasta notar tensión fuerte en los isquios (suele ser justo bajo la rodilla). Espalda neutra todo el recorrido. Sube empujando la cadera adelante y apretando el glúteo, sin arquear la lumbar arriba.' },
     'Peso muerto rumano con mancuernas': { group: 'Pierna', type: 'weight',
       howto: 'Igual que con barra: mancuernas pegadas a los muslos, cadera atrás y rodillas fijas. Útil si la barra está ocupada o para aprender el movimiento.' },
     'Hiperextensión en banco': { group: 'Glúteo', type: 'weight',
       howto: 'En el banco de 45º, con la cadera justo en el borde del apoyo. Baja doblando por la cadera con la espalda neutra y sube apretando el glúteo hasta quedar en línea, sin arquear la lumbar. Añade un disco al pecho cuando 15 repeticiones te sobren.' },
-    'Hip thrust': { group: 'Glúteo', type: 'weight', subs: ['Puente de glúteo', 'Hiperextensión en banco'],
+    'Hip thrust': { videos: [{ url: 'https://www.youtube.com/shorts/WUDVZPTHUhU', label: 'Técnica · Jeremy Ethier' }], group: 'Glúteo', type: 'weight', subs: ['Puente de glúteo', 'Hiperextensión en banco'],
       howto: 'Espalda alta apoyada en el banco (el borde justo bajo las escápulas) y barra sobre la cadera con almohadilla. Pies a la anchura de la cadera, con las espinillas verticales arriba. Empuja con los talones hasta que el tronco quede paralelo al suelo, barbilla recogida y costillas abajo. Aprieta el glúteo 1-2 s sin arquear la lumbar.' },
     'Puente de glúteo': { group: 'Glúteo', type: 'weight',
       howto: 'Tumbado en el suelo con la barra sobre la cadera. Menos recorrido que el hip thrust, pero muy buen sustituto si no hay banco libre. Aprieta 2 s arriba.' },
@@ -70,7 +70,7 @@ const TEMPLATES = (() => {
       howto: 'En la prensa, con solo la punta de los pies en el borde bajo de la plataforma. Estira del todo abajo y empuja con los dedos. Rodillas estiradas pero sin bloquear.' },
 
     // Pecho
-    'Press banca': { group: 'Pecho', type: 'weight', subs: ['Press con mancuernas', 'Press de pecho en máquina', 'Flexiones'],
+    'Press banca': { videos: [{ url: 'https://www.youtube.com/shorts/Sb4y8gASMNk', label: 'Técnica · Jeremy Ethier' }], group: 'Pecho', type: 'weight', subs: ['Press con mancuernas', 'Press de pecho en máquina', 'Flexiones'],
       howto: 'Tumbado con los ojos bajo la barra. Junta las escápulas y llévalas hacia abajo, con un ligero arco en la espalda alta, el glúteo en el banco y los pies firmes. Agarre algo más ancho que los hombros y muñecas rectas. Baja controlado hasta la parte baja del pecho, con los codos a unos 45-70º del cuerpo (nunca en cruz), y empuja hacia arriba y un poco hacia atrás. Con peso serio, usa los topes de seguridad o pide que te ayuden.' },
     'Press con mancuernas': { group: 'Pecho', type: 'weight',
       howto: 'Más recorrido que con barra, y cada brazo trabaja por su cuenta. Escápulas atrás y abajo. Baja hasta que las mancuernas lleguen a los lados del pecho y sube sin chocarlas.' },
@@ -78,7 +78,7 @@ const TEMPLATES = (() => {
       howto: 'Ajusta el asiento para que los agarres queden a la altura del medio del pecho y pega las escápulas al respaldo. Muy buena opción para apurar las series sin ayudante.' },
     'Flexiones': { group: 'Pecho', type: 'reps',
       howto: 'Manos algo más anchas que los hombros, cuerpo en bloque (glúteo y abdomen apretados) y codos a unos 45º. Baja hasta casi tocar el suelo con el pecho. Si te salen más de 20, pon los pies en alto o usa lastre.' },
-    'Press inclinado con mancuernas': { group: 'Pecho', type: 'weight', subs: ['Press inclinado en máquina', 'Press inclinado con barra'],
+    'Press inclinado con mancuernas': { videos: [{ url: 'https://www.youtube.com/watch?v=tXmgIuNO-3o', label: 'Técnica · Trainologym' }], group: 'Pecho', type: 'weight', subs: ['Press inclinado en máquina', 'Press inclinado con barra'],
       howto: 'Banco a 30º (con más inclinación trabaja sobre todo el hombro). Escápulas atrás y abajo. Baja las mancuernas a los lados del pecho con los codos a unos 45º y sube acercándolas sin chocarlas.' },
     'Press inclinado en máquina': { group: 'Pecho', type: 'weight',
       howto: 'Asiento a la altura en la que los agarres queden a la altura de la parte alta del pecho. Escápulas pegadas al respaldo y empuje controlado.' },
@@ -86,7 +86,7 @@ const TEMPLATES = (() => {
       howto: 'Banco a 30º. Baja la barra a la parte alta del pecho, con los codos algo por debajo de la barra, y empuja en línea recta.' },
 
     // Espalda
-    'Remo con barra': { group: 'Espalda', type: 'weight', subs: ['Remo con apoyo en pecho', 'Remo con mancuerna', 'Remo sentado'],
+    'Remo con barra': { videos: [{ url: 'https://www.youtube.com/shorts/BMVeFJVh59A', label: 'Errores · ATHLEAN-X' }], group: 'Espalda', type: 'weight', subs: ['Remo con apoyo en pecho', 'Remo con mancuerna', 'Remo sentado'],
       howto: 'Inclínate doblando por la cadera hasta unos 45º, con la espalda neutra y las rodillas algo flexionadas. Tira de la barra hacia el ombligo llevando los codos atrás y juntando las escápulas, y baja controlado sin perder la postura. Si la lumbar se queja, sobre todo cerca del día de peso muerto, cámbialo por el remo con apoyo en el pecho.' },
     'Remo con apoyo en pecho': { group: 'Espalda', type: 'weight',
       howto: 'Boca abajo en un banco inclinado, o en una máquina con apoyo. Como no tienes que sujetar el tronco, la lumbar descansa y todo el esfuerzo va a la espalda. Tira con los codos, junta las escápulas y baja estirando del todo.' },
@@ -96,7 +96,7 @@ const TEMPLATES = (() => {
       howto: 'Sentado, con el pecho alto y las rodillas un poco flexionadas. Tira del agarre hacia el ombligo con los codos pegados al cuerpo y junta las escápulas. Vuelve estirando los brazos y deja que las escápulas se separen, sin balancear el tronco.' },
     'Remo en máquina': { group: 'Espalda', type: 'weight',
       howto: 'Pecho contra el apoyo y agarre a la altura del ombligo. Tira con los codos y junta las escápulas; vuelve controlado hasta estirar.' },
-    'Dominadas': { group: 'Espalda', type: 'reps', subs: ['Dominadas asistidas', 'Jalón al pecho', 'Negativas de dominada'],
+    'Dominadas': { videos: [{ url: 'https://www.youtube.com/watch?v=jYbNXmbErt8', label: 'De 0 a 10 · Jeremy Ethier' }], group: 'Espalda', type: 'reps', subs: ['Dominadas asistidas', 'Jalón al pecho', 'Negativas de dominada'],
       howto: 'Agarre prono algo más ancho que los hombros (supino si quieres más bíceps). Empieza colgado con los brazos estirados, baja y junta los hombros y tira llevando los codos hacia las costillas hasta pasar la barbilla. Baja controlado hasta estirar del todo. Si no llegas a 6, hazlas asistidas; si pasas de 10, añade lastre.' },
     'Dominadas asistidas': { group: 'Espalda', type: 'weight',
       howto: 'En máquina asistida o con goma. Elige la asistencia justa para completar las repeticiones con buena técnica y ve reduciéndola semana a semana.' },
@@ -106,7 +106,7 @@ const TEMPLATES = (() => {
       howto: 'Sube a la posición de arriba con un salto o un cajón, con la barbilla por encima de la barra, y baja lo más lento que puedas (4-6 s). Es el puente hacia tu primera dominada.' },
 
     // Hombro
-    'Press militar': { group: 'Hombro', type: 'weight', subs: ['Press militar con mancuernas', 'Press de hombro en máquina', 'Landmine press'],
+    'Press militar': { videos: [{ url: 'https://www.youtube.com/watch?v=4I6gCfiIHlw', label: 'Guía · Fit Generation' }], group: 'Hombro', type: 'weight', subs: ['Press militar con mancuernas', 'Press de hombro en máquina', 'Landmine press'],
       howto: 'De pie, barra a la altura de las clavículas, agarre algo más ancho que los hombros y antebrazos verticales. Glúteo y abdomen apretados para no arquear la espalda. Empuja la barra en línea recta apartando la cara y, cuando pase la frente, mete la cabeza «por la ventana» hasta bloquear arriba con la barra sobre el medio del pie.' },
     'Press militar con mancuernas': { group: 'Hombro', type: 'weight',
       howto: 'Sentado con respaldo o de pie. Mancuernas a la altura de las orejas y codos un poco por delante del cuerpo. Empuja hacia arriba sin arquear la lumbar.' },
@@ -114,7 +114,7 @@ const TEMPLATES = (() => {
       howto: 'Ajusta el asiento para que los agarres queden a la altura de los hombros. Espalda pegada al respaldo y empuje controlado sin bloquear los codos de golpe.' },
     'Landmine press': { group: 'Hombro', type: 'weight',
       howto: 'Barra anclada en una esquina o en un soporte. Empuja el extremo hacia arriba y adelante con una mano: el recorrido en diagonal es muy amable con el hombro.' },
-    'Elevación lateral': { group: 'Hombro', type: 'weight', subs: ['Elevación lateral en polea'],
+    'Elevación lateral': { videos: [{ url: 'https://www.youtube.com/shorts/5ah-7uqsIZU', label: 'Técnica · Jeremy Ethier' }], group: 'Hombro', type: 'weight', subs: ['Elevación lateral en polea'],
       howto: 'Mancuernas a los lados y el cuerpo un poco inclinado hacia delante. Sube los brazos hasta la altura de los hombros, con los codos apenas flexionados y ligeramente por delante del cuerpo. Baja en 2-3 s. Si tienes que balancearte, sobra peso.' },
     'Elevación lateral en polea': { group: 'Hombro', type: 'weight',
       howto: 'Elevación lateral con la polea baja por delante del cuerpo. La polea mantiene la tensión también abajo. Ligero y controlado.' },
@@ -150,7 +150,7 @@ const TEMPLATES = (() => {
       howto: 'De lado a la polea, que está a la altura del pecho. Lleva el agarre al esternón y estira los brazos al frente sin dejar que la polea te gire: el abdomen trabaja resistiendo la rotación. Aguanta con los brazos estirados el tiempo indicado y cambia de lado.' },
     'Plancha lateral': { group: 'Core', type: 'time', metrics: [],
       howto: 'Apoyado en un antebrazo, con el cuerpo en línea y la cadera alta. Aguanta sin dejar que la cadera caiga. Para hacerla más fácil, apoya la rodilla de abajo.' },
-    'Paseo del granjero': { group: 'Core', type: 'time', metrics: ['weight', 'distance'], subs: ['Aguante con mancuernas'],
+    'Paseo del granjero': { videos: [{ url: 'https://www.youtube.com/watch?v=8DBHNgT1zO8', label: 'Técnica · HSN' }], group: 'Core', type: 'time', metrics: ['weight', 'distance'], subs: ['Aguante con mancuernas'],
       howto: 'Una mancuerna o kettlebell pesada en cada mano, hombros abajo y atrás, tronco erguido. Camina con pasos cortos y firmes sin dejar que el cuerpo se incline. Trabaja agarre, core y postura a la vez.' },
     'Aguante con mancuernas': { group: 'Agarre', type: 'time', metrics: ['weight'],
       howto: 'De pie y quieto, con una mancuerna pesada en cada mano y la postura del paseo del granjero. Aguanta el tiempo indicado sin encoger los hombros.' },
