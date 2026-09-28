@@ -65,6 +65,10 @@ const app = {
     }).catch(() => {});
     await this.refreshRoutine();
     await DB.ensurePlaces(this.routine);
+    // Plan de plantilla: trae al catálogo lo que la plantilla haya ganado desde que se
+    // creó (vídeos, técnica, suplentes). Solo añade lo que falte; nunca pisa nada.
+    const tpl = VPlan.templateOf(this);
+    if (tpl) DB.ensureTemplateExercises(this.activeUser.id, tpl).catch(() => {});
     this.go('week', {}, true);
     // Unificación de cardio (v10): si hay variantes, avisa y deja hacer copia antes.
     if (await DB.cardioUnifyPending()) { this.showCardioMigration(); return; }
@@ -776,7 +780,7 @@ const app = {
                 tipo: d.tipo,
                 mensaje: d.mensaje.trim(),
                 contacto: (d.contacto || '').trim() || '(no indicado)',
-                version: 'v2.42.0',
+                version: 'v2.42.1',
                 perfil: (this.mainUser && this.mainUser.name) || '',
                 navegador: navigator.userAgent,
               }),
@@ -812,7 +816,7 @@ const app = {
     return `<div class="section">
       ${rows.map(r => `<button class="big-row" ${r.modal ? 'data-share' : r.landing ? 'data-landing' : `data-link="${r.v}"`}><span class="big-row-icon tile" style="background:${r.color}">${UI.icon(r.icon, 20)}</span><span class="big-row-text"><strong>${r.label}</strong><span class="dim">${r.sub}</span></span><span class="chev">›</span></button>`).join('')}
       <button class="big-row" data-feedback><span class="big-row-icon tile" style="background:var(--strong)">${UI.icon('chat', 20)}</span><span class="big-row-text"><strong>Sugerencias y reportes</strong><span class="dim">Envíame ideas o fallos</span></span><span class="chev">›</span></button>
-      <p class="version-foot">Traindía · v2.42.0 · ${Object.keys(this.usersById).length} perfil(es)<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
+      <p class="version-foot">Traindía · v2.42.1 · ${Object.keys(this.usersById).length} perfil(es)<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
     </div>`;
   },
   bindMore(root) {
@@ -1139,7 +1143,7 @@ const app = {
         <p class="field-hint" style="margin-top:0">Restablece la app al estado inicial: se borran todos los perfiles, sesiones y progreso de este dispositivo. Haz antes una copia.</p>
         <button class="btn ghost danger small" id="resetApp">Borrar todos los datos</button>
       </div>
-      <p class="version-foot">Traindía · v2.42.0</p>
+      <p class="version-foot">Traindía · v2.42.1</p>
     </div>`;
   },
 

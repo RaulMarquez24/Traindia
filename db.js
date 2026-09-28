@@ -480,11 +480,18 @@ const DB = (() => {
         const type = def.type || classifyType(n, '');
         e = { id: uid('ex'), userId, name: n, muscleGroup: def.group || muscleGroupFor(n) || 'General', type, substitutes: [], createdAt: Date.now() };
         if (def.howto) e.howto = def.howto;
+        if (Array.isArray(def.videos) && def.videos.length) { e.videos = def.videos.map(v => ({ ...v })); e.videoUrl = def.videos[0].url; }
         const metrics = Array.isArray(def.metrics) ? def.metrics : defaultMetricsFor(n, type);
         if ((type === 'time' || type === 'check') && Array.isArray(metrics)) e.metrics = metrics.slice();
         await put('exercises', e); byName.set(key(n), e);
-      } else if (def.howto && !e.howto) {
-        e.howto = def.howto; await put('exercises', e);
+      } else {
+        // Ya lo tenía: solo se añade lo que le falte (técnica y vídeos), sin pisar nada.
+        let touched = false;
+        if (def.howto && !e.howto) { e.howto = def.howto; touched = true; }
+        const mine = exVideos(e);
+        const extra = (def.videos || []).filter(v => !mine.some(m => m.url === v.url));
+        if (extra.length) { e.videos = [...mine, ...extra.map(v => ({ ...v }))]; e.videoUrl = e.videos[0].url; touched = true; }
+        if (touched) await put('exercises', e);
       }
     }
     for (const n of needed) {
@@ -953,7 +960,7 @@ const DB = (() => {
     getSettings, saveSettings,
     getPlaces, savePlaces, ensurePlaces,
     getUsers, getMainUser, createUser,
-    seedForUser, createPlan, setActivePlan, deletePlan, restoreDefaultExercises, restoreDefaultRoutine, restoreDefaultDay, updateExercise, migrate, runCardioUnify, cardioUnifyPending, classifyType,
+    seedForUser, createPlan, ensureTemplateExercises, setActivePlan, deletePlan, restoreDefaultExercises, restoreDefaultRoutine, restoreDefaultDay, updateExercise, migrate, runCardioUnify, cardioUnifyPending, classifyType,
     saveInternalBackup, listInternalBackups, deleteInternalBackup, restoreInternalBackup,
     filesOf, addFile, hasStore, isFallback, upgradeNow,
     nutritionOf, primaryNutritionOf, saveNutrition,
