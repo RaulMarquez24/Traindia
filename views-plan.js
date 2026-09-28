@@ -154,7 +154,7 @@ const VPlan = (() => {
     const planVacio = r.days.every(d => d.isRest || !(d.blocks || []).some(b => (b.exercises || []).length));
     const empty = planVacio ? `<div class="week-empty" id="weekEmpty">
         <strong>Tu plan está vacío</strong>
-        <span>Toca un día para añadirle ejercicios, o empieza con una plantilla ya montada.</span>
+        <span>Toca cada día para añadirle ejercicios o marcarlo como descanso, o empieza con una plantilla ya montada.</span>
         <div class="week-empty-actions">
           <button class="btn primary" data-we-tpl>Usar una plantilla</button>
           <button class="btn ghost" data-we-free>Entrenar sin plan</button>
@@ -227,9 +227,10 @@ const VPlan = (() => {
         </div>
         <div class="day-empty">
           <div class="day-empty-ic">${UI.icon('dumbbell', 26)}</div>
-          <strong>Este día aún no tiene ejercicios</strong>
-          <span>Añádelos una vez y, cada vez que entrenes, Traindía te enseñará qué hiciste la última vez.</span>
+          <strong>¿Qué toca este día?</strong>
+          <span>Si entrenas, añade los ejercicios una vez y Traindía te enseñará qué hiciste la última vez. Si no, márcalo como descanso.</span>
           <button class="btn primary block" data-act="edit-day">${UI.icon('plus', 16)} Añadir ejercicios</button>
+          <button class="btn ghost block" data-act="make-rest">Marcar como descanso</button>
         </div>
         <div class="detail-toolbar">
           <button class="btn ghost" data-act="swap-day">${UI.icon('swap', 16)} Intercambiar</button>
@@ -304,6 +305,14 @@ const VPlan = (() => {
       app.go('live', { dayId: d.id });
     });
     root.querySelector('[data-act="edit-day"]').addEventListener('click', () => editDay(app, d));
+    const mkRest = root.querySelector('[data-act="make-rest"]');
+    if (mkRest) mkRest.addEventListener('click', async () => {
+      d.type = 'rest'; d.typeLabel = TYPE_LABELS.rest; d.isRest = true;
+      if (!d.focus) d.focus = 'Recuperación';
+      await saveRoutine(app);
+      app.render();
+      UI.toast(`${d.name}: descanso · se cambia desde Editar día`);
+    });
     const share = root.querySelector('[data-act="share-day"]');
     if (share) share.addEventListener('click', () => VData.exportDay(app, d.id));
     const swap = root.querySelector('[data-act="swap-day"]');
