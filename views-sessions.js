@@ -647,6 +647,52 @@ const VSessions = (() => {
     }
     return app._restDuration;
   }
+  // ---- Aviso de fin de descanso como NOTIFICACIÓN del sistema ----
+  // Opt-in (interruptor en el selector de duración). Fase 1, sin servidor: si la app
+  // está en segundo plano cuando acaba el descanso, sale una notificación en vez del
+  // aviso de dentro. Con el móvil bloqueado el navegador congela la página y no
+  // llega: eso lo cubrirá el aviso desde el servidor (Web Push, fase 2).
+  const REST_NOTIFY_KEY = 'traindia.restNotify';
+  const REST_TAG = 'traindia-rest';
+  const notifSupported = () => 'Notification' in window && 'serviceWorker' in navigator;
+  function restNotifyOn() {
+    try { return notifSupported() && Notification.permission === 'granted' && localStorage.getItem(REST_NOTIFY_KEY) === '1'; } catch (e) { return false; }
+  }
+  // Activa/desactiva. Al activar pide permiso (tiene que ser tras un toque).
+  async function setRestNotify(on) {
+    if (!on) { try { localStorage.setItem(REST_NOTIFY_KEY, '0'); } catch (e) {} return false; }
+    if (!notifSupported()) { UI.toast('Este navegador no permite notificaciones', 'err'); return false; }
+    let perm = Notification.permission;
+    if (perm === 'default') { try { perm = await Notification.requestPermission(); } catch (e) { perm = 'denied'; } }
+    if (perm !== 'granted') {
+      UI.toast(perm === 'denied' ? 'Notificaciones bloqueadas: actívalas en los ajustes del móvil para Traindía' : 'Sin permiso para notificar', 'err');
+      try { localStorage.setItem(REST_NOTIFY_KEY, '0'); } catch (e) {}
+      return false;
+    }
+    try { localStorage.setItem(REST_NOTIFY_KEY, '1'); } catch (e) {}
+    return true;
+  }
+  async function restNotifications() {
+    try { const reg = await navigator.serviceWorker.ready; return { reg, list: await reg.getNotifications({ tag: REST_TAG }) }; } catch (e) { return { reg: null, list: [] }; }
+  }
+  async function clearRestNotification() { (await restNotifications()).list.forEach(n => n.close()); }
+  async function showRestNotification() {
+    const { reg } = await restNotifications();
+    if (!reg) return false;
+    try {
+      await reg.showNotification('⏱ Descanso terminado', {
+        body: 'A por la siguiente serie.',
+        tag: REST_TAG, renotify: true, requireInteraction: false,
+        icon: 'icon-192.png', badge: 'icon-192.png',
+        vibrate: [220, 110, 220],
+        data: { url: './' },
+      });
+      return true;
+    } catch (e) { return false; }
+  }
+  // Al volver a la app, la notificación ya no hace falta.
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && notifSupported()) clearRestNotification(); });
+
   function restRunning(app) { return !!(app._restEndTs && app._restEndTs > Date.now()); }
 
   // Wake Lock: mantiene la pantalla encendida (a su brillo normal, sin forzar
@@ -737,6 +783,8 @@ const VSessions = (() => {
     }
     if (!app._restFired) {
       app._restFired = true;
+      const fuera = document.visibilityState !== 'visible';
+      if (fuera && restNotifyOn()) showRestNotification();
       try { if (navigator.vibrate) navigator.vibrate([220, 110, 220]); } catch (e) {}
       beep();
       UI.toast('⏱ Descanso terminado');
@@ -750,6 +798,7 @@ const VSessions = (() => {
     ensureAudio(); // el toque del usuario habilita el audio (política de autoplay)
     app._restEndTs = Date.now() + dur * 1000;
     app._restFired = false;
+    if (notifSupported()) clearRestNotification(); // la del descanso anterior, si seguía ahí
     restEnsure(app);
   }
   function restStop(app) {
@@ -764,9 +813,18 @@ const VSessions = (() => {
       bodyHTML: `<div class="menu-list">
         ${opts.map(d => `<button class="menu-row" data-dur="${d}"><span><strong>${fmtClock(d)}</strong> · ${d}s</span><span class="chev">${d === cur ? '✓' : '›'}</span></button>`).join('')}
         <button class="menu-row" data-dur="custom"><span>Personalizado…${opts.includes(cur) ? '' : ` <span class="dim">(${cur}s)</span>`}</span><span class="chev">${opts.includes(cur) ? '›' : '✓'}</span></button>
-      </div>`,
+      </div>
+      ${notifSupported() ? `<label class="check-row rest-notif"><input type="checkbox" id="restNotif"${restNotifyOn() ? ' checked' : ''}>
+        <span><strong>Avisar con notificación</strong><span class="dim">Si sales de la app (a WhatsApp, la música…) te avisa al acabar el descanso.</span></span></label>` : ''}`,
       actions: [{ label: 'Cerrar', kind: 'ghost' }],
-      onMount: (m) => m.querySelectorAll('[data-dur]').forEach(b => b.addEventListener('click', async () => {
+      onMount: (m) => {
+        const chk = m.querySelector('#restNotif');
+        if (chk) chk.addEventListener('change', async () => {
+          const on = await setRestNotify(chk.checked);
+          chk.checked = on;
+          if (on) UI.toast('Te avisaremos con una notificación');
+        });
+        m.querySelectorAll('[data-dur]').forEach(b => b.addEventListener('click', async () => {
         const v = b.dataset.dur;
         UI.closeModal();
         if (v === 'custom') {
@@ -776,7 +834,8 @@ const VSessions = (() => {
         } else {
           restStart(app, parseInt(v, 10));
         }
-      })),
+      }));
+      },
     });
   }
 

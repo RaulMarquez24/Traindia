@@ -636,6 +636,11 @@ textarea.inp { resize: vertical; line-height: 1.4; }
 .check-list { max-height: 320px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; margin-top: 8px; }
 .check-row { display: flex; align-items: center; gap: 10px; padding: 8px 6px; font-size: 13px; color: var(--ink-soft); border-bottom: 1px solid var(--line-soft); }
 .check-row input { accent-color: var(--strong); width: 18px; height: 18px; }
+.rest-notif { margin-top: 14px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg-card); align-items: flex-start; }
+.rest-notif input { flex: none; margin-top: 2px; }
+.rest-notif > span { display: flex; flex-direction: column; gap: 2px; }
+.rest-notif strong { font-size: 14px; color: var(--ink); }
+.rest-notif .dim { font-size: 12px; line-height: 1.4; }
 /* Importador: secciones editables */
 .imp-sec { border-bottom: 1px solid var(--line-soft); }
 .imp-sec-head { border-bottom: none; }
