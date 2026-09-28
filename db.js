@@ -462,12 +462,74 @@ const DB = (() => {
     }));
   }
 
-  // Crea un plan (rutina). type: 'guided' (todo el contenido) | 'custom' (7 días vacíos).
-  // Ambos conservan el catálogo de ejercicios. Si activate, pasa a ser el plan activo.
-  async function createPlan(userId, type = 'guided', { name, activate = true } = {}) {
-    const { map } = await ensureDefaultExercises(userId);
+  // ---- Plantillas (templates.js) ----
+  // Deja en el catálogo del usuario todos los ejercicios que usa la plantilla (y sus
+  // suplentes). Reutiliza los que ya tenga con el mismo nombre (su progreso sigue
+  // enlazado): solo les añade la técnica si no tenían y los suplentes que falten.
+  async function ensureTemplateExercises(userId, tpl) {
+    const defs = (typeof TEMPLATES !== 'undefined' && TEMPLATES.EXERCISES) || {};
+    const key = (n) => String(n || '').trim().toLowerCase();
+    const byName = new Map((await exercisesOf(userId)).map(e => [key(e.name), e]));
+    const needed = [];
+    const add = (n) => { if (!n || needed.includes(n)) return; needed.push(n); ((defs[n] && defs[n].subs) || []).forEach(add); };
+    tpl.days.forEach(d => (d.blocks || []).forEach(b => (b.exercises || []).forEach(x => add(x.name))));
+    for (const n of needed) {
+      const def = defs[n] || {};
+      let e = byName.get(key(n));
+      if (!e) {
+        const type = def.type || classifyType(n, '');
+        e = { id: uid('ex'), userId, name: n, muscleGroup: def.group || muscleGroupFor(n) || 'General', type, substitutes: [], createdAt: Date.now() };
+        if (def.howto) e.howto = def.howto;
+        const metrics = Array.isArray(def.metrics) ? def.metrics : defaultMetricsFor(n, type);
+        if ((type === 'time' || type === 'check') && Array.isArray(metrics)) e.metrics = metrics.slice();
+        await put('exercises', e); byName.set(key(n), e);
+      } else if (def.howto && !e.howto) {
+        e.howto = def.howto; await put('exercises', e);
+      }
+    }
+    for (const n of needed) {
+      const subs = (defs[n] && defs[n].subs) || [];
+      if (!subs.length) continue;
+      const e = byName.get(key(n));
+      const mine = e.substitutes || [];
+      const extra = subs.map(s => byName.get(key(s))).filter(s => s && s.id !== e.id && !mine.includes(s.id)).map(s => s.id);
+      if (extra.length) { e.substitutes = [...mine, ...extra]; await put('exercises', e); }
+    }
+    return (n) => byName.get(key(n));
+  }
+  function buildTemplateDays(tpl, find) {
+    return tpl.days.map((d, i) => ({
+      id: uid('day'), name: d.name, type: d.type || '', typeLabel: d.typeLabel || '',
+      focus: d.focus || '', place: '', placeAccent: false, duration: d.duration || '',
+      isRest: !!d.isRest, order: i, substitutes: [], substitutesTitle: '',
+      planB: (d.planB || []).map(p => ({ ...p })), relatedGuides: [...(d.relatedGuides || [])],
+      blocks: (d.blocks || []).map(b => ({
+        label: b.label, optional: !!b.optional,
+        exercises: (b.exercises || []).map(x => {
+          const e = find(x.name);
+          const row = { exerciseId: e ? e.id : null, name: e ? e.name : x.name, type: e ? e.type : 'weight', sets: x.sets || '', priority: !!x.priority, optional: !!x.optional };
+          if (x.notes) row.notes = x.notes;
+          if (x.label) row.label = x.label;
+          return row;
+        }),
+      })),
+    }));
+  }
+
+  // Crea un plan (rutina). type: 'guided' (el plan completo antiguo) | 'custom' (7 días
+  // vacíos) | 'template' (una plantilla de templates.js, con opts.templateId).
+  // Todos conservan el catálogo de ejercicios. Si activate, pasa a ser el plan activo.
+  async function createPlan(userId, type = 'guided', { name, activate = true, templateId } = {}) {
     const isCustom = type === 'custom';
-    const routine = {
+    const tpl = type === 'template' && typeof TEMPLATES !== 'undefined' ? TEMPLATES.byId(templateId) : null;
+    if (type === 'template' && !tpl) throw new Error('Plantilla no encontrada');
+    // La plantilla trae su propio catálogo; el del plan completo antiguo solo para los demás.
+    const { map } = tpl ? { map: null } : await ensureDefaultExercises(userId);
+    const routine = tpl
+      ? { id: uid('rt'), userId, planType: 'template', templateId: tpl.id, name: name || tpl.name,
+          days: buildTemplateDays(tpl, await ensureTemplateExercises(userId, tpl)),
+          order: Date.now(), createdAt: Date.now(), isPrimary: false, dayTypeUnset: true }
+      : {
       id: uid('rt'), userId, planType: isCustom ? 'custom' : 'guided',
       name: name || (isCustom ? 'Mi plan' : routineName()),
       days: isCustom ? buildEmptyDays() : buildDefaultDays(map),
@@ -479,7 +541,7 @@ const DB = (() => {
       routine.isPrimary = true;
     }
     await put('routines', routine);
-    if (!isCustom) await seedSubstitutes(userId);
+    if (!isCustom && !tpl) await seedSubstitutes(userId); // suplentes del plan completo antiguo
     return routine;
   }
 
@@ -825,7 +887,8 @@ const DB = (() => {
             if (!ex.type) ex.type = typeByName.get((ex.name || '').trim().toLowerCase()) || classifyType(ex.name, ex.sets);
           }));
           // reagrupar bloques por categoría (conserva series, flags y ejercicios añadidos)
-          if (!d.isRest && d.blocks && d.blocks.length) {
+          // (no en plantillas: sus secciones van por función —fuerza principal, accesorios…— y en orden)
+          if (!d.isRest && d.blocks && d.blocks.length && rt.planType !== 'template') {
             const flat = d.blocks.flatMap(b => b.exercises || []);
             if (flat.length) d.blocks = groupIntoBlocks(flat, groupOf);
           }

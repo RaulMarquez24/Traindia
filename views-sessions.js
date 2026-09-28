@@ -1109,9 +1109,15 @@ const VSessions = (() => {
         day.blocks.forEach(b => b.exercises.forEach(ex => {
           const e = entryFromExercise(ex);
           if ((e.type === 'time' || e.type === 'check') && e.exerciseId && metricsById[e.exerciseId]) e.metrics = metricsById[e.exerciseId].slice();
-          const first = emptySet(e.type);
-          if (ex.label && e.type === 'time') first.label = ex.label; // prerellena la variante prescrita en el plan
-          e.sets.push(first);
+          // Tantas series como diga la prescripción («4×6-8», «3x12», «5×400m»); si no
+          // hay número o es hecho/no hecho, una. Las que queden vacías se limpian al terminar.
+          const m = e.type === 'check' ? null : /^\s*(\d{1,2})\s*[x×]/i.exec(ex.sets || '');
+          const n = m ? Math.min(Math.max(+m[1], 1), 10) : 1;
+          for (let i = 0; i < n; i++) {
+            const st = emptySet(e.type);
+            if (ex.label && e.type === 'time') st.label = ex.label; // prerellena la variante prescrita en el plan
+            e.sets.push(st);
+          }
           entries.push(e);
         }));
       }
