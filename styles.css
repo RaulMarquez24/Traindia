@@ -658,6 +658,13 @@ textarea.inp { resize: vertical; line-height: 1.4; }
 .rest-notif > span { display: flex; flex-direction: column; gap: 2px; }
 .rest-notif strong { font-size: 14px; color: var(--ink); }
 .rest-notif .dim { font-size: 12px; line-height: 1.4; }
+.notif-status { list-style: none; margin: 12px 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.notif-status li { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 2px 10px; padding: 9px 12px; border-radius: 10px; background: var(--line-soft); font-size: 13px; color: var(--ink-soft); }
+.notif-status li strong { font-size: 13px; color: var(--ink); }
+.notif-status li.ok strong { color: var(--light); }
+.notif-status li.ok strong::before { content: '✓ '; }
+.notif-status li.bad strong { color: var(--priority); }
+.notif-status li em { flex-basis: 100%; font-style: normal; font-size: 11.5px; color: var(--ink-dim); line-height: 1.35; }
 /* Importador: secciones editables */
 .imp-sec { border-bottom: 1px solid var(--line-soft); }
 .imp-sec-head { border-bottom: none; }

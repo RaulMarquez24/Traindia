@@ -769,7 +769,7 @@ const app = {
                 tipo: d.tipo,
                 mensaje: d.mensaje.trim(),
                 contacto: (d.contacto || '').trim() || '(no indicado)',
-                version: 'v2.40.0',
+                version: 'v2.41.0',
                 perfil: (this.mainUser && this.mainUser.name) || '',
                 navegador: navigator.userAgent,
               }),
@@ -805,7 +805,7 @@ const app = {
     return `<div class="section">
       ${rows.map(r => `<button class="big-row" ${r.modal ? 'data-share' : r.landing ? 'data-landing' : `data-link="${r.v}"`}><span class="big-row-icon tile" style="background:${r.color}">${UI.icon(r.icon, 20)}</span><span class="big-row-text"><strong>${r.label}</strong><span class="dim">${r.sub}</span></span><span class="chev">›</span></button>`).join('')}
       <button class="big-row" data-feedback><span class="big-row-icon tile" style="background:var(--strong)">${UI.icon('chat', 20)}</span><span class="big-row-text"><strong>Sugerencias y reportes</strong><span class="dim">Envíame ideas o fallos</span></span><span class="chev">›</span></button>
-      <p class="version-foot">Traindía · v2.40.0 · ${Object.keys(this.usersById).length} perfil(es)<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
+      <p class="version-foot">Traindía · v2.41.0 · ${Object.keys(this.usersById).length} perfil(es)<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
     </div>`;
   },
   bindMore(root) {
@@ -1056,6 +1056,40 @@ const app = {
   },
 
   // ---- Vista AJUSTES ----
+  // Ajustes → Notificaciones: interruptor, estado de cada pieza y aviso de prueba.
+  bindNotifSettings(root) {
+    const card = root.querySelector('#notifCard');
+    if (!card) return;
+    const chk = card.querySelector('#setNotif');
+    const box = card.querySelector('#notifStatus');
+    const row = (ok, label, value, hint = '') => `<li class="${ok === true ? 'ok' : ok === false ? 'bad' : ''}"><span>${label}</span><strong>${value}</strong>${hint ? `<em>${hint}</em>` : ''}</li>`;
+    const paint = async () => {
+      const st = await VSessions.notifStatus();
+      if (!document.body.contains(box)) return;
+      chk.checked = st.on;
+      const perm = { granted: [true, 'Permitido'], denied: [false, 'Bloqueado'], default: [null, 'Sin pedir'], unsupported: [false, 'No disponible'] }[st.permission] || [null, st.permission];
+      const err = st.lastError && st.lastError.msg ? `Último fallo: ${UI.esc(st.lastError.msg)}` : '';
+      box.innerHTML = [
+        row(perm[0], 'Permiso del móvil', perm[1], st.permission === 'denied' ? 'Actívalo en Ajustes de Android → Aplicaciones → Traindía (o Chrome) → Notificaciones.' : ''),
+        row(st.server, 'Servidor de avisos', st.server ? 'Conectado' : 'No responde', st.server ? '' : 'Sin él, con el móvil bloqueado no llega el aviso.'),
+        row(st.on ? st.subscribed : null, 'Este móvil', st.subscribed ? 'Suscrito' : (st.on ? 'Sin suscribir' : 'Aviso desactivado'), err),
+      ].join('');
+    };
+    chk.addEventListener('change', async () => {
+      chk.checked = await VSessions.setRestNotify(chk.checked);
+      if (chk.checked) UI.toast('Te avisaremos al acabar cada descanso');
+      setTimeout(paint, 1500); // la suscripción tarda un momento
+    });
+    card.querySelector('#notifTest').addEventListener('click', async (ev) => {
+      const b = ev.currentTarget; b.disabled = true;
+      try {
+        if (await VSessions.testPush(10000)) UI.toast('Aviso de prueba en 10 s: bloquea el móvil');
+      } catch (e) { UI.toast('No se pudo programar: ' + ((e && e.message) || 'error'), 'err'); }
+      b.disabled = false; paint();
+    });
+    paint();
+  },
+
   renderSettings() {
     const u = this.mainUser;
     const theme = this.getTheme();
@@ -1076,6 +1110,14 @@ const app = {
         </div>
         <p class="field-hint" style="margin-bottom:0">"Sistema" sigue el modo claro/oscuro de tu teléfono.</p>
       </div>
+      <div class="card" id="notifCard">
+        <div class="card-label">Notificaciones</div>
+        <label class="check-row rest-notif" style="margin-top:0"><input type="checkbox" id="setNotif"${VSessions.restNotifyOn() ? ' checked' : ''}>
+          <span><strong>Aviso de fin de descanso</strong><span class="dim">${UI.esc(VSessions.REST_NOTIFY_TEXT)}</span></span></label>
+        <ul class="notif-status" id="notifStatus"><li class="dim">Comprobando…</li></ul>
+        <button class="btn ghost block" id="notifTest">${UI.icon('clock', 16)} Probar aviso (llega en 10 s)</button>
+        <p class="field-hint" style="margin-bottom:0">Pulsa y <strong>bloquea el móvil</strong>: si a los 10 s te llega la notificación, está todo bien.</p>
+      </div>
       ${this.isFullPlan() ? `<div class="card">
         <div class="card-label">Datos predefinidos</div>
         <p class="field-hint" style="margin-top:0;margin-bottom:10px">Los ejercicios predefinidos nunca se borran. Si has cambiado tu rutina, puedes volver al plan original.</p>
@@ -1087,12 +1129,13 @@ const app = {
         <button class="btn danger block" id="resetApp">Borrar todos los datos</button>
         <p class="field-hint">Restablece la app al estado inicial (se borran todos los perfiles, sesiones y progreso).</p>
       </div>
-      <p class="version-foot">Traindía · v2.40.0</p>
+      <p class="version-foot">Traindía · v2.41.0</p>
     </div>`;
   },
 
   bindSettings(root) {
     UI.bindColorPicker(root);
+    this.bindNotifSettings(root);
     const shareBtn = root.querySelector('#shareData');
     if (shareBtn) shareBtn.addEventListener('click', () => VData.openShare(this));
     root.querySelectorAll('[data-theme-opt]').forEach(b => b.addEventListener('click', () => {
