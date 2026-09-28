@@ -222,9 +222,9 @@ const VPlan = (() => {
     }
 
     let related = '';
-    if (app.isFullPlan() && d.relatedGuides && d.relatedGuides.length) {
+    if (d.relatedGuides && d.relatedGuides.length && guideList(app).length) {
       const found = d.relatedGuides
-        .map(gid => PLAN_DATA.guides.find(x => x.id === gid))
+        .map(gid => guideList(app).find(x => x.id === gid))
         .filter(Boolean); // ignora guías que ya no existen (p.ej. la eliminada)
       if (found.length) {
         const links = found.map(g => `<a class="guide-link" data-link="guide" data-params='${JSON.stringify({ guideId: g.id })}'><span>${UI.esc(g.title)}</span><span class="guide-link-arrow">›</span></a>`).join('');
@@ -462,18 +462,24 @@ const VPlan = (() => {
     const openPicker = (category, cb) => {
       const inDay = new Set();
       draft.blocks.forEach(bl => (bl.exercises || []).forEach(x => { if (x.exerciseId) inDay.add(x.exerciseId); }));
-      const opts = catalog.filter(e => (e.muscleGroup || 'General') === category && !inDay.has(e.id));
-      const others = catalog.filter(e => (e.muscleGroup || 'General') !== category && !inDay.has(e.id));
+      // Una sección puede ser una categoría (Pecho) o una función (Fuerza principal,
+      // como en las plantillas). Si no hay ejercicios de esa categoría, se ofrecen
+      // todos y al crear uno se elige su categoría.
+      const isCategory = catalog.some(e => (e.muscleGroup || 'General') === category);
+      const free = catalog.filter(e => !inDay.has(e.id));
+      const opts = isCategory ? free.filter(e => (e.muscleGroup || 'General') === category) : free;
+      const others = isCategory ? free.filter(e => (e.muscleGroup || 'General') !== category) : [];
       const known = catalog.map(e => ({ ...e, inDay: inDay.has(e.id) }));
-      UI.pickExercise({ exercises: opts, others, known, withSets: true, title: `Añadir a ${category}`, lockGroup: category, onPick: async (picked) => {
+      UI.pickExercise({ exercises: opts, others, known, withSets: true, title: `Añadir a ${category}`, lockGroup: isCategory ? category : null, categories: isCategory ? null : categories, onPick: async (picked) => {
         let ex = picked;
         if (picked.isNew) {
           const clash = catalog.find(e => (e.name || '').trim().toLowerCase() === picked.name.trim().toLowerCase());
           if (clash) { ex = clash; UI.toast('Ese ejercicio ya existe; se ha usado el existente'); }
           else {
-            ex = { id: DB.uid('ex'), userId: app.activeUser.id, name: picked.name, muscleGroup: category, type: picked.type, substitutes: [], createdAt: Date.now() };
+            const group = isCategory ? category : (picked.muscleGroup || 'General');
+            ex = { id: DB.uid('ex'), userId: app.activeUser.id, name: picked.name, muscleGroup: group, type: picked.type, substitutes: [], createdAt: Date.now() };
             await DB.put('exercises', ex); catalog.push(ex);
-            if (!categories.includes(category)) categories.push(category);
+            if (!categories.includes(group)) categories.push(group);
             UI.toast(`«${ex.name}» creado y añadido`);
           }
         }
@@ -571,37 +577,109 @@ const VPlan = (() => {
   }
 
   // ---------- GUÍAS (estáticas) ----------
-  function guides() {
-    const cards = PLAN_DATA.guides.map(g => `
+  // Vienen del plan activo: su plantilla (templates.js) o, en el plan completo
+  // antiguo, PLAN_DATA. Un plan personalizado no tiene guías.
+  function templateOf(app) {
+    const r = app && app.routine;
+    return (r && r.planType === 'template' && typeof TEMPLATES !== 'undefined') ? TEMPLATES.byId(r.templateId) : null;
+  }
+  function guideList(app) {
+    const t = templateOf(app);
+    if (t) return t.guides || [];
+    return (app && app.isFullPlan() && typeof PLAN_DATA !== 'undefined') ? PLAN_DATA.guides : [];
+  }
+  function findGuide(app, id) { return guideList(app).find(x => x.id === id) || null; }
+
+  function guides(app) {
+    const t = templateOf(app);
+    const cards = guideList(app).map(g => `
       <a class="guide-card" data-link="guide" data-params='${JSON.stringify({ guideId: g.id })}'>
         <div class="num">GUÍA ${UI.esc(g.number)}</div>
         <h3>${UI.esc(g.title)}</h3>
         <p>${UI.esc(g.summary)}</p>
       </a>`).join('');
-    return `<div class="week-intro"><div class="eyebrow">Documentación detallada</div><h2>Guías</h2><p>Información completa sobre cada parte del plan.</p></div><div class="guides-list">${cards}</div>`;
+    return `<div class="week-intro"><div class="eyebrow">${t ? UI.esc(t.name) : 'Documentación detallada'}</div><h2>Guías</h2><p>Información completa sobre cada parte del plan.</p></div><div class="guides-list">${cards || '<p class="dim">Este plan no tiene guías.</p>'}</div>`;
   }
 
   function guide(app, params) {
-    const g = PLAN_DATA.guides.find(x => x.id === params.guideId);
+    const g = findGuide(app, params.guideId);
     if (!g) return `<div class="empty-state"><p>Guía no encontrada.</p></div>`;
     return `<div class="guide-content"><div class="guide-eyebrow">GUÍA ${UI.esc(g.number)}</div><h2>${UI.esc(g.title)}</h2>${g.content}</div>`;
   }
 
   // ---------- PLANES (gestor de planes) ----------
-  const PLAN_TYPE_LABEL = { guided: 'Completo', custom: 'Personalizado' };
+  const PLAN_TYPE_LABEL = { guided: 'Completo', custom: 'Personalizado', template: 'Plantilla' };
+
+  // Ficha de una plantilla: datos, puntos fuertes y guías.
+  function templateInfoHTML(t) {
+    const rows = [['Objetivo', t.goal], ['Frecuencia', t.frequency], ['Sesión', t.sessionTime], ['Nivel', t.level], ['Material', t.equipment]];
+    return `
+      <div class="catalog-title" style="margin-top:8px">Sobre este plan</div>
+      <p class="field-hint" style="margin-top:0">${UI.esc(t.tagline)}</p>
+      <div class="block"><ul class="ex-list">${rows.map(([k, v]) => `<li><span class="ex-name">${k}</span><span class="ex-sets">${UI.esc(v)}</span></li>`).join('')}</ul></div>
+      <div class="block"><div class="block-label">Qué incluye</div><ul class="ex-list">${(t.highlights || []).map(h => `<li><span class="ex-name">${UI.esc(h)}</span></li>`).join('')}</ul></div>
+      <div class="related-guides"><div class="block-label">Guías</div>
+        ${(t.guides || []).map(g => `<a class="guide-link" data-link="guide" data-params='${JSON.stringify({ guideId: g.id })}'><span>${UI.esc(g.title)}</span><span class="guide-link-arrow">›</span></a>`).join('')}
+      </div>`;
+  }
+
+  // Tarjetas para elegir con qué empezar un plan (alta y «Crear plan»).
+  // Valor: 'tpl:<id>' para una plantilla o 'custom' para uno en blanco.
+  function planChoicesHTML(selected) {
+    const tpls = typeof TEMPLATES !== 'undefined' ? TEMPLATES.list : [];
+    const card = (value, title, sub, meta, badge) => `
+      <button type="button" class="plan-choice${value === selected ? ' sel' : ''}" data-plan="${value}">
+        <strong>${title}${badge ? ` <span class="badge">${badge}</span>` : ''}</strong>
+        <span class="dim">${sub}</span>
+        ${meta ? `<span class="plan-choice-meta">${meta}</span>` : ''}
+      </button>`;
+    return tpls.map((t, i) => card(`tpl:${t.id}`, UI.esc(t.name), UI.esc(t.tagline),
+        `<span>${UI.esc(t.frequency)} · ${UI.esc(t.sessionTime)} · ${UI.esc(t.level)}</span><span class="plan-choice-more" data-preview="${t.id}">Ver qué incluye ›</span>`, i === 0 ? 'Recomendada' : ''))
+      .join('')
+      + card('custom', 'Plan en blanco', '7 días vacíos que montas a tu medida: tus ejercicios, tus días.', '', '')
+      + '<p class="field-hint plan-choice-soon">Más plantillas en camino.</p>';
+  }
+  function bindPlanChoices(root, onChange) {
+    root.querySelectorAll('.plan-choice[data-plan]').forEach(b => b.addEventListener('click', (e) => {
+      const pv = e.target.closest('[data-preview]');
+      if (pv) { e.stopPropagation(); templatePreview(pv.dataset.preview); return; }
+      root.querySelectorAll('.plan-choice').forEach(x => x.classList.remove('sel'));
+      b.classList.add('sel'); onChange(b.dataset.plan);
+    }));
+  }
+  // Vista previa de una plantilla: sus días y ejercicios, antes de elegirla.
+  function templatePreview(id) {
+    const t = TEMPLATES.byId(id);
+    if (!t) return;
+    const days = t.days.map(d => d.isRest
+      ? `<div class="tp-day rest"><strong>${UI.esc(d.name)}</strong><span class="dim">Descanso</span></div>`
+      : `<div class="tp-day"><strong>${UI.esc(d.name)}</strong><span class="tp-focus">${UI.esc(d.focus || '')}${d.duration ? ` · ${UI.esc(d.duration)}` : ''}</span>
+          <ul>${d.blocks.filter(b => !/calentamiento|vuelta a la calma/i.test(b.label)).flatMap(b => b.exercises).map(x => `<li class="${x.priority ? 'prio' : ''}${x.optional ? ' opt' : ''}"><span>${UI.esc(x.name)}</span><span class="dim">${UI.esc(x.sets || '')}</span></li>`).join('')}</ul>
+        </div>`).join('');
+    UI.modal({
+      title: t.name, size: 'wide',
+      bodyHTML: `<p class="modal-text">${UI.esc(t.tagline)}</p>
+        <p class="field-hint" style="margin-top:0">${UI.esc(t.frequency)} · ${UI.esc(t.sessionTime)} · ${UI.esc(t.level)} · ${UI.esc(t.equipment)}</p>
+        <div class="tp-days">${days}</div>
+        <p class="field-hint">Cada día incluye calentamiento, vuelta a la calma y Plan B. Todo se puede editar después.</p>`,
+      actions: [{ label: 'Cerrar', kind: 'ghost' }],
+    });
+  }
 
   async function info(app) {
     const routines = (await DB.routinesOf(app.activeUser.id)).sort((a, b) => (a.order || 0) - (b.order || 0));
     const activeId = app.routine && app.routine.id;
 
     const planCards = routines.map(r => {
-      const tDays = (r.days || []).filter(d => !d.isRest).length;
+      const train = (r.days || []).filter(d => !d.isRest);
+      const optDays = train.filter(d => (d.blocks || []).length && d.blocks.every(b => b.optional)).length; // días enteros opcionales
+      const tDays = train.length - optDays;
       const isActive = r.id === activeId;
       const typeBadge = `<span class="badge${(r.planType === 'custom') ? ' guest' : ''}">${PLAN_TYPE_LABEL[r.planType] || 'Completo'}</span>`;
       return `<div class="plan-card${isActive ? ' active' : ''}">
         <div class="plan-card-main">
           <strong>${UI.esc(r.name)} ${typeBadge}${isActive ? ' <span class="badge">Activo</span>' : ''}</strong>
-          <span class="dim">${tDays} días de entreno</span>
+          <span class="dim">${tDays} días de entreno${optDays ? ` + ${optDays} opcional` : ''}</span>
         </div>
         <span class="plan-card-actions">
           ${isActive ? '' : `<button class="btn ghost small" data-activate="${r.id}">Activar</button>`}
@@ -610,7 +688,8 @@ const VPlan = (() => {
       </div>`;
     }).join('');
 
-    const planInfo = app.isFullPlan() ? `
+    const tplActive = templateOf(app);
+    const planInfo = tplActive ? templateInfoHTML(tplActive) : app.isFullPlan() ? `
       <div class="catalog-title" style="margin-top:8px">Sobre este plan</div>
       <div class="block"><div class="block-label">Datos atleta</div>
         <ul class="ex-list">
@@ -644,8 +723,7 @@ const VPlan = (() => {
       <div class="week-intro"><div class="eyebrow">Tus planes</div><h2>Planes</h2><p>Cambia entre planes o crea uno nuevo. El plan activo decide qué guías y contenido ves.</p></div>
       ${planCards}
       <button class="btn ghost block" id="newPlan">${UI.icon('plus', 16)} Crear plan</button>
-      ${planInfo}
-      <p class="version-foot">Traindía · v2.1.0</p>`;
+      ${planInfo}`;
   }
 
   function infoBind(app, root) {
@@ -667,31 +745,26 @@ const VPlan = (() => {
   }
 
   function createPlanModal(app) {
-    let type = 'custom';
+    let type = typeof TEMPLATES !== 'undefined' && TEMPLATES.list.length ? `tpl:${TEMPLATES.list[0].id}` : 'custom';
     UI.modal({
-      title: 'Crear plan',
+      title: 'Crear plan', size: 'wide',
       bodyHTML: `<div id="newPlanForm">
-        ${UI.field('Nombre', UI.input('name', '', { placeholder: 'Ej: Mi plan' }))}
-        <span class="field-label">Tipo de plan</span>
-        <div class="plan-choices" id="planChoices">
-          <button type="button" class="plan-choice sel" data-plan="custom"><strong>Plan personalizado</strong><span class="dim">7 días que montas a tu medida: tus ejercicios, tus días.</span></button>
-          <div class="plan-choice disabled"><strong>Más planes <span class="badge soon">Próximamente</span></strong></div>
-        </div>
+        <span class="field-label">Empieza con</span>
+        <div class="plan-choices" id="planChoices">${planChoicesHTML(type)}</div>
+        ${UI.field('Nombre (opcional)', UI.input('name', '', { placeholder: 'Si lo dejas vacío, el de la plantilla' }))}
       </div>`,
       actions: [
         { label: 'Cancelar', kind: 'ghost' },
         { label: 'Crear y activar', kind: 'primary', onClick: async (rootEl) => {
           const d = UI.readForm(rootEl.querySelector('#newPlanForm'));
-          await DB.createPlan(app.activeUser.id, type, { name: d.name.trim() || undefined, activate: true });
+          const tplId = type.startsWith('tpl:') ? type.slice(4) : null;
+          await DB.createPlan(app.activeUser.id, tplId ? 'template' : 'custom', { name: d.name.trim() || undefined, activate: true, templateId: tplId });
           await app.refreshRoutine();
           app.go('info', {}, true);
           UI.toast('Plan creado y activado');
         }},
       ],
-      onMount: (rootEl) => rootEl.querySelectorAll('.plan-choice[data-plan]').forEach(b => b.addEventListener('click', () => {
-        rootEl.querySelectorAll('.plan-choice').forEach(x => x.classList.remove('sel'));
-        b.classList.add('sel'); type = b.dataset.plan;
-      })),
+      onMount: (rootEl) => bindPlanChoices(rootEl, (v) => { type = v; }),
     });
   }
 
@@ -1303,5 +1376,5 @@ const VPlan = (() => {
     return `<div class="empty-state"><p>No hay rutina configurada.</p></div>`;
   }
 
-  return { week, weekBind, day, dayBind, normalizeDayTypes, guides, guide, info, infoBind, exercises, exercisesBind, places, placesBind, checkDuplicates };
+  return { week, weekBind, day, dayBind, normalizeDayTypes, guides, guide, templateOf, guideList, findGuide, planChoicesHTML, bindPlanChoices, templatePreview, info, infoBind, exercises, exercisesBind, places, placesBind, checkDuplicates };
 })();

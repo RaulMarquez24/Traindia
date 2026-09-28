@@ -347,8 +347,8 @@ const app = {
     } else if (this.currentView === 'day' && this.routine) {
       const d = this.routine.days.find(x => x.id === this.params.dayId);
       if (d) label = d.name;
-    } else if (this.currentView === 'guide' && typeof PLAN_DATA !== 'undefined') {
-      const g = PLAN_DATA.guides.find(x => x.id === this.params.guideId);
+    } else if (this.currentView === 'guide') {
+      const g = VPlan.findGuide(this, this.params.guideId);
       if (g) label = g.title;
     }
     title.textContent = label;
@@ -393,7 +393,7 @@ const app = {
       host.id = 'onboarding';
       document.body.appendChild(host);
     }
-    let planType = 'custom';
+    let planType = typeof TEMPLATES !== 'undefined' && TEMPLATES.list.length ? `tpl:${TEMPLATES.list[0].id}` : 'custom';
     host.innerHTML = `
       <div class="onb-wrap">
         <div class="onb-card">
@@ -405,17 +405,8 @@ const app = {
             ${UI.field('Tu nombre', UI.input('name', '', { placeholder: 'Ej: Raúl' }))}
             ${UI.field('Color', UI.colorPicker('color', UI.COLORS[0]))}
           </div>
-          <span class="field-label">Tu plan</span>
-          <div class="plan-choices" id="planChoices">
-            <button type="button" class="plan-choice sel" data-plan="custom">
-              <strong>Plan personalizado</strong>
-              <span class="dim">7 días que montas a tu medida: tus ejercicios, tus días.</span>
-            </button>
-            <div class="plan-choice disabled">
-              <strong>Más planes <span class="badge soon">Próximamente</span></strong>
-              <span class="dim">Nuevas plantillas en camino.</span>
-            </div>
-          </div>
+          <span class="field-label">Empieza con</span>
+          <div class="plan-choices" id="planChoices">${VPlan.planChoicesHTML(planType)}</div>
           <button class="btn primary block" id="onbStart">Empezar</button>
         </div>
       </div>`;
@@ -429,20 +420,24 @@ const app = {
       if (ld) ld.style.display = '';
       window.scrollTo(0, 0);
     });
-    host.querySelectorAll('.plan-choice[data-plan]').forEach(b => b.addEventListener('click', () => {
-      host.querySelectorAll('.plan-choice').forEach(x => x.classList.remove('sel'));
-      b.classList.add('sel'); planType = b.dataset.plan;
-    }));
+    VPlan.bindPlanChoices(host, (v) => { planType = v; });
     const start = host.querySelector('#onbStart');
     start.addEventListener('click', async () => {
       const data = UI.readForm(host.querySelector('#onbForm'));
       if (!data.name || !data.name.trim()) { UI.toast('Escribe un nombre', 'err'); return; }
       start.disabled = true;
       const user = await DB.createUser({ name: data.name, color: data.color, isMain: true });
-      await DB.createPlan(user.id, planType, { activate: true });
-      await DB.saveSettings({ mainUserId: user.id, activeUserId: user.id, seeded: true, version: 2, dataVersion: 8 });
-      await DB.migrate();
-      await DB.runCardioUnify(); // usuario nuevo: cardio ya unificado de inicio, sin aviso
+      const tplId = planType.startsWith('tpl:') ? planType.slice(4) : null;
+      await DB.createPlan(user.id, tplId ? 'template' : 'custom', { activate: true, templateId: tplId });
+      if (tplId) {
+        // Con plantilla todo nace en el formato actual: nada que migrar (y las migraciones
+        // añadirían el catálogo del plan completo antiguo, que aquí solo sería ruido).
+        await DB.saveSettings({ mainUserId: user.id, activeUserId: user.id, seeded: true, version: 2, dataVersion: 10, cardioTimeMetric: true, debranded: true });
+      } else {
+        await DB.saveSettings({ mainUserId: user.id, activeUserId: user.id, seeded: true, version: 2, dataVersion: 8 });
+        await DB.migrate();
+        await DB.runCardioUnify(); // usuario nuevo: cardio ya unificado de inicio, sin aviso
+      }
       host.remove();
       this.markHasProfile(); // ya hay perfil: se oculta la presentación y se muestra la app
       document.getElementById('appShell').style.display = '';
@@ -455,7 +450,7 @@ const app = {
     });
   },
 
-  isFullPlan() { return !this.routine || this.routine.planType !== 'custom'; }, // plan con guías/contenido (no personalizado vacío)
+  isFullPlan() { return !this.routine || !['custom', 'template'].includes(this.routine.planType); }, // el plan completo antiguo (sus guías y datos); las plantillas llevan las suyas
 
   // ---- Presentación (landing) vs app ----
   // Por defecto el HTML muestra la presentación; en cuanto hay perfil se marca el <html>
@@ -774,7 +769,7 @@ const app = {
                 tipo: d.tipo,
                 mensaje: d.mensaje.trim(),
                 contacto: (d.contacto || '').trim() || '(no indicado)',
-                version: 'v2.38.0',
+                version: 'v2.39.0',
                 perfil: (this.mainUser && this.mainUser.name) || '',
                 navegador: navigator.userAgent,
               }),
@@ -806,11 +801,11 @@ const app = {
       { v: 'backups', icon: 'clock', color: 'var(--moderate)', label: 'Copias internas', sub: 'Puntos de restauración' },
       { v: 'settings', icon: 'settings', color: 'var(--rest)', label: 'Ajustes', sub: 'Perfil principal y app' },
       { v: 'landing', icon: 'info', color: 'var(--light)', label: 'Ver la presentación', sub: 'La página de bienvenida', landing: true },
-    ].filter(r => !r.guidedOnly || this.isFullPlan());
+    ].filter(r => !r.guidedOnly || VPlan.guideList(this).length);
     return `<div class="section">
       ${rows.map(r => `<button class="big-row" ${r.modal ? 'data-share' : r.landing ? 'data-landing' : `data-link="${r.v}"`}><span class="big-row-icon tile" style="background:${r.color}">${UI.icon(r.icon, 20)}</span><span class="big-row-text"><strong>${r.label}</strong><span class="dim">${r.sub}</span></span><span class="chev">›</span></button>`).join('')}
       <button class="big-row" data-feedback><span class="big-row-icon tile" style="background:var(--strong)">${UI.icon('chat', 20)}</span><span class="big-row-text"><strong>Sugerencias y reportes</strong><span class="dim">Envíame ideas o fallos</span></span><span class="chev">›</span></button>
-      <p class="version-foot">Traindía · v2.38.0 · ${Object.keys(this.usersById).length} perfil(es)<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
+      <p class="version-foot">Traindía · v2.39.0 · ${Object.keys(this.usersById).length} perfil(es)<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
     </div>`;
   },
   bindMore(root) {
@@ -1092,7 +1087,7 @@ const app = {
         <button class="btn danger block" id="resetApp">Borrar todos los datos</button>
         <p class="field-hint">Restablece la app al estado inicial (se borran todos los perfiles, sesiones y progreso).</p>
       </div>
-      <p class="version-foot">Traindía · v2.38.0</p>
+      <p class="version-foot">Traindía · v2.39.0</p>
     </div>`;
   },
 
