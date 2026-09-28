@@ -1,10 +1,10 @@
 // Service Worker - Traindía
-// La versión visible de la app es v2.41.3 (ver pie en la app).
+// La versión visible de la app es v2.42.0 (ver pie en la app).
 // CACHE_NAME es solo la clave de caché: súbele el número de build en cada deploy
 // (build-6, build-7, …) para que los cambios lleguen a las apps ya instaladas.
 // Los fetch usan {cache:'reload'} para saltarse la caché HTTP del navegador/Pages
 // y traer SIEMPRE la última versión con red (offline tira de CACHE_NAME).
-const CACHE_NAME = 'traindia-build-192';
+const CACHE_NAME = 'traindia-build-193';
 // Buzón temporal para archivos que llegan por "Compartir" desde otra app
 // (WhatsApp, Archivos…). No se borra al activar: lo lee y vacía la app.
 const SHARE_CACHE = 'traindia-share-inbox';
@@ -22,6 +22,7 @@ const ASSETS = [
   './views-progress.js',
   './views-nutrition.js',
   './views-data.js',
+  './plan-ai.js',
   './app.js',
   './manifest.json',
   './icon.svg',
