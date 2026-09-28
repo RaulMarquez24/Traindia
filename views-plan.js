@@ -229,7 +229,7 @@ const VPlan = (() => {
           <div class="day-empty-ic">${UI.icon('dumbbell', 26)}</div>
           <strong>¿Qué toca este día?</strong>
           <span>Si entrenas, añade los ejercicios una vez y Traindía te enseñará qué hiciste la última vez. Si no, márcalo como descanso.</span>
-          <button class="btn primary block" data-act="edit-day">${UI.icon('plus', 16)} Añadir ejercicios</button>
+          <button class="btn primary block" data-act="add-first">${UI.icon('plus', 16)} Añadir ejercicios</button>
           <button class="btn ghost block" data-act="make-rest">Marcar como descanso</button>
         </div>
         <div class="detail-toolbar">
@@ -304,7 +304,10 @@ const VPlan = (() => {
       }
       app.go('live', { dayId: d.id });
     });
-    root.querySelector('[data-act="edit-day"]').addEventListener('click', () => editDay(app, d));
+    const editBtn = root.querySelector('[data-act="edit-day"]');
+    if (editBtn) editBtn.addEventListener('click', () => editDay(app, d));
+    const addFirst = root.querySelector('[data-act="add-first"]');
+    if (addFirst) addFirst.addEventListener('click', () => editDay(app, d, { openAdd: true }));
     const mkRest = root.querySelector('[data-act="make-rest"]');
     if (mkRest) mkRest.addEventListener('click', async () => {
       d.type = 'rest'; d.typeLabel = TYPE_LABELS.rest; d.isRest = true;
@@ -398,7 +401,7 @@ const VPlan = (() => {
   // ---- Editor de día (modal grande, con buscador de ejercicios) ----
   const EX_TYPE_SHORT = { weight: 'peso+reps', reps: 'reps', time: 'tiempo', check: 'hecho/no' };
 
-  async function editDay(app, d) {
+  async function editDay(app, d, opts = {}) {
     const catalog = await DB.exercisesOf(app.activeUser.id); // lista mutable
     const categories = categoriesFrom(catalog); // establecidas; se amplían al crear nuevas
     const places = await DB.getPlaces(); // lugares establecidos (mutable)
@@ -466,7 +469,9 @@ const VPlan = (() => {
           <div class="ed-ex-list" data-block="${bi}">${b.exercises.map((ex, ei) => rowHTML(ex, bi, ei)).join('')}</div>
           <button class="btn ghost small" data-add-ex="${bi}">+ Ejercicio</button>
         </div>`).join('');
-      return meta + `<div class="editor-blocks">${blocks}</div><button class="btn ghost block" id="addBlock">+ Añadir categoría</button>` + planBHTML;
+      return meta + `<div class="editor-blocks">${blocks}</div>
+        <button class="btn primary block" id="addExAny">${UI.icon('plus', 16)} Añadir ejercicio</button>
+        <div class="ed-add-more"><button class="btn ghost small" id="addBlock">+ Añadir categoría vacía</button></div>` + planBHTML;
     };
 
     const readMeta = (root) => {
@@ -510,12 +515,12 @@ const VPlan = (() => {
       // Una sección puede ser una categoría (Pecho) o una función (Fuerza principal,
       // como en las plantillas). Si no hay ejercicios de esa categoría, se ofrecen
       // todos y al crear uno se elige su categoría.
-      const isCategory = catalog.some(e => (e.muscleGroup || 'General') === category);
+      const isCategory = !!category && catalog.some(e => (e.muscleGroup || 'General') === category);
       const free = catalog.filter(e => !inDay.has(e.id));
       const opts = isCategory ? free.filter(e => (e.muscleGroup || 'General') === category) : free;
       const others = isCategory ? free.filter(e => (e.muscleGroup || 'General') !== category) : [];
       const known = catalog.map(e => ({ ...e, inDay: inDay.has(e.id) }));
-      UI.pickExercise({ exercises: opts, others, known, withSets: true, title: `Añadir a ${category}`, lockGroup: isCategory ? category : null, categories: isCategory ? null : categories, onPick: async (picked) => {
+      UI.pickExercise({ exercises: opts, others, known, withSets: true, title: category ? `Añadir a ${category}` : 'Añadir ejercicio', lockGroup: isCategory ? category : null, categories: isCategory ? null : categories, onPick: async (picked) => {
         let ex = picked;
         if (picked.isNew) {
           const clash = catalog.find(e => (e.name || '').trim().toLowerCase() === picked.name.trim().toLowerCase());
@@ -532,16 +537,51 @@ const VPlan = (() => {
       } });
     };
 
+    const defSets = (t) => (t === 'weight' || t === 'reps') ? '3×10' : '';
+    const placeExercise = (ex, extra = {}) => {
+      const row = { exerciseId: ex.id, name: ex.name, type: ex.type, sets: extra.sets || defSets(ex.type), notes: extra.notes || '', priority: false, optional: false };
+      const group = ex.muscleGroup || 'General';
+      let bi = -1;
+      draft.blocks.forEach((b, i) => { if ((b.label || '') === group) bi = i; });
+      if (bi < 0) {
+        const tail = /estiramiento|vuelta a la calma/i;
+        let at = draft.blocks.length;
+        while (at > 0 && tail.test(draft.blocks[at - 1].label || '') && !tail.test(group)) at--;
+        draft.blocks.splice(at, 0, { label: group, optional: false, exercises: [] });
+        bi = at;
+      }
+      draft.blocks[bi].exercises.push(row);
+      return { bi, ei: draft.blocks[bi].exercises.length - 1, group };
+    };
+    // Tras repintar, lleva la vista al ejercicio recién añadido y lo resalta.
+    const flashRow = (root, pos) => {
+      const el = root.querySelector(`.ed-ex[data-bi="${pos.bi}"][data-ei="${pos.ei}"]`);
+      if (!el) return;
+      el.scrollIntoView({ block: 'center' });
+      el.classList.add('flash');
+      setTimeout(() => el.classList.remove('flash'), 1600);
+    };
+    const openAddAny = (root) => {
+      sync(root);
+      openPicker(null, (ex, extra) => {
+        const pos = placeExercise(ex, extra);
+        rerender(root);
+        flashRow(root, pos);
+        UI.toast(`Añadido a ${pos.group}`);
+      });
+    };
+
     const bindBody = (root) => {
       const typeSel = root.querySelector('#dayMeta select[name="type"]');
+      const addAny = root.querySelector('#addExAny');
+      if (addAny) addAny.addEventListener('click', () => openAddAny(root));
       if (typeSel) typeSel.addEventListener('change', () => { syncSafe(root); draft.type = typeSel.value; rerender(root); });
       root.querySelectorAll('[data-add-ex]').forEach(b => b.addEventListener('click', () => {
         sync(root);
         const bi = +b.dataset.addEx;
         const cat = draft.blocks[bi].label || 'General';
         // Si no se indican series (ejercicio elegido de la lista), 3×10 en los de peso o
-        // repeticiones: así el entreno arranca con 3 series y no con una.
-        const defSets = (t) => (t === 'weight' || t === 'reps') ? '3×10' : '';
+        // repeticiones (defSets): así el entreno arranca con 3 series y no con una.
         openPicker(cat, (ex, extra = {}) => { draft.blocks[bi].exercises.push({ exerciseId: ex.id, name: ex.name, type: ex.type, sets: extra.sets || defSets(ex.type), notes: extra.notes || '', priority: false, optional: false }); rerender(root); });
       }));
       root.querySelectorAll('[data-block-cat]').forEach(b => b.addEventListener('click', () => {
@@ -620,7 +660,7 @@ const VPlan = (() => {
           UI.toast('Día guardado');
         }},
       ],
-      onMount: (root) => rerender(root),
+      onMount: (root) => { rerender(root); if (opts.openAdd && draft.type !== 'rest') openAddAny(root); },
     });
   }
 

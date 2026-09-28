@@ -312,6 +312,8 @@ textarea.inp { resize: vertical; line-height: 1.4; }
 /* Aviso de instalar: nunca durante el entreno (taparía el descanso) */
 body[data-view="live"] .install-prompt { display: none !important; }
 /* Día y plan vacíos */
+.ed-add-more { display: flex; justify-content: center; margin: 6px 0 14px; }
+.ed-ex.flash { animation: catFlash 1.6s ease; }
 .day-empty { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 6px; padding: 22px 18px 18px; margin: 4px 0 14px; background: var(--bg-card); border: 1.5px dashed var(--line); border-radius: 14px; }
 .day-empty-ic { display: flex; align-items: center; justify-content: center; width: 52px; height: 52px; border-radius: 16px; background: var(--strong-bg); color: var(--strong); margin-bottom: 4px; }
 .day-empty strong { font-size: 16px; }
