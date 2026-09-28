@@ -291,7 +291,8 @@ const VData = (() => {
 
   function routeImport(app, payload) {
     if (!payload || !isExportFormat(payload.format) || !payload.data) { UI.toast('No es un export de Traindía', 'err'); return; }
-    if (payload.kind === 'nutrition' && payload.data.plan) importNutrition(app, payload);
+    if (payload.kind === 'plan-ia' && typeof VPlanAI !== 'undefined') VPlanAI.preview(app, payload); // plan de entreno hecho por una IA
+    else if (payload.kind === 'nutrition' && payload.data.plan) importNutrition(app, payload);
     else if (payload.kind === 'day' && payload.data.day) importDay(app, payload);
     else if (payload.kind === 'plan' && payload.data.routine) importPlan(app, payload);
     else importFlow(app, payload);
@@ -329,7 +330,9 @@ const VData = (() => {
       (d.blocks || []).forEach(b => (b.exercises || []).forEach(e => { if (e.exerciseId && idMap[e.exerciseId]) e.exerciseId = idMap[e.exerciseId]; }));
     });
     const { id: _i, userId: _u, isPrimary: _p, days: _d, ...rest } = routine; // resto de datos del plan, tal cual
-    await DB.put('routines', { ...rest, id: DB.uid('rt'), userId: targetUserId, planType: (routine.planType === 'cnp' ? 'guided' : routine.planType) || 'guided', name, days: newDays, order: Date.now(), createdAt: Date.now(), isPrimary: false });
+    const rec = { ...rest, id: DB.uid('rt'), userId: targetUserId, planType: (routine.planType === 'cnp' ? 'guided' : routine.planType) || 'guided', name, days: newDays, order: Date.now(), createdAt: Date.now(), isPrimary: false };
+    await DB.put('routines', rec);
+    return rec;
   }
   // Fusiona los días elegidos del plan del archivo DENTRO del plan activo del destino:
   // sustituye el día con el mismo nombre (conserva su id/orden) o lo añade si no existe.
@@ -925,5 +928,5 @@ const VData = (() => {
     return added;
   }
 
-  return { openShare, exportDay, importDay, exportNutrition, exportSession, exportProgressEntry, routeImport, checkBackupReminder, backupProfile };
+  return { openShare, exportDay, importDay, exportNutrition, exportSession, exportProgressEntry, routeImport, checkBackupReminder, backupProfile , createImportedPlan };
 })();

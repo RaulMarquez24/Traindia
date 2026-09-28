@@ -724,6 +724,7 @@ const VPlan = (() => {
     return tpls.map((t, i) => card(`tpl:${t.id}`, UI.esc(t.name), UI.esc(t.tagline),
         `<span>${UI.esc(t.frequency)} · ${UI.esc(t.sessionTime)} · ${UI.esc(t.level)}</span><span class="plan-choice-more" data-preview="${t.id}">Ver qué incluye ›</span>`, i === 0 ? 'Recomendada' : ''))
       .join('')
+      + card('ai', 'Plan de tu entrenador', 'Con el PDF o las fotos que te dio y la ayuda de una IA: Traindía lo convierte en tu plan.', '', 'Beta')
       + card('custom', 'Plan en blanco', '7 días vacíos que montas a tu medida: tus ejercicios, tus días.', '', '')
       + '<p class="field-hint plan-choice-soon">Más plantillas en camino.</p>';
   }
@@ -776,6 +777,11 @@ const VPlan = (() => {
       </div>`;
     }).join('');
 
+    const r0 = app.routine;
+    const notesHTML = (r0 && Array.isArray(r0.planNotes) && r0.planNotes.length) ? `
+      <div class="catalog-title" style="margin-top:8px">Notas del plan</div>
+      ${(r0.planDuration || r0.planStart) ? `<p class="field-hint" style="margin-top:0">${[r0.planDuration ? `Duración: ${UI.esc(r0.planDuration)}` : '', r0.planStart ? `Empieza: ${UI.esc(UI.fmtDate(r0.planStart))}` : ''].filter(Boolean).join(' · ')}</p>` : ''}
+      <div class="block"><ul class="ex-list">${r0.planNotes.map(n => `<li><span class="ex-name">${UI.esc(n)}</span></li>`).join('')}</ul></div>` : '';
     const tplActive = templateOf(app);
     const planInfo = tplActive ? templateInfoHTML(tplActive) : app.isFullPlan() ? `
       <div class="catalog-title" style="margin-top:8px">Sobre este plan</div>
@@ -811,6 +817,8 @@ const VPlan = (() => {
       <div class="week-intro"><div class="eyebrow">Tus planes</div><h2>Planes</h2><p>Cambia entre planes o crea uno nuevo. El plan activo decide qué guías y contenido ves.</p></div>
       ${planCards}
       <button class="btn ghost block" id="newPlan">${UI.icon('plus', 16)} Crear plan</button>
+      <button class="btn ${VPlanAI.pidioPrompt() ? 'primary' : 'ghost'} block" id="aiPaste">${UI.icon('upload', 16)} Pegar el resultado de la IA</button>
+      ${notesHTML}
       ${planInfo}`;
   }
 
@@ -830,6 +838,8 @@ const VPlan = (() => {
     }));
     const newPlan = root.querySelector('#newPlan');
     if (newPlan) newPlan.addEventListener('click', () => createPlanModal(app));
+    const aiPaste = root.querySelector('#aiPaste');
+    if (aiPaste) aiPaste.addEventListener('click', () => VPlanAI.paste(app));
   }
 
   function createPlanModal(app) {
@@ -845,6 +855,7 @@ const VPlan = (() => {
         { label: 'Cancelar', kind: 'ghost' },
         { label: 'Crear y activar', kind: 'primary', onClick: async (rootEl) => {
           const d = UI.readForm(rootEl.querySelector('#newPlanForm'));
+          if (type === 'ai') { setTimeout(() => VPlanAI.open(app), 50); return; } // el plan lo crea el importador
           const tplId = type.startsWith('tpl:') ? type.slice(4) : null;
           await DB.createPlan(app.activeUser.id, tplId ? 'template' : 'custom', { name: d.name.trim() || undefined, activate: true, templateId: tplId });
           await app.refreshRoutine();
