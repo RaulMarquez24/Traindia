@@ -771,7 +771,7 @@ const app = {
                 tipo: d.tipo,
                 mensaje: d.mensaje.trim(),
                 contacto: (d.contacto || '').trim() || '(no indicado)',
-                version: 'v2.44.0',
+                version: 'v2.44.1',
                 perfil: (this.mainUser && this.mainUser.name) || '',
                 navegador: navigator.userAgent,
               }),
@@ -791,29 +791,42 @@ const app = {
   },
 
   // ---- Vista MÁS ----
-  renderMore() {
+  async renderMore() {
+    // Cada fila dice algo tuyo (plan activo, cuántos ejercicios, última copia…), no solo qué es.
+    const uid = this.activeUser.id;
+    const [plans, exs, docs, st] = await Promise.all([
+      DB.routinesOf(uid).catch(() => []), DB.exercisesOf(uid).catch(() => []), this.loadDocs().catch(() => []), DB.getSettings().catch(() => null),
+    ]);
+    const n = (k, one, many) => `${k} ${k === 1 ? one : many}`;
+    const guides = VPlan.guideList(this);
+    const DAY = 86400000, last = (st && st.lastBackupAt) || 0; // fresco: la copia puede ser de hace un momento
+    const ago = last ? Math.floor((Date.now() - last) / DAY) : -1;
+    const copia = ago < 0 ? { txt: 'Aún no has hecho ninguna copia completa', warn: true }
+      : { txt: `Última copia completa ${ago === 0 ? 'hoy' : ago === 1 ? 'ayer' : `hace ${ago} días`}`, warn: ago > 7 };
+    const invitados = Object.keys(this.usersById).length - 1;
+    const tema = { system: 'Tema del sistema', light: 'Tema claro', dark: 'Tema oscuro' }[this.getTheme()] || 'Tema';
     const groups = [
       { title: 'Entreno', color: 'var(--moderate)', rows: [
-        { v: 'info', icon: 'calendar', label: 'Planes', sub: 'Cambia o crea planes' },
-        ...(VPlan.guideList(this).length ? [{ v: 'guides', icon: 'book', label: 'Guías', sub: 'Las de tu plan' }] : []),
-        { v: 'exercises', icon: 'tag', label: 'Ejercicios', sub: 'Tu catálogo' },
-        { v: 'docs', icon: 'notebook', label: 'Documentos', sub: 'PDFs y fotos del entreno' },
+        { v: 'info', icon: 'calendar', label: 'Planes', sub: this.routine ? `${this.routine.name}${plans.length > 1 ? ` · ${n(plans.length, 'plan', 'planes')}` : ''}` : 'Crea tu primer plan' },
+        ...(guides.length ? [{ v: 'guides', icon: 'book', label: 'Guías', sub: `${n(guides.length, 'guía', 'guías')} de tu plan` }] : []),
+        { v: 'exercises', icon: 'tag', label: 'Ejercicios', sub: exs.length ? `${n(exs.length, 'ejercicio', 'ejercicios')} en tu catálogo` : 'Tu catálogo, vacío por ahora' },
+        { v: 'docs', icon: 'notebook', label: 'Documentos', sub: docs.length ? `${n(docs.length, 'guardado', 'guardados')} · a mano en el entreno` : 'PDFs y fotos, a mano en el entreno' },
       ] },
       { title: 'Tus datos', color: 'var(--light)', rows: [
-        { v: 'backups', icon: 'swap', label: 'Copias y datos', sub: 'Exportar, importar y copias' },
-        { v: 'profiles', icon: 'users', label: 'Perfiles', sub: 'Principal e invitados' },
+        { v: 'backups', icon: 'swap', label: 'Copias y datos', sub: copia.txt, warn: copia.warn },
+        { v: 'profiles', icon: 'users', label: 'Perfiles', sub: `${this.mainUser ? this.mainUser.name : 'Tú'}${invitados > 0 ? ` · ${n(invitados, 'invitado', 'invitados')}` : ' · sin invitados'}` },
       ] },
       { title: 'App', color: 'var(--rest)', rows: [
-        { v: 'settings', icon: 'settings', label: 'Ajustes', sub: 'Tema, avisos y acerca de' },
+        { v: 'settings', icon: 'settings', label: 'Ajustes', sub: `${tema} · avisos ${VSessions.restNotifyOn() ? 'activados' : 'desactivados'}` },
         { feedback: true, icon: 'chat', label: 'Sugerencias y reportes', sub: 'Envíame ideas o fallos' },
       ] },
     ];
     return `<div class="section">
       ${groups.map(g => `<div class="more-sec">${g.title}</div>
         <div class="more-group">${g.rows.map(r => `<button class="more-row" ${r.feedback ? 'data-feedback' : `data-link="${r.v}"`}>
-          <span class="more-ic" style="background:${g.color}">${UI.icon(r.icon, 17)}</span>
-          <span class="more-txt"><strong>${r.label}</strong><span>${r.sub}</span></span><span class="chev">›</span></button>`).join('')}</div>`).join('')}
-      <p class="version-foot">Traindía · v2.44.0 · ${Object.keys(this.usersById).length} perfil(es)<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
+          <span class="more-ic" style="background:${g.color}">${UI.icon(r.icon, 20)}</span>
+          <span class="more-txt"><strong>${r.label}</strong><span${r.warn ? ' class="warn"' : ''}>${UI.esc(r.sub)}</span></span><span class="chev">›</span></button>`).join('')}</div>`).join('')}
+      <p class="version-foot">Traindía · v2.44.1 · ${Object.keys(this.usersById).length} perfil(es)<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
     </div>`;
   },
   bindMore(root) {
@@ -1141,7 +1154,7 @@ const app = {
       </div>
       <div class="card">
         <div class="card-label">Acerca de Traindía</div>
-        <p class="field-hint" style="margin-top:0">Versión v2.44.0 · © 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
+        <p class="field-hint" style="margin-top:0">Versión v2.44.1 · © 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
         <button class="btn ghost block" id="seeLanding">${UI.icon('info', 16)} Ver la presentación</button>
       </div>
       <div class="card danger-zone">
