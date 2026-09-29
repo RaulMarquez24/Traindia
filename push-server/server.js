@@ -16,6 +16,14 @@
 //   POST   /rest            { subscription, inMs }     → { id }   programa un aviso
 //   PUT    /rest/:id        { inMs }                   → { ok }   lo reprograma (+15 s)
 //   DELETE /rest/:id                                   → { ok }   lo cancela
+//
+// Compartir progreso con un amigo (enlace): la app sube un paquete YA CIFRADO en
+// el móvil (AES-GCM; la llave va en el enlace, en la parte «#» que nunca llega
+// aquí), así que el servidor guarda algo que no puede leer. Solo en memoria, se
+// borra al abrirlo o a las SHARE_TTL_H horas (48 por defecto).
+//   POST   /share           { data }                   → { id, del, exp }
+//   GET    /share/:id                                  → { data }  (y se borra)
+//   DELETE /share/:id?del=…                            → { ok }   lo retira quien lo subió
 
 'use strict';
 const http = require('node:http');
@@ -29,6 +37,10 @@ const ORIGINS = env('ALLOWED_ORIGINS', 'https://traindia.raulmarquez.dev').split
 const MAX_DELAY_MS = +env('MAX_DELAY_S', 900) * 1000;   // un descanso de más de 15 min no tiene sentido
 const RATE_PER_MIN = +env('RATE_LIMIT_PER_MIN', 60);     // por IP; el uso normal son 1-2/min
 const MAX_PENDING = +env('MAX_PENDING', 500);            // tope de avisos a la vez (memoria acotada)
+const SHARE_MAX_BYTES = +env('SHARE_MAX_KB', 2048) * 1024;      // un paquete (ya comprimido y cifrado)
+const SHARE_TOTAL_BYTES = +env('SHARE_TOTAL_MB', 40) * 1048576; // todos a la vez (el contenedor tiene 128 MB)
+const SHARE_TTL_MS = +env('SHARE_TTL_H', 48) * 3600000;
+const SHARE_MAX = +env('SHARE_MAX', 300);
 const VAPID_PUBLIC = env('VAPID_PUBLIC_KEY', '');
 const VAPID_PRIVATE = env('VAPID_PRIVATE_KEY', '');
 const VAPID_SUBJECT = env('VAPID_SUBJECT', 'https://traindia.raulmarquez.dev');
@@ -83,6 +95,13 @@ async function fire(id) {
   }
 }
 
+// ---- Paquetes compartidos (cifrados en el móvil; aquí solo se guardan un rato) ----
+const shares = new Map(); // id -> { data, del, exp, size }
+let sharesBytes = 0, compartidos = 0, abiertos = 0;
+function dropShare(id) { const x = shares.get(id); if (x) { sharesBytes -= x.size; shares.delete(id); } }
+setInterval(() => { const now = Date.now(); for (const [id, x] of shares) if (x.exp <= now) dropShare(id); }, 10 * 60000).unref();
+const B64URL = /^[A-Za-z0-9_-]+$/;
+
 // ---- Límite de peticiones por IP (ventana de 1 minuto) ----
 const hits = new Map(); // ip -> { n, since }
 function rateLimited(ip) {
@@ -101,10 +120,10 @@ function send(res, status, body, origin) {
   res.writeHead(status, headers);
   res.end(body === undefined ? '' : JSON.stringify(body));
 }
-function readJson(req) {
+function readJson(req, max = 8192) {
   return new Promise((resolve, reject) => {
     let size = 0; const chunks = [];
-    req.on('data', (c) => { size += c.length; if (size > 8192) { reject(Object.assign(new Error('grande'), { status: 413 })); req.destroy(); } else chunks.push(c); });
+    req.on('data', (c) => { size += c.length; if (size > max) { reject(Object.assign(new Error('grande'), { status: 413 })); req.destroy(); } else chunks.push(c); });
     req.on('end', () => { try { resolve(chunks.length ? JSON.parse(Buffer.concat(chunks).toString('utf8')) : {}); } catch (e) { reject(Object.assign(new Error('json'), { status: 400 })); } });
     req.on('error', reject);
   });
@@ -130,7 +149,7 @@ const server = http.createServer(async (req, res) => {
     return res.end();
   }
 
-  if (req.method === 'GET' && path === '/health') return send(res, 200, { ok: true, pendientes: pending.size, enviados, fallidos }, allowed);
+  if (req.method === 'GET' && path === '/health') return send(res, 200, { ok: true, pendientes: pending.size, enviados, fallidos, compartidos, abiertos, paquetes: shares.size }, allowed);
   if (req.method === 'GET' && path === '/vapid') return send(res, 200, { publicKey: VAPID_PUBLIC }, allowed);
 
   // Lo que programa avisos: solo desde la app (su origen) y con límite por IP.
@@ -149,6 +168,29 @@ const server = http.createServer(async (req, res) => {
       pending.set(id, { subscription: { endpoint: b.subscription.endpoint, keys: { p256dh: b.subscription.keys.p256dh, auth: b.subscription.keys.auth } }, timer: null, at: 0 });
       schedule(id, b.inMs);
       return send(res, 201, { id }, allowed);
+    }
+    if (req.method === 'POST' && path === '/share') {
+      const b = await readJson(req, Math.ceil(SHARE_MAX_BYTES * 1.4) + 1024);
+      const data = typeof b.data === 'string' ? b.data : '';
+      if (!data || data.length > Math.ceil(SHARE_MAX_BYTES * 1.37) || !B64URL.test(data)) return send(res, 400, { error: 'paquete no válido' }, allowed);
+      if (shares.size >= SHARE_MAX || sharesBytes + data.length > SHARE_TOTAL_BYTES) return send(res, 503, { error: 'ocupado, prueba en un rato' }, allowed);
+      const id = crypto.randomBytes(12).toString('base64url');
+      const del = crypto.randomBytes(12).toString('base64url');
+      const exp = Date.now() + SHARE_TTL_MS;
+      shares.set(id, { data, del, exp, size: data.length }); sharesBytes += data.length; compartidos++;
+      return send(res, 201, { id, del, exp }, allowed);
+    }
+    const sm = path.match(/^\/share\/([A-Za-z0-9_-]{16})$/);
+    if (sm && req.method === 'GET') {
+      const x = shares.get(sm[1]);
+      if (!x || x.exp <= Date.now()) { dropShare(sm[1]); return send(res, 404, { error: 'caducado o ya abierto' }, allowed); }
+      dropShare(sm[1]); abiertos++; // de un solo uso: al abrirlo desaparece
+      return send(res, 200, { data: x.data }, allowed);
+    }
+    if (sm && req.method === 'DELETE') {
+      const x = shares.get(sm[1]);
+      if (x && x.del === url.searchParams.get('del')) dropShare(sm[1]);
+      return send(res, 200, { ok: true }, allowed); // idempotente
     }
     const m = path.match(/^\/rest\/([0-9a-f-]{36})$/);
     if (m && req.method === 'PUT') {

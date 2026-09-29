@@ -154,6 +154,15 @@ textarea.inp { resize: vertical; line-height: 1.4; }
 .tab.on { background: var(--bg-card); color: var(--strong); box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
 
 /* ---- Filas grandes (Más) ---- */
+/* Perfiles: compartir progreso con un enlace */
+.share-card-cta { display: grid; grid-template-columns: auto 1fr; gap: 12px 14px; align-items: start; background: var(--bg-card); border: 1px solid var(--line); border-radius: 16px; padding: 16px; margin-bottom: 16px; }
+.share-cta-ic { width: 44px; height: 44px; border-radius: 12px; background: var(--light); color: #fff; display: flex; align-items: center; justify-content: center; }
+.share-cta-txt { display: flex; flex-direction: column; gap: 4px; }
+.share-cta-txt strong { font-size: 16px; }
+.share-cta-txt span { font-size: 13px; color: var(--ink-dim); line-height: 1.45; }
+.share-card-cta .btn { grid-column: 1 / -1; }
+.share-link-inp { font-family: 'IBM Plex Mono', monospace; font-size: 12px; }
+.share-privacy { line-height: 1.45; }
 /* Guías: vacío que invita a crearlas, acciones y guías propias */
 .guides-empty { text-align: center; background: var(--bg-card); border: 1px dashed var(--line); border-radius: 16px; padding: 24px 18px; margin: 6px 0 14px; }
 .guides-empty-ic { width: 54px; height: 54px; border-radius: 50%; background: var(--strong-bg); color: var(--strong); display: inline-flex; align-items: center; justify-content: center; margin-bottom: 10px; }

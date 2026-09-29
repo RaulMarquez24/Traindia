@@ -32,5 +32,10 @@ Para ver cada petición en los logs (sin datos personales): `DEBUG=1` en el `.en
 | `POST /rest` `{ subscription, inMs }` | Programa un aviso → `{ id }` |
 | `PUT /rest/:id` `{ inMs }` | Lo reprograma (+15 s) |
 | `DELETE /rest/:id` | Lo cancela |
+| `POST /share` `{ data }` | Guarda un paquete **ya cifrado en el móvil** → `{ id, del, exp }` |
+| `GET /share/:id` | Lo devuelve **y lo borra** (un solo uso) |
+| `DELETE /share/:id?del=…` | Lo retira quien lo subió |
+
+**Compartir progreso:** la app comprime y cifra (AES-GCM) el paquete antes de subirlo; la llave va en el enlace, detrás de `#`, y nunca llega al servidor. Se guarda solo en memoria, 48 h como mucho (`SHARE_TTL_H`), hasta 2 MB por paquete (`SHARE_MAX_KB`) y 40 MB en total (`SHARE_TOTAL_MB`).
 
 Protecciones: solo desde el origen de la app (CORS), solo a servicios de push conocidos (Google, Mozilla, Apple, Microsoft), aviso en ≤ 15 min, 60 peticiones/min por IP, 500 avisos a la vez como máximo.
