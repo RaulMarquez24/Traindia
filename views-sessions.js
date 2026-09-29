@@ -1132,7 +1132,7 @@ const VSessions = (() => {
   }
   function compactGroupHTML(items) {
     const head = items[0].e.block || 'Por hacer';
-    const hechas = items.filter(({ e }) => e.sets[0].done).length;
+    const hechas = items.filter(({ e }) => setHasData(e.sets[0])).length; // «No hecho» también cuenta como apuntado
     const rows = items.map(({ e, i }) => {
       const st = e.sets[0];
       const sub = [e.target, e.detail].filter(Boolean).join(' · ');
