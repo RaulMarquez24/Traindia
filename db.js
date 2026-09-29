@@ -504,6 +504,30 @@ const DB = (() => {
     }
     return (n) => byName.get(key(n));
   }
+  // Catálogo base para un plan en blanco: los ejercicios de las plantillas (nombres de
+  // gimnasio, técnica, vídeos y suplentes). Solo CREA los que falten; los que ya
+  // existan no se tocan (ni su nombre, ni sus datos, ni sus registros).
+  async function ensureBaseCatalog(userId) {
+    const defs = (typeof TEMPLATES !== 'undefined' && TEMPLATES.EXERCISES) || {};
+    const key = (n) => String(n || '').trim().toLowerCase();
+    const byName = new Map((await exercisesOf(userId)).map(e => [key(e.name), e]));
+    const created = [];
+    for (const n of Object.keys(defs)) {
+      if (byName.has(key(n))) continue;
+      const def = defs[n];
+      const type = def.type || classifyType(n, '');
+      const e = { id: uid('ex'), userId, name: n, muscleGroup: def.group || 'General', type, substitutes: [], createdAt: Date.now() };
+      if (def.howto) e.howto = def.howto;
+      if (Array.isArray(def.videos) && def.videos.length) { e.videos = def.videos.map(v => ({ ...v })); e.videoUrl = def.videos[0].url; }
+      if ((type === 'time' || type === 'check') && Array.isArray(def.metrics)) e.metrics = def.metrics.slice();
+      byName.set(key(n), e); created.push(e);
+    }
+    for (const e of created) {
+      e.substitutes = ((defs[e.name] && defs[e.name].subs) || []).map(s => byName.get(key(s))).filter(s => s && s.id !== e.id).map(s => s.id);
+      await put('exercises', e);
+    }
+    return created.length;
+  }
   function buildTemplateDays(tpl, find) {
     return tpl.days.map((d, i) => ({
       id: uid('day'), name: d.name, type: d.type || '', typeLabel: d.typeLabel || '',
@@ -530,8 +554,10 @@ const DB = (() => {
     const isCustom = type === 'custom';
     const tpl = type === 'template' && typeof TEMPLATES !== 'undefined' ? TEMPLATES.byId(templateId) : null;
     if (type === 'template' && !tpl) throw new Error('Plantilla no encontrada');
-    // La plantilla trae su propio catálogo; el del plan completo antiguo solo para los demás.
-    const { map } = tpl ? { map: null } : await ensureDefaultExercises(userId);
+    // La plantilla trae su propio catálogo; un plan en blanco, el catálogo base de las
+    // plantillas; el del plan completo antiguo, solo para ese plan.
+    if (isCustom && typeof TEMPLATES !== 'undefined') await ensureBaseCatalog(userId);
+    const { map } = (tpl || (isCustom && typeof TEMPLATES !== 'undefined')) ? { map: null } : await ensureDefaultExercises(userId);
     const routine = tpl
       ? { id: uid('rt'), userId, planType: 'template', templateId: tpl.id, name: name || tpl.name,
           days: buildTemplateDays(tpl, await ensureTemplateExercises(userId, tpl)),
