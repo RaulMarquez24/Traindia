@@ -1,10 +1,10 @@
 // Service Worker - Traindía
-// La versión visible de la app es v2.47.1 (ver pie en la app).
+// La versión visible de la app es v2.48.0 (ver pie en la app).
 // CACHE_NAME es solo la clave de caché: súbele el número de build en cada deploy
 // (build-6, build-7, …) para que los cambios lleguen a las apps ya instaladas.
 // Los fetch usan {cache:'reload'} para saltarse la caché HTTP del navegador/Pages
 // y traer SIEMPRE la última versión con red (offline tira de CACHE_NAME).
-const CACHE_NAME = 'traindia-build-212';
+const CACHE_NAME = 'traindia-build-213';
 // Buzón temporal para archivos que llegan por "Compartir" desde otra app
 // (WhatsApp, Archivos…). No se borra al activar: lo lee y vacía la app.
 const SHARE_CACHE = 'traindia-share-inbox';
@@ -22,6 +22,7 @@ const ASSETS = [
   './views-nutrition.js',
   './views-data.js',
   './session-pdf.js',
+  './share-link.js',
   './plan-ai.js',
   './app.js',
   './manifest.json',
@@ -103,6 +104,8 @@ self.addEventListener('fetch', (event) => {
   if (url.hostname === 'gc.zgo.at' || url.hostname.endsWith('.goatcounter.com')) return;
   // El servidor de avisos (programar/cancelar, clave pública) siempre en vivo: nunca desde caché.
   if (url.hostname === 'push.raulmarquez.dev' || (url.hostname === 'localhost' && url.port === '8787')) return;
+  // Enlaces de «Compartir mi progreso» (de un solo uso): nunca desde caché.
+  if (url.origin !== self.location.origin && url.pathname.startsWith('/share')) return;
 
   const sameOrigin = url.origin === self.location.origin;
 

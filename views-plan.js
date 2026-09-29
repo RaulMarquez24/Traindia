@@ -1331,7 +1331,7 @@ const VPlan = (() => {
       const recs = recsOf(e);
       return {
         e, days, used: days.length > 0, recs: recs.n, lastRec: recs.last, subOf: [...new Set(subOf[e.id] || [])],
-        // en uso (en tu plan) · usado antes (sin plan, pero con registros) · nunca usado
+        // en el plan · suelto (fuera del plan, pero lo has apuntado) · sin usar
         state: days.length > 0 ? 'used' : recs.n ? 'past' : 'never',
         group: e.muscleGroup || 'General',
         type: e.type || 'weight',
@@ -1364,7 +1364,7 @@ const VPlan = (() => {
       <div id="catalogBody"></div>
       ${removableDup.length ? `<button class="btn ghost danger block" id="cleanDups" style="margin-top:16px">${UI.icon('trash', 16)} Eliminar ${removableDup.length} duplicado${removableDup.length === 1 ? '' : 's'} idéntico${removableDup.length === 1 ? '' : 's'}</button>` : ''}
       <details class="det cat-help"><summary>¿Cómo funciona el catálogo?</summary>
-        <p class="field-hint">Catálogo de <strong>${UI.esc(app.activeUser.name)}</strong>. <strong>En uso</strong>: está en algún día de tu plan activo (o es suplente de uno que lo está). <strong>Antes</strong> (usados antes): ya no están en tu plan, pero los apuntaste alguna vez (por ejemplo, de un plan anterior); su historial sigue en Progreso. <strong>Nunca usados</strong>: ni en tu plan ni con registros; son los que puedes borrar sin perder nada. Toca un ejercicio para editarlo.</p>
+        <p class="field-hint">Catálogo de <strong>${UI.esc(app.activeUser.name)}</strong>. <strong>En el plan</strong>: está en algún día de tu plan activo (o es suplente de uno que lo está). <strong>Sueltos</strong>: no están en tu plan, pero los has apuntado alguna vez (añadiéndolos a mano en un entreno o de un plan anterior); su historial sigue en Progreso. <strong>Sin usar</strong>: ni en tu plan ni con registros; son los que puedes borrar sin perder nada. Toca un ejercicio para editarlo.</p>
       </details>
     </div>`;
   }
@@ -1416,7 +1416,7 @@ const VPlan = (() => {
       // «Suplente de Plancha frontal» (o «de A, B y 2 más» si lo es de varios)
       const de = it.subOf.length > 2 ? `${it.subOf.slice(0, 2).join(', ')} y ${it.subOf.length - 2} más` : it.subOf.join(' y ');
       const cuando = it.lastRec ? ` · último, ${UI.fmtDateShort(it.lastRec)}` : '';
-      const where = it.state === 'past' ? `Usado antes${cuando}` : it.state === 'never' ? 'Nunca usado'
+      const where = it.state === 'past' ? `Fuera del plan${cuando}` : it.state === 'never' ? 'Sin usar'
         : realDays.length ? 'En ' + realDays.join(', ') + (asSub ? ` · suplente de ${de}` : '')
         : `Suplente de ${de}`;
       const extras = [
@@ -1441,9 +1441,9 @@ const VPlan = (() => {
       const useC = countBy('use', it => it.state);
       const useOpts = [
         { v: 'all', l: 'Todos', n: (useC.used || 0) + (useC.past || 0) + (useC.never || 0) },
-        { v: 'used', l: 'En uso', n: useC.used || 0 },
-        { v: 'past', l: 'Antes', n: useC.past || 0 }, // usados antes: sin plan, pero con registros
-        { v: 'never', l: 'Nunca', n: useC.never || 0 },
+        { v: 'used', l: 'En el plan', n: useC.used || 0 },
+        { v: 'past', l: 'Sueltos', n: useC.past || 0 }, // fuera del plan, pero con registros (a mano o de otro plan)
+        { v: 'never', l: 'Sin usar', n: useC.never || 0 },
       ];
       $('#catUse').innerHTML = useOpts.map(o => `<button class="seg-opt${exUI.use === o.v ? ' on' : ''}" data-use="${o.v}"><span>${o.l}</span><span class="cat-n">${o.n}</span></button>`).join('');
 

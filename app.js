@@ -46,6 +46,7 @@ const app = {
   },
 
   async boot() {
+    try { VShare.stashFromUrl(); } catch (e) {} // enlace de «Compartir mi progreso»: se guarda y se limpia la URL
     this.applyTheme(this.getTheme()); // tema antes de nada (sincroniza barra del navegador)
     if (window.matchMedia) { try { matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { if (this.getTheme() === 'system') this.applyTheme('system'); }); } catch (e) {} }
     await DB.open();
@@ -76,6 +77,7 @@ const app = {
     // Un archivo compartido es una acción explícita del usuario: va ANTES que el aviso
     // de entreno a medias (si no, se apilan dos modales). El aviso vuelve al siguiente inicio.
     if (await this.checkSharedImport()) return;
+    if (await VShare.checkPending(this)) return; // abriste la app con un enlace de un amigo
     await VSessions.checkResume(this);
     if (await VSessions.checkDayAfter(this)) return; // semáforo: cómo amaneciste tras el último entreno
     VData.checkBackupReminder(this); // recordatorio semanal de copia (si procede)
@@ -450,6 +452,7 @@ const app = {
       UI.toast(`¡Listo, ${user.name}!`);
       this.go('week', {}, true);
       if (planType === 'ai') setTimeout(() => VPlanAI.open(this), 400);
+      else setTimeout(() => VShare.checkPending(this), 500); // llegó por el enlace de un amigo antes de tener perfil
     });
   },
 
@@ -771,7 +774,7 @@ const app = {
                 tipo: d.tipo,
                 mensaje: d.mensaje.trim(),
                 contacto: (d.contacto || '').trim() || '(no indicado)',
-                version: 'v2.47.1',
+                version: 'v2.48.0',
                 perfil: (this.mainUser && this.mainUser.name) || '',
                 navegador: navigator.userAgent,
               }),
@@ -1059,13 +1062,19 @@ const app = {
         </div>
       </div>`).join('');
     return `<div class="section">
-      <p class="section-intro">El <strong>perfil principal</strong> es el dueño del dispositivo y el usuario activo siempre. Los <strong>invitados</strong> son perfiles de referencia: sirven para importar datos a su nombre y comparar progreso, pero no se usan como sesión activa.</p>
+      <div class="share-card-cta">
+        <span class="share-cta-ic">${UI.icon('users', 22)}</span>
+        <div class="share-cta-txt"><strong>Compárate con tus amigos</strong><span>Mándale a un amigo un enlace con tu progreso; él te añade como invitado en su Traindía y os comparáis en Progreso → Comparativa. Si te manda el suyo, ábrelo y aparece aquí.</span></div>
+        <button class="btn primary block" id="shareMine">${UI.icon('upload', 16)} Compartir mi progreso</button>
+      </div>
+      <p class="section-intro">Tú eres el <strong>perfil principal</strong>. Tus amigos aparecen aquí como <strong>invitados</strong>: sus datos solo sirven para compararos y nunca se mezclan con los tuyos.</p>
       ${cards}
       <button class="btn primary block" id="addGuest">+ Crear perfil invitado</button>
     </div>`;
   },
 
   bindProfiles(root) {
+    const sm = root.querySelector('#shareMine'); if (sm) sm.addEventListener('click', () => VShare.start(this));
     root.querySelector('#addGuest').addEventListener('click', () => this.editUserModal(null));
     root.querySelectorAll('[data-edit]').forEach(b => b.addEventListener('click', () => this.editUserModal(b.dataset.edit)));
     root.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', () => this.deleteGuest(b.dataset.del)));
@@ -1199,7 +1208,7 @@ const app = {
       <div class="more-group">
         ${row('id="seeLanding"', 'info', 'var(--rest)', 'Ver la presentación', 'Qué es Traindía y cómo funciona')}
         ${row('id="seeRepo"', 'code', 'var(--rest)', 'Código en GitHub', 'Novedades de cada versión', `<span class="chev">↗</span>`)}
-        <div class="more-row set-ver"><span class="more-txt"><span>Versión</span></span><strong>v2.47.1</strong></div>
+        <div class="more-row set-ver"><span class="more-txt"><span>Versión</span></span><strong>v2.48.0</strong></div>
       </div>
 
       <div class="more-sec danger">Zona peligrosa</div>

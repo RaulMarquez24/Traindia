@@ -51,6 +51,36 @@ const VData = (() => {
     };
   }
 
+  // Paquete para «Compartir mi progreso» (enlace): lo elegido + los ejercicios que
+  // hacen falta para entenderlo (nombres, tipos). Sin documentos.
+  async function gatherShare(app, want) {
+    const u = app.mainUser, uid = u.id;
+    const allEx = await DB.exercisesOf(uid);
+    const data = { exercises: [], sessions: [], progress: [], routines: [], nutrition: [], places: [] };
+    const ids = new Set();
+    if (want.has('sessions')) {
+      data.sessions = (await DB.sessionsOf(uid)).filter(s => !s.draft);
+      data.sessions.forEach(s => (s.entries || []).forEach(e => e.exerciseId && ids.add(e.exerciseId)));
+    }
+    if (want.has('progress')) data.progress = await DB.progressOf(uid);
+    if (want.has('plan') && app.routine) {
+      data.routines = [JSON.parse(JSON.stringify(app.routine))];
+      exercisesForDays(allEx, app.routine.days).forEach(e => ids.add(e.id));
+      data.places = await placesForDays(app.routine.days);
+    }
+    if (want.has('nutrition')) data.nutrition = await DB.nutritionOf(uid);
+    data.exercises = allEx.filter(e => ids.has(e.id) || data.sessions.some(s => (s.entries || []).some(x => !x.exerciseId && (x.name || '').trim().toLowerCase() === e.name.trim().toLowerCase())));
+    return { format: FORMAT, version: 2, kind: 'profile', exportedAt: new Date().toISOString(), user: { name: u.name, color: u.color }, data };
+  }
+  // Lo que llega por enlace, al perfil invitado: «reemplazar lo que coincida», así
+  // un segundo enlace del mismo amigo actualiza sus datos en vez de duplicarlos.
+  async function importShared(app, payload, guestId) {
+    const d = payload.data || {};
+    const sections = new Set(['exercises', ...['sessions', 'progress', 'routines', 'nutrition'].filter(k => (d[k] || []).length)]);
+    await applyImport(app, payload, guestId, 'overwrite', sections);
+    if ((d.routines || []).length) await importPlaces(d.places, d.routines.flatMap(r => r.days || []));
+  }
+
   function exercisesByIds(allExercises, ids) {
     const set = new Set(ids.filter(Boolean));
     return allExercises.filter(e => set.has(e.id));
@@ -281,7 +311,7 @@ const VData = (() => {
     UI.modal({
       title: 'Importar datos', size: 'wide',
       bodyHTML: `
-        <p class="field-hint" style="margin-top:0">Pega aquí el texto JSON exportado, o elige un archivo. <strong>Desde el móvil</strong>: en WhatsApp o Archivos, dale al documento → <strong>Compartir</strong> → <strong>Traindía</strong> y se importa solo.</p>
+        <p class="field-hint" style="margin-top:0">Pega aquí el texto JSON exportado <strong>o el enlace que te hayan compartido</strong>, o elige un archivo. <strong>Desde el móvil</strong>: en WhatsApp o Archivos, dale al documento → <strong>Compartir</strong> → <strong>Traindía</strong> y se importa solo.</p>
         <textarea class="inp" id="impText" rows="6" placeholder='Pega el JSON aquí… (empieza por {"format":"traindia-export"…})'></textarea>
         <button class="btn ghost block" id="impFileBtn" style="margin-top:8px">${UI.icon('upload', 15)} …o elegir un archivo</button>`,
       actions: [
@@ -289,6 +319,7 @@ const VData = (() => {
         { label: 'Continuar', kind: 'primary', onClick: (root) => {
           const txt = (root.querySelector('#impText').value || '').trim();
           if (!txt) { UI.toast('Pega el JSON o elige un archivo', 'err'); return false; }
+          if (typeof VShare !== 'undefined' && VShare.parseLink(txt)) { VShare.open(app, txt); return; } // enlace de «Compartir mi progreso»
           let parsed;
           try { parsed = JSON.parse(txt); } catch (e) { UI.toast('El texto no es un JSON válido', 'err'); return false; }
           if (!parsed || !isExportFormat(parsed.format) || !parsed.data) { UI.toast('No es un export de Traindía', 'err'); return false; }
@@ -970,5 +1001,5 @@ const VData = (() => {
     return added;
   }
 
-  return { openShare, openExport, startImport, exportRoutine: doExportPlan, exportDay, importDay, exportNutrition, exportSession, exportProgressEntry, routeImport, checkBackupReminder, backupProfile , createImportedPlan };
+  return { openShare, openExport, startImport, exportRoutine: doExportPlan, gatherShare, importShared, exportDay, importDay, exportNutrition, exportSession, exportProgressEntry, routeImport, checkBackupReminder, backupProfile , createImportedPlan };
 })();
