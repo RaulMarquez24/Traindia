@@ -748,7 +748,7 @@ const app = {
         ${UI.field('Mensaje', UI.textarea('mensaje', preMsg, 'Describe tu idea o el problema con detalle…', 6))}
         ${UI.field('Tu contacto (opcional)', UI.input('contacto', '', { placeholder: 'Email o nombre, por si quiero responderte' }))}
         <input type="text" name="botcheck" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px">
-        <p class="field-hint">Se envía a través de un servicio externo (Web3Forms) para que me llegue por correo. No se envía ningún dato de tus entrenos.</p>
+        <p class="field-hint">Se envía por un servicio externo (Web3Forms) y me llega por correo. Con tu mensaje van el nombre de tu perfil, la versión de la app y el tipo de navegador (para poder reproducir los fallos). Nada de tus entrenos.</p>
       </div>`,
       actions: [
         { label: 'Cancelar', kind: 'ghost' },
@@ -771,7 +771,7 @@ const app = {
                 tipo: d.tipo,
                 mensaje: d.mensaje.trim(),
                 contacto: (d.contacto || '').trim() || '(no indicado)',
-                version: 'v2.47.0',
+                version: 'v2.47.1',
                 perfil: (this.mainUser && this.mainUser.name) || '',
                 navegador: navigator.userAgent,
               }),
@@ -826,7 +826,7 @@ const app = {
         <div class="more-group">${g.rows.map(r => `<button class="more-row" ${r.feedback ? 'data-feedback' : `data-link="${r.v}"`}>
           <span class="more-ic" style="background:${g.color}">${UI.icon(r.icon, 20)}</span>
           <span class="more-txt"><strong>${r.label}</strong><span${r.warn ? ' class="warn"' : ''}>${UI.esc(r.sub)}</span></span><span class="chev">›</span></button>`).join('')}</div>`).join('')}
-      <p class="version-foot">Traindía · v2.47.0 · ${Object.keys(this.usersById).length} perfil(es)<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
+      <p class="version-foot">© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
     </div>`;
   },
   bindMore(root) {
@@ -1040,17 +1040,18 @@ const app = {
   // ---- Vista PERFILES ----
   async renderProfiles() {
     const users = await DB.getUsers();
-    const counts = {};
+    const counts = {}, lastOf = {};
     for (const u of users) {
-      const s = await DB.sessionsOf(u.id);
+      const s = (await DB.sessionsOf(u.id)).filter(x => !x.draft);
       counts[u.id] = s.length;
+      lastOf[u.id] = s.reduce((m, x) => ((x.date || '') > m ? x.date : m), '');
     }
     const cards = users.map(u => `
       <div class="profile-card">
         ${UI.avatar(u, 40)}
         <div class="profile-meta">
           <strong>${UI.esc(u.name)} ${u.isMain ? '<span class="badge">Principal</span>' : '<span class="badge guest">Invitado</span>'}</strong>
-          <span class="dim">${counts[u.id]} sesión(es) registradas</span>
+          <span class="dim">${counts[u.id] === 0 ? 'Sin entrenos apuntados' : `${counts[u.id]} entreno${counts[u.id] === 1 ? '' : 's'}`}${lastOf[u.id] ? ` · el último, ${UI.fmtDateShort(lastOf[u.id])}` : ''}</span>
         </div>
         <div class="profile-actions">
           <button class="icon-btn" data-edit="${u.id}" title="Editar">${UI.icon('edit', 17)}</button>
@@ -1175,7 +1176,12 @@ const app = {
       </div></div>
 
       <div class="more-sec">Durante el entreno</div>
-      <div class="more-group" id="notifCard">
+      <div class="more-group">
+        <button class="more-row" id="setRestDur"><span class="more-ic" style="background:var(--strong)">${UI.icon('clock', 18)}</span><span class="more-txt"><strong>Descanso por defecto</strong><span>El que sale al empezar el descanso</span></span><span class="set-val" id="restDurVal">${VSessions.fmtClock(VSessions.getRestDuration(this))}</span><span class="chev">›</span></button>
+        <label class="more-row set-switch"><span class="more-ic" style="background:var(--strong)">${UI.icon('play', 18)}</span><span class="more-txt"><strong>Sonido al acabar</strong><span>Dos pitidos cortos</span></span><input type="checkbox" class="sw" id="setRestSound"${VSessions.restSoundOn() ? ' checked' : ''}></label>
+        <label class="more-row set-switch"><span class="more-ic" style="background:var(--strong)">${UI.icon('activity', 18)}</span><span class="more-txt"><strong>Vibración al acabar</strong><span>Si tu móvil lo permite</span></span><input type="checkbox" class="sw" id="setRestVibrate"${VSessions.restVibrateOn() ? ' checked' : ''}></label>
+      </div>
+      <div class="more-group" id="notifCard" style="margin-top:10px">
         <label class="more-row set-switch">
           <span class="more-ic" style="background:var(--strong)">${UI.icon('clock', 18)}</span>
           <span class="more-txt"><strong>Aviso de fin de descanso</strong><span class="wrap">${UI.esc(VSessions.REST_NOTIFY_TEXT)}</span></span>
@@ -1193,7 +1199,7 @@ const app = {
       <div class="more-group">
         ${row('id="seeLanding"', 'info', 'var(--rest)', 'Ver la presentación', 'Qué es Traindía y cómo funciona')}
         ${row('id="seeRepo"', 'code', 'var(--rest)', 'Código en GitHub', 'Novedades de cada versión', `<span class="chev">↗</span>`)}
-        <div class="more-row set-ver"><span class="more-txt"><span>Versión</span></span><strong>v2.47.0</strong></div>
+        <div class="more-row set-ver"><span class="more-txt"><span>Versión</span></span><strong>v2.47.1</strong></div>
       </div>
 
       <div class="more-sec danger">Zona peligrosa</div>
@@ -1209,6 +1215,27 @@ const app = {
     const on = (sel, fn) => { const b = root.querySelector(sel); if (b) b.addEventListener('click', fn); };
     on('#seeLanding', () => this.previewLanding());
     on('#seeRepo', () => window.open(this.REPO_URL + '/releases', '_blank', 'noopener'));
+    const snd = root.querySelector('#setRestSound'); if (snd) snd.addEventListener('change', () => VSessions.setRestSound(snd.checked));
+    const vib = root.querySelector('#setRestVibrate'); if (vib) vib.addEventListener('change', () => { VSessions.setRestVibrate(vib.checked); if (vib.checked) { try { navigator.vibrate && navigator.vibrate(120); } catch (e) {} } });
+    on('#setRestDur', () => {
+      const cur = VSessions.getRestDuration(this), opts = [45, 60, 90, 120, 150, 180];
+      const ov = UI.modal({
+        title: 'Descanso por defecto',
+        bodyHTML: `<div class="menu-list">${opts.map(d => `<button class="menu-row${d === cur ? ' on' : ''}" data-d="${d}"><span><strong>${VSessions.fmtClock(d)}</strong> <span class="dim">· ${d} s</span></span>${d === cur ? UI.icon('check', 16) : ''}</button>`).join('')}
+          <button class="menu-row${opts.includes(cur) ? '' : ' on'}" data-d="custom"><span>Otro…${opts.includes(cur) ? '' : ` <span class="dim">(${cur} s)</span>`}</span></button></div>
+          <p class="field-hint">Durante el entreno puedes cambiarlo cuando quieras; se queda el último que elijas.</p>`,
+        actions: [{ label: 'Cerrar', kind: 'ghost' }],
+        onMount: (m) => m.querySelectorAll('[data-d]').forEach(b => b.addEventListener('click', async () => {
+          UI.closeModal(ov);
+          let n = parseInt(b.dataset.d, 10);
+          if (b.dataset.d === 'custom') n = parseInt(await UI.prompt({ title: 'Descanso por defecto', label: 'Segundos', value: String(cur), placeholder: 'Ej: 75' }), 10);
+          if (!n || n < 5 || n > 1800) return;
+          VSessions.setRestDefault(this, n);
+          const v = root.querySelector('#restDurVal'); if (v) v.textContent = VSessions.fmtClock(n);
+          UI.toast(`Descanso por defecto: ${VSessions.fmtClock(n)}`);
+        })),
+      });
+    });
     root.querySelectorAll('[data-theme-opt]').forEach(b => b.addEventListener('click', () => {
       this.setTheme(b.dataset.themeOpt);
       root.querySelectorAll('[data-theme-opt]').forEach(x => x.classList.toggle('on', x === b));

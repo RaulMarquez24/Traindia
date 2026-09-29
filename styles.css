@@ -221,6 +221,10 @@ textarea.inp { resize: vertical; line-height: 1.4; }
 .set-det .notif-status { margin-top: 0; }
 .set-ver { cursor: default; }
 .set-ver strong { font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: var(--ink-dim); }
+.set-val { font-family: 'IBM Plex Mono', monospace; font-size: 14px; font-weight: 600; color: var(--strong); }
+.set-switch .sw { margin-top: 6px; }
+.plan-notes-add { margin-top: 14px; width: 100%; text-align: left; font: inherit; cursor: pointer; }
+.plan-notes-title { display: flex; align-items: center; justify-content: space-between; }
 /* Selector de lugar: elegir + lápiz para editar */
 .pk-place-row { display: flex; gap: 6px; align-items: center; }
 .pk-place-row .menu-row { flex: 1; min-width: 0; }
