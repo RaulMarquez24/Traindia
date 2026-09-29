@@ -231,7 +231,6 @@ const app = {
       week:     { render: (a, p) => VPlan.week(a, p),     bind: (a, r, p) => VPlan.weekBind(a, r, p) },
       day:      { render: (a, p) => VPlan.day(a, p),      bind: (a, r, p) => VPlan.dayBind(a, r, p) },
       exercises:{ render: (a, p) => VPlan.exercises(a, p),bind: (a, r, p) => VPlan.exercisesBind(a, r, p) },
-      places:   { render: (a, p) => VPlan.places(a, p),   bind: (a, r, p) => VPlan.placesBind(a, r, p) },
       guides:   { render: (a, p) => VPlan.guides(a, p) },
       guide:    { render: (a, p) => VPlan.guide(a, p) },
       info:     { render: (a, p) => VPlan.info(a, p),      bind: (a, r, p) => VPlan.infoBind(a, r, p) },
@@ -344,10 +343,10 @@ const app = {
     backBtn.style.display = this.history.length > 0 ? 'flex' : 'none';
     const title = document.getElementById('headerTitle');
     const titles = {
-      week: 'Traindía', exercises: 'Ejercicios', places: 'Lugares', guides: 'Guías', info: 'El plan',
+      week: 'Traindía', exercises: 'Ejercicios', guides: 'Guías', info: 'Planes',
       sessions: 'Sesiones', live: 'Entreno', session: 'Sesión',
       progress: 'Progreso', nutrition: 'Nutrición',
-      more: 'Más', profiles: 'Perfiles', settings: 'Ajustes', backups: 'Copias internas', docs: 'Documentos',
+      more: 'Más', profiles: 'Perfiles', settings: 'Ajustes', backups: 'Copias y datos', docs: 'Documentos',
     };
     let label = titles[this.currentView] || 'Traindía';
     if (this.currentView === 'nutrition' && typeof VNutrition !== 'undefined') {
@@ -377,7 +376,7 @@ const app = {
       week: 'week', day: 'week', exercises: 'week',
       sessions: 'sessions', session: 'sessions', live: 'sessions',
       progress: 'progress', nutrition: 'nutrition',
-      more: 'more', profiles: 'more', settings: 'more', guides: 'more', guide: 'more', info: 'more', places: 'more', backups: 'more', docs: 'more',
+      more: 'more', profiles: 'more', settings: 'more', guides: 'more', guide: 'more', info: 'more', backups: 'more', docs: 'more',
     };
     const active = map[this.currentView] || 'week';
     document.querySelectorAll('.nav-btn').forEach(btn => {
@@ -772,7 +771,7 @@ const app = {
                 tipo: d.tipo,
                 mensaje: d.mensaje.trim(),
                 contacto: (d.contacto || '').trim() || '(no indicado)',
-                version: 'v2.43.2',
+                version: 'v2.44.0',
                 perfil: (this.mainUser && this.mainUser.name) || '',
                 navegador: navigator.userAgent,
               }),
@@ -793,31 +792,33 @@ const app = {
 
   // ---- Vista MÁS ----
   renderMore() {
-    const rows = [
-      { v: 'guides', icon: 'book', color: 'var(--light)', label: 'Guías', sub: 'Documentación del plan', guidedOnly: true },
-      { v: 'exercises', icon: 'tag', color: 'var(--strong)', label: 'Ejercicios', sub: 'Catálogo editable' },
-      { v: 'places', icon: 'pin', color: 'var(--priority)', label: 'Lugares', sub: 'Sitios donde entrenas' },
-      { v: 'info', icon: 'info', color: 'var(--moderate)', label: 'El plan', sub: 'Tus planes de entrenamiento' },
-      { v: 'profiles', icon: 'users', color: 'var(--sub-accent)', label: 'Perfiles', sub: 'Principal e invitados' },
-      { v: 'data', icon: 'swap', color: 'var(--light)', label: 'Compartir', sub: 'Copia, exporta o importa tus datos', modal: true },
-      { v: 'docs', icon: 'book', color: 'var(--sub-accent)', label: 'Documentos', sub: 'PDFs y fotos, a mano en el entreno' },
-      { v: 'backups', icon: 'clock', color: 'var(--moderate)', label: 'Copias internas', sub: 'Copias automáticas de seguridad' },
-      { v: 'settings', icon: 'settings', color: 'var(--rest)', label: 'Ajustes', sub: 'Perfil principal y app' },
-      { v: 'landing', icon: 'info', color: 'var(--light)', label: 'Ver la presentación', sub: 'La página de bienvenida', landing: true },
-    ].filter(r => !r.guidedOnly || VPlan.guideList(this).length);
+    const groups = [
+      { title: 'Entreno', color: 'var(--moderate)', rows: [
+        { v: 'info', icon: 'calendar', label: 'Planes', sub: 'Cambia o crea planes' },
+        ...(VPlan.guideList(this).length ? [{ v: 'guides', icon: 'book', label: 'Guías', sub: 'Las de tu plan' }] : []),
+        { v: 'exercises', icon: 'tag', label: 'Ejercicios', sub: 'Tu catálogo' },
+        { v: 'docs', icon: 'notebook', label: 'Documentos', sub: 'PDFs y fotos del entreno' },
+      ] },
+      { title: 'Tus datos', color: 'var(--light)', rows: [
+        { v: 'backups', icon: 'swap', label: 'Copias y datos', sub: 'Exportar, importar y copias' },
+        { v: 'profiles', icon: 'users', label: 'Perfiles', sub: 'Principal e invitados' },
+      ] },
+      { title: 'App', color: 'var(--rest)', rows: [
+        { v: 'settings', icon: 'settings', label: 'Ajustes', sub: 'Tema, avisos y acerca de' },
+        { feedback: true, icon: 'chat', label: 'Sugerencias y reportes', sub: 'Envíame ideas o fallos' },
+      ] },
+    ];
     return `<div class="section">
-      ${rows.map(r => `<button class="big-row" ${r.modal ? 'data-share' : r.landing ? 'data-landing' : `data-link="${r.v}"`}><span class="big-row-icon tile" style="background:${r.color}">${UI.icon(r.icon, 20)}</span><span class="big-row-text"><strong>${r.label}</strong><span class="dim">${r.sub}</span></span><span class="chev">›</span></button>`).join('')}
-      <button class="big-row" data-feedback><span class="big-row-icon tile" style="background:var(--strong)">${UI.icon('chat', 20)}</span><span class="big-row-text"><strong>Sugerencias y reportes</strong><span class="dim">Envíame ideas o fallos</span></span><span class="chev">›</span></button>
-      <p class="version-foot">Traindía · v2.43.2 · ${Object.keys(this.usersById).length} perfil(es)<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
+      ${groups.map(g => `<div class="more-sec">${g.title}</div>
+        <div class="more-group">${g.rows.map(r => `<button class="more-row" ${r.feedback ? 'data-feedback' : `data-link="${r.v}"`}>
+          <span class="more-ic" style="background:${g.color}">${UI.icon(r.icon, 17)}</span>
+          <span class="more-txt"><strong>${r.label}</strong><span>${r.sub}</span></span><span class="chev">›</span></button>`).join('')}</div>`).join('')}
+      <p class="version-foot">Traindía · v2.44.0 · ${Object.keys(this.usersById).length} perfil(es)<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
     </div>`;
   },
   bindMore(root) {
     const fb = root && root.querySelector('[data-feedback]');
     if (fb) fb.addEventListener('click', () => this.openFeedback());
-    const sh = root && root.querySelector('[data-share]');
-    if (sh) sh.addEventListener('click', () => VData.openShare(this));
-    const ldb = root && root.querySelector('[data-landing]');
-    if (ldb) ldb.addEventListener('click', () => this.previewLanding());
   },
 
   // ---- Vista DOCUMENTOS (adjuntos consultables durante el entreno) ----
@@ -950,12 +951,25 @@ const app = {
         </div>
       </div>`).join('');
     return `<div class="section">
+      <button class="share-hero" data-bk-act="profile">
+        <span class="share-hero-icon">${UI.icon('upload', 26)}</span>
+        <span class="share-hero-txt"><strong>Copia completa</strong><span>TODO tu perfil en un archivo: ejercicios, planes, sesiones, progreso y nutrición. Guárdala fuera del móvil.</span></span>
+      </button>
+      <div class="more-group" style="margin-top:12px">
+        <button class="more-row" data-bk-act="export"><span class="more-ic" style="background:var(--light)">${UI.icon('upload', 17)}</span><span class="more-txt"><strong>Exportar algo concreto</strong><span>Un plan, un día, sesiones, progreso…</span></span><span class="chev">›</span></button>
+        <button class="more-row" data-bk-act="import"><span class="more-ic" style="background:var(--light)">${UI.icon('swap', 17)}</span><span class="more-txt"><strong>Importar</strong><span>Trae un archivo o pega el JSON</span></span><span class="chev">›</span></button>
+      </div>
+      <div class="more-sec" style="margin-top:22px">Copias automáticas</div>
       <p class="section-intro">Copias de seguridad automáticas, guardadas <strong>en este dispositivo</strong> antes de cambios importantes. Se conservan como mucho <strong>2</strong> (al crear una nueva se borra la más antigua).</p>
-      <p class="section-intro" style="color:var(--priority)">⚠️ Viven aquí dentro: si borras los datos de la app, la desinstalas o limpias el navegador, <strong>se pierden igual que el resto</strong>. Para una copia de verdad segura, usa <strong>Exportar</strong> en Datos y guarda el archivo fuera del móvil.</p>
+      <p class="section-intro" style="color:var(--priority)">⚠️ Viven aquí dentro: si borras los datos de la app, la desinstalas o limpias el navegador, <strong>se pierden igual que el resto</strong>. Para una copia de verdad segura, usa la <strong>Copia completa</strong> de arriba y guarda el archivo fuera del móvil.</p>
       ${list.length ? rows : '<div class="empty-state"><p class="dim">Aún no hay copias internas.</p></div>'}
     </div>`;
   },
   bindBackups(root) {
+    const act = (k, fn) => { const b = root.querySelector(`[data-bk-act="${k}"]`); if (b) b.addEventListener('click', fn); };
+    act('profile', () => VData.backupProfile(this));
+    act('export', () => VData.openExport(this));
+    act('import', () => VData.startImport(this));
     root.querySelectorAll('[data-dl]').forEach(b => b.addEventListener('click', () => {
       const raw = localStorage.getItem(b.dataset.dl); if (!raw) return;
       const blob = new Blob([raw], { type: 'application/json' });
@@ -1123,14 +1137,19 @@ const app = {
       </div>
       <div class="card">
         <div class="card-label">Datos de la app</div>
-        <button class="btn ghost block" id="shareData">Compartir datos (exportar / importar)</button>
+        <button class="btn ghost block" id="shareData">Copias y datos (exportar / importar)</button>
+      </div>
+      <div class="card">
+        <div class="card-label">Acerca de Traindía</div>
+        <p class="field-hint" style="margin-top:0">Versión v2.44.0 · © 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
+        <button class="btn ghost block" id="seeLanding">${UI.icon('info', 16)} Ver la presentación</button>
       </div>
       <div class="card danger-zone">
         <div class="card-label">Zona peligrosa</div>
         <p class="field-hint" style="margin-top:0">Restablece la app al estado inicial: se borran todos los perfiles, sesiones y progreso de este dispositivo. Haz antes una copia.</p>
         <button class="btn ghost danger small" id="resetApp">Borrar todos los datos</button>
       </div>
-      <p class="version-foot">Traindía · v2.43.2</p>
+
     </div>`;
   },
 
@@ -1138,7 +1157,9 @@ const app = {
     UI.bindColorPicker(root);
     this.bindNotifSettings(root);
     const shareBtn = root.querySelector('#shareData');
-    if (shareBtn) shareBtn.addEventListener('click', () => VData.openShare(this));
+    if (shareBtn) shareBtn.addEventListener('click', () => this.go('backups'));
+    const seeLanding = root.querySelector('#seeLanding');
+    if (seeLanding) seeLanding.addEventListener('click', () => this.previewLanding());
     root.querySelectorAll('[data-theme-opt]').forEach(b => b.addEventListener('click', () => {
       this.setTheme(b.dataset.themeOpt);
       root.querySelectorAll('[data-theme-opt]').forEach(x => x.classList.toggle('on', x === b));
