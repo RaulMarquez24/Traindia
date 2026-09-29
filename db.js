@@ -314,7 +314,16 @@ const DB = (() => {
     if (type !== 'time') return undefined;
     const n = (name || '').toLowerCase();
     const cardio = ['cinta', 'bici', 'elíptic', 'eliptic', 'carrera', 'trote', 'paseo', 'z2', '400m', '800m', 'km', 'metros'];
+    if (/^cinta(\s|$)/.test(n)) return CINTA_METRICS.slice();
     return cardio.some(w => n.includes(w)) ? ['distance', 'kcal', 'time'] : [];
+  }
+  // Lo que se apunta en la cinta: tiempo total, km y kcal; por serie, velocidad e inclinación.
+  const CINTA_METRICS = ['distance', 'kcal', 'time', 'speed', 'incline'];
+  // Nombre canónico de un cardio de máquina del plan antiguo («Cinta Z2 conversacional»
+  // → «Cinta» con la etiqueta «Z2 conversacional»), para no volver a crear variantes.
+  function canonCardio(name) {
+    const c = cardioCanon(name);
+    return c ? { name: c.machine, label: c.label } : { name: (name || '').trim(), label: '' };
   }
 
   // Grupo muscular INDIVIDUAL de cada ejercicio predefinido (uno solo, nunca combinado).
@@ -398,14 +407,16 @@ const DB = (() => {
         for (const ex of b.exercises) {
           const key = ex.name.trim().toLowerCase();
           if (map.has(key)) continue;
-          if (byName.has(key)) { const e = byName.get(key); map.set(key, { id: e.id, type: e.type }); continue; }
-          const type = classifyType(ex.name, ex.sets);
-          const metrics = defaultMetricsFor(ex.name, type);
-          const rec = { id: uid('ex'), userId, name: ex.name.trim(), muscleGroup: muscleGroupFor(ex.name) || 'General', type, isDefault: true, defaultKey: ex.name.trim(), createdAt: Date.now() };
+          const cn = canonCardio(ex.name).name, ckey = cn.toLowerCase();
+          if (byName.has(ckey)) { const e = byName.get(ckey); map.set(key, { id: e.id, type: e.type, name: e.name }); continue; }
+          const type = cn !== ex.name.trim() ? 'time' : classifyType(ex.name, ex.sets);
+          const metrics = defaultMetricsFor(cn, type);
+          const rec = { id: uid('ex'), userId, name: cn, muscleGroup: muscleGroupFor(ex.name) || 'General', type, isDefault: true, defaultKey: cn, createdAt: Date.now() };
           if (metrics) rec.metrics = metrics;
           await put('exercises', rec);
           added++;
-          map.set(key, { id: rec.id, type });
+          byName.set(ckey, rec);
+          map.set(key, { id: rec.id, type, name: rec.name });
         }
       }
     }
@@ -439,7 +450,10 @@ const DB = (() => {
         const flat = [];
         d.blocks.forEach(b => b.exercises.forEach(ex => {
           const m = map.get(ex.name.trim().toLowerCase());
-          flat.push({ exerciseId: m ? m.id : null, name: ex.name, sets: ex.sets, type: m ? m.type : classifyType(ex.name, ex.sets), priority: !!ex.priority, optional: !!ex.optional });
+          const cc = canonCardio(ex.name);
+          const row = { exerciseId: m ? m.id : null, name: (m && m.name) || cc.name, sets: ex.sets, type: m ? m.type : classifyType(ex.name, ex.sets), priority: !!ex.priority, optional: !!ex.optional };
+          if (cc.label) row.label = cc.label;
+          flat.push(row);
         }));
         day.blocks = groupIntoBlocks(flat, e => muscleGroupFor(e.name) || 'General');
       }
@@ -680,9 +694,12 @@ const DB = (() => {
     { from: 'Landmine', to: 'Landmine press' },
     { from: 'Goblet', to: 'Sentadilla goblet' },
     { from: 'Suspensión supina barra parque', to: 'Suspensión supina' },
-    { from: 'Mancuerna', to: 'Curl de muñeca con mancuerna' },
-    // v2: carrera del plan antiguo
-    { from: "Sem. impar — 5-6×400m R 1:30-2'", to: '5-6×400m' },
+    { from: 'Mancuerna', to: 'Curl de muñeca con mancuerna' },
+
+    // v2: carrera del plan antiguo
+
+    { from: "Sem. impar — 5-6×400m R 1:30-2'", to: '5-6×400m' },
+
     { from: 'Sem. par — 1km test o 2×800m', to: '1km o 2×800m' },
   ];
   // Restos de leer mal el plan antiguo: se borran solo si no se usan en ningún sitio.
@@ -798,6 +815,7 @@ const DB = (() => {
     const exs = await exercisesOf(userId);
     const byName = new Map(exs.map(e => [e.name.trim().toLowerCase(), e]));
     const ensureAlt = async (name, group, type) => {
+      if (cardioCanon(name)) { name = canonCardio(name).name; group = 'Cardio'; type = 'time'; }
       const key = name.trim().toLowerCase();
       if (byName.has(key)) return byName.get(key);
       const rec = { id: uid('ex'), userId, name: _cap(name.trim()), muscleGroup: group || 'General', type: type || 'weight', isDefault: true, defaultKey: _cap(name.trim()), substitutes: [], createdAt: Date.now() };
@@ -810,7 +828,7 @@ const DB = (() => {
     const dayPlanB = {};
     for (const d of PLAN_DATA.days) {
       if (!d.substitutes || !d.substitutes.length) continue;
-      const dayExNames = (d.blocks || []).flatMap(b => b.exercises.map(e => e.name));
+      const dayExNames = (d.blocks || []).flatMap(b => b.exercises.map(e => canonCardio(e.name).name));
       const leftover = [];
       for (const { orig, sub } of d.substitutes) {
         const matchName = _bestMatch(orig, dayExNames);
@@ -918,7 +936,7 @@ const DB = (() => {
         const c = cardioCanon(e.name); if (!c) continue;
         let canon = canonByMachine[c.machine];
         if (!canon) {
-          canon = { id: uid('ex'), userId: u.id, name: c.machine, type: 'time', muscleGroup: 'Cardio', metrics: Array.isArray(e.metrics) ? e.metrics.slice() : ['distance', 'kcal'], substitutes: [], isDefault: true, defaultKey: c.machine, createdAt: Date.now() };
+          canon = { id: uid('ex'), userId: u.id, name: c.machine, type: 'time', muscleGroup: 'Cardio', metrics: c.machine === 'Cinta' ? [...new Set([...CINTA_METRICS, ...(e.metrics || [])])] : Array.isArray(e.metrics) ? e.metrics.slice() : ['distance', 'kcal'], substitutes: [], isDefault: true, defaultKey: c.machine, createdAt: Date.now() };
           canonByMachine[c.machine] = canon;
         } else if (Array.isArray(e.metrics)) {
           canon.metrics = [...new Set([...(canon.metrics || []), ...e.metrics])];
@@ -966,6 +984,39 @@ const DB = (() => {
     }
   }
 
+  // Variantes de máquina (Cinta Z2…, Bici Z2…) que el plan antiguo volvía a crear tras la
+  // unificación: se unen a su máquina con la misma migración (registros → la máquina, la
+  // variante pasa a etiqueta de la serie). Solo con la unificación ya aceptada (v10).
+  async function cardioVariantsLeft() {
+    for (const u of await getAll('users')) {
+      const exs = (await exercisesOf(u.id)).filter(e => e.type === 'time');
+      if (exs.some(e => { const c = cardioCanon(e.name); return c && (c.label || e.name.trim() !== c.machine); })) return true;
+    }
+    return false;
+  }
+  async function tidyCardioVariants() {
+    const s = await getSettings();
+    if (!s || (s.dataVersion || 0) < 10) return false;
+    let hubo = false;
+    if (await cardioVariantsLeft()) {
+      await saveInternalBackup('Antes de unir las variantes de cinta, bici y elíptica');
+      await migrateCardioV10();
+      hubo = true;
+    }
+    // Una vez: la cinta con lo que se apunta en ella (velocidad e inclinación por serie).
+    if (!s.cintaMetricsV1) {
+      for (const u of await getAll('users')) {
+        for (const e of await exercisesOf(u.id)) {
+          if (e.type !== 'time' || e.name.trim().toLowerCase() !== 'cinta') continue;
+          const m = [...new Set([...(e.metrics || []), ...CINTA_METRICS])];
+          if (m.length !== (e.metrics || []).length) { e.metrics = m; await put('exercises', e); hubo = true; }
+        }
+      }
+      await saveSettings({ cintaMetricsV1: true });
+    }
+    return hubo;
+  }
+
   // Unificación de cardio: la dispara la app TRAS avisar al usuario (copia + confirmar).
   async function runCardioUnify() {
     await saveInternalBackup('Antes de unificar cardio');
@@ -976,11 +1027,7 @@ const DB = (() => {
   async function cardioUnifyPending() {
     const s = await getSettings();
     if (!s || (s.dataVersion || 0) >= 10) return false;
-    for (const u of await getAll('users')) {
-      const exs = (await exercisesOf(u.id)).filter(e => e.type === 'time');
-      if (exs.some(e => { const c = cardioCanon(e.name); return c && (c.label || e.name.trim() !== c.machine); })) return true;
-    }
-    return false;
+    return cardioVariantsLeft();
   }
 
   // Aditivo e inofensivo: marca 'time' (tiempo total opcional) en el cardio que ya
@@ -1024,6 +1071,7 @@ const DB = (() => {
     if (!s.debranded) { await debrandStoredData(); await saveSettings({ debranded: true }); }
     // Una vez: nombres del catálogo antiguo → nombres de gimnasio (con copia interna antes).
     try { await runCatalogNames(); } catch (e) { console.error('runCatalogNames', e); }
+    try { await tidyCardioVariants(); } catch (e) { console.error('tidyCardioVariants', e); }
     const v = s.dataVersion || 0;
     if (v >= 9) return; // la unificación de cardio (v10) la lanza la app aparte (con aviso)
     const defaults = defaultTypeByName();
@@ -1124,7 +1172,7 @@ const DB = (() => {
     getSettings, saveSettings,
     getPlaces, savePlaces, ensurePlaces,
     getUsers, getMainUser, createUser,
-    seedForUser, createPlan, ensureTemplateExercises, runCatalogNames, setActivePlan, deletePlan, restoreDefaultExercises, restoreDefaultRoutine, restoreDefaultDay, updateExercise, migrate, runCardioUnify, cardioUnifyPending, classifyType,
+    seedForUser, createPlan, ensureTemplateExercises, runCatalogNames, tidyCardioVariants, setActivePlan, deletePlan, restoreDefaultExercises, restoreDefaultRoutine, restoreDefaultDay, updateExercise, migrate, runCardioUnify, cardioUnifyPending, classifyType,
     saveInternalBackup, listInternalBackups, deleteInternalBackup, restoreInternalBackup,
     filesOf, addFile, hasStore, isFallback, upgradeNow,
     nutritionOf, primaryNutritionOf, saveNutrition,
