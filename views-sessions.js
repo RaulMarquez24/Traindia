@@ -1793,29 +1793,65 @@ const VSessions = (() => {
 
   // Bloques por ejercicio de una sesión (series + totales + nota). Reutilizado por el
   // detalle y por el vistazo rápido a la sesión anterior. opts.ai añade el botón de IA.
+  // Totales de un ejercicio de tiempo (tiempo total, km, kcal, pulso) en una línea.
+  function entryTotalsText(e) {
+    if ((e.type || 'weight') !== 'time' || !entryHasTotals(e)) return '';
+    const t = e.totals || {};
+    const active = new Set(timeActiveMetrics(e));
+    const parts = [];
+    if (active.has('time') && (e.sets || []).length > 1) { // tiempo total solo con varios intervalos (con 1 serie es redundante)
+      const totalSec = (t.time != null && t.time !== '') ? parseInt(t.time) : (e.sets || []).reduce((a, set) => a + (parseInt(set.time) || 0), 0);
+      if (totalSec) parts.push(`${fmtClock(totalSec)} total`);
+    }
+    const dist = t.distance ? parseFloat(t.distance) : (e.sets || []).reduce((a, set) => a + (parseFloat(set.distance) || 0), 0); // compat viejas
+    const kc = t.kcal ? parseFloat(t.kcal) : (e.sets || []).reduce((a, set) => a + (parseFloat(set.kcal) || 0), 0);
+    if (dist) parts.push(`${Math.round(dist * 100) / 100} km`);
+    if (kc) parts.push(`${Math.round(kc)} kcal`);
+    if (t.hr) parts.push(`${t.hr} ppm`);
+    return parts.join(' · ');
+  }
+
+  // Datos de una sesión ya listos para el PDF del entrenador: cada ejercicio con sus
+  // series en texto y, al lado, lo que hiciste la vez anterior (sesiones de antes).
+  async function reportModel(app, s) {
+    const all = await DB.sessionsOf(s.userId);
+    const antes = all.filter(x => !x.draft && x.id !== s.id &&
+      ((x.date || '') < (s.date || '') || ((x.date || '') === (s.date || '') && (x.createdAt || 0) < (s.createdAt || 0))));
+    const prevMap = buildLastTimeMap(antes, s.id);
+    const author = app.userById(s.userId);
+    const entries = (s.entries || []).map(e => {
+      const type = e.type || 'weight';
+      const prev = prevMap[keyForEntry(e)];
+      const sets = (e.sets || []).map((set, i) => ({
+        n: i + 1,
+        txt: setHasData(set) ? setDisplay(type, set) : 'Sin apuntar',
+        empty: !setHasData(set),
+        skip: !!(set.check && set.skip && !set.done),
+        prev: prev && prev.sets[i] ? setDisplay(prev.type, prev.sets[i]) : '',
+      }));
+      return { name: e.name, type, block: e.block || '', target: e.target || '', detail: e.detail || '', note: e.note || '',
+        totals: entryTotalsText(e), sets, prevDate: prev ? prev.date : '', check: type === 'check' && sets.length <= 1 };
+    });
+    const nSeries = (s.entries || []).filter(e => (e.type || 'weight') !== 'check') // el calentamiento (hecho/no hecho) no cuenta como series
+      .reduce((a, e) => a + (e.sets || []).filter(setHasData).length, 0);
+    const r = s.response && RESPONSE[s.response];
+    return {
+      name: s.name || 'Sesión', date: s.date, dateTxt: UI.fmtDate(s.date), author: author ? author.name : '',
+      duration: s.durationSec ? fmtClock(s.durationSec) : '', volume: sessionVolume(s), nSeries,
+      nEx: (s.entries || []).length, response: r ? { label: r.label, cls: r.cls } : null,
+      prs: (s.prs || []).filter(p => !p.first).map(p => ({ name: p.name, value: prValueText(p.type, p.value) })),
+      notes: s.notes || '', entries,
+    };
+  }
+
   function sessionEntriesHTML(s, opts) {
     const withAI = !!(opts && opts.ai);
     return (s.entries || []).map((e, ei) => {
       const rows = (e.sets || []).map((set, i) =>
         `<li><span class="set-n-sm">${i + 1}</span><span>${UI.esc(setDisplay(e.type || 'weight', set))}</span></li>`).join('');
       const note = e.note ? `<div class="ex-note"><span class="ex-note-txt">${UI.icon('edit', 13)} ${UI.esc(e.note)}</span></div>` : '';
-      const totalsLine = (() => {
-        if ((e.type || 'weight') !== 'time' || !entryHasTotals(e)) return '';
-        const t = e.totals || {};
-        const active = new Set(timeActiveMetrics(e));
-        const parts = [];
-        if (active.has('time') && (e.sets || []).length > 1) { // tiempo total solo con varios intervalos (con 1 serie es redundante)
-          const totalSec = (t.time != null && t.time !== '') ? parseInt(t.time) : (e.sets || []).reduce((a, set) => a + (parseInt(set.time) || 0), 0);
-          if (totalSec) parts.push(`${fmtClock(totalSec)} total`);
-        }
-        const dist = t.distance ? parseFloat(t.distance) : (e.sets || []).reduce((a, set) => a + (parseFloat(set.distance) || 0), 0); // compat viejas
-        const kc = t.kcal ? parseFloat(t.kcal) : (e.sets || []).reduce((a, set) => a + (parseFloat(set.kcal) || 0), 0);
-        if (dist) parts.push(`${Math.round(dist * 100) / 100} km`);
-        if (kc) parts.push(`${Math.round(kc)} kcal`);
-        if (t.hr) parts.push(`${t.hr} ppm`);
-        if (!parts.length) return '';
-        return `<div class="detail-totals">${UI.icon('clock', 13)} ${parts.join(' · ')}</div>`;
-      })();
+      const tt = entryTotalsText(e);
+      const totalsLine = tt ? `<div class="detail-totals">${UI.icon('clock', 13)} ${tt}</div>` : '';
       const head = withAI
         ? `<div class="block-label detail-ex-head"><span>${UI.esc(e.name)}</span><button class="icon-btn" data-ai-done data-ei="${ei}" title="Consultar a una IA sobre este ejercicio">${UI.icon('chat', 16)}</button></div>`
         : `<div class="block-label">${UI.esc(e.name)}</div>`;
@@ -1887,7 +1923,17 @@ const VSessions = (() => {
       const s = await DB.get('sessions', params.sessionId);
       sessionEditor(app, s);
     });
-    root.querySelector('[data-act="share"]').addEventListener('click', () => VData.exportSession(app, params.sessionId));
+    // Compartir: PDF para el entrenador (lo normal) o el archivo de Traindía para importarlo en otra app.
+    root.querySelector('[data-act="share"]').addEventListener('click', () => UI.modal({
+      title: 'Compartir sesión',
+      bodyHTML: `<button class="big-row" data-sh="pdf"><span class="big-row-icon tile" style="background:var(--strong)">${UI.icon('notebook', 18)}</span><span class="big-row-text"><strong>PDF para tu entrenador</strong><span class="dim">Cada ejercicio con sus series y lo de la vez anterior</span></span><span class="chev">›</span></button>
+        <button class="big-row" data-sh="json"><span class="big-row-icon tile" style="background:var(--light)">${UI.icon('upload', 18)}</span><span class="big-row-text"><strong>Archivo de Traindía</strong><span class="dim">Para importarla en otro móvil con Traindía</span></span><span class="chev">›</span></button>`,
+      actions: [{ label: 'Cerrar', kind: 'ghost' }],
+      onMount: (m) => {
+        m.querySelector('[data-sh="pdf"]').addEventListener('click', () => { UI.closeModal(); VSessionPDF.share(app, params.sessionId); });
+        m.querySelector('[data-sh="json"]').addEventListener('click', () => { UI.closeModal(); VData.exportSession(app, params.sessionId); });
+      },
+    }));
     const respBtn = root.querySelector('[data-act="resp"]');
     if (respBtn) respBtn.addEventListener('click', async () => {
       const s = await DB.get('sessions', params.sessionId);
@@ -2009,6 +2055,6 @@ const VSessions = (() => {
     });
   }
 
-  return { live, liveBind, list, listBind, detail, detailBind, checkDayAfter, sessionVolume, checkResume, liveHasData, restEnsure, TIME_FIELDS, CHECK_FIELDS,
+  return { live, liveBind, list, listBind, detail, detailBind, checkDayAfter, sessionVolume, reportModel, checkResume, liveHasData, restEnsure, TIME_FIELDS, CHECK_FIELDS,
     notifStatus, setRestNotify, restNotifyOn, testPush, REST_NOTIFY_TEXT };
 })();
