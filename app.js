@@ -771,7 +771,7 @@ const app = {
                 tipo: d.tipo,
                 mensaje: d.mensaje.trim(),
                 contacto: (d.contacto || '').trim() || '(no indicado)',
-                version: 'v2.44.2',
+                version: 'v2.44.3',
                 perfil: (this.mainUser && this.mainUser.name) || '',
                 navegador: navigator.userAgent,
               }),
@@ -826,7 +826,7 @@ const app = {
         <div class="more-group">${g.rows.map(r => `<button class="more-row" ${r.feedback ? 'data-feedback' : `data-link="${r.v}"`}>
           <span class="more-ic" style="background:${g.color}">${UI.icon(r.icon, 20)}</span>
           <span class="more-txt"><strong>${r.label}</strong><span${r.warn ? ' class="warn"' : ''}>${UI.esc(r.sub)}</span></span><span class="chev">›</span></button>`).join('')}</div>`).join('')}
-      <p class="version-foot">Traindía · v2.44.2 · ${Object.keys(this.usersById).length} perfil(es)<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
+      <p class="version-foot">Traindía · v2.44.3 · ${Object.keys(this.usersById).length} perfil(es)<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
     </div>`;
   },
   bindMore(root) {
@@ -1159,25 +1159,13 @@ const app = {
     paint();
   },
 
-  // Ajustes, ordenado: quién eres, cómo se ve, cómo te avisa el entreno, tus datos,
-  // acerca de y, aparte y al final, lo peligroso.
-  async renderSettings() {
-    const u = this.mainUser;
+  // Ajustes: solo lo que es de la app (cómo se ve, cómo avisa, acerca de y lo peligroso).
+  // Perfiles y Copias y datos tienen su propia entrada en Más: aquí no se repiten.
+  renderSettings() {
     const theme = this.getTheme();
     const themeOpts = [['system', 'Sistema'], ['light', 'Claro'], ['dark', 'Oscuro']];
-    const [ses, st] = await Promise.all([DB.sessionsOf(u.id).catch(() => []), DB.getSettings().catch(() => null)]);
-    const nSes = ses.filter(x => !x.draft).length;
-    const last = (st && st.lastBackupAt) || 0, days = last ? Math.floor((Date.now() - last) / 86400000) : -1;
-    const copia = days < 0 ? 'Aún sin copia completa' : `Última copia ${days === 0 ? 'hoy' : days === 1 ? 'ayer' : `hace ${days} días`}`;
-    const invitados = Object.keys(this.usersById).length - 1;
     const row = (attrs, icon, color, title, sub, extra = '') => `<button class="more-row" ${attrs}><span class="more-ic" style="background:${color}">${UI.icon(icon, 18)}</span><span class="more-txt"><strong>${title}</strong>${sub ? `<span>${sub}</span>` : ''}</span>${extra || '<span class="chev">›</span>'}</button>`;
     return `<div class="section">
-      <button class="set-head" id="editMain">
-        ${UI.avatar(u, 54)}
-        <span class="set-head-txt"><strong>${UI.esc(u.name)}</strong><span>Perfil principal · ${nSes} entreno${nSes === 1 ? '' : 's'}</span></span>
-        <span class="set-head-edit">${UI.icon('edit', 15)} Editar</span>
-      </button>
-
       <div class="more-sec">Apariencia</div>
       <div class="more-group"><div class="set-block">
         <div class="seg" id="themeChoices">
@@ -1201,17 +1189,11 @@ const app = {
         </details>
       </div>
 
-      <div class="more-sec">Tus datos</div>
-      <div class="more-group">
-        ${row('data-link="backups"', 'swap', 'var(--light)', 'Copias y datos', UI.esc(copia))}
-        ${row('data-link="profiles"', 'users', 'var(--light)', 'Perfiles', invitados > 0 ? `${invitados} invitado${invitados === 1 ? '' : 's'}` : 'Añade a quien entrene contigo')}
-      </div>
-
       <div class="more-sec">Acerca de Traindía</div>
       <div class="more-group">
         ${row('id="seeLanding"', 'info', 'var(--rest)', 'Ver la presentación', 'Qué es Traindía y cómo funciona')}
         ${row('id="seeRepo"', 'code', 'var(--rest)', 'Código en GitHub', 'Novedades de cada versión', `<span class="chev">↗</span>`)}
-        <div class="more-row set-ver"><span class="more-txt"><span>Versión</span></span><strong>v2.44.2</strong></div>
+        <div class="more-row set-ver"><span class="more-txt"><span>Versión</span></span><strong>v2.44.3</strong></div>
       </div>
 
       <div class="more-sec danger">Zona peligrosa</div>
@@ -1222,31 +1204,9 @@ const app = {
     </div>`;
   },
 
-  // Nombre y color del perfil principal (antes era un formulario fijo en la pantalla).
-  editMainProfile() {
-    const u = this.mainUser;
-    UI.modal({
-      title: 'Tu perfil',
-      bodyHTML: `<div id="mainForm">${UI.field('Nombre', UI.input('name', u.name))}${UI.field('Color', UI.colorPicker('color', u.color))}</div>`,
-      actions: [
-        { label: 'Cancelar', kind: 'ghost' },
-        { label: 'Guardar', kind: 'primary', onClick: async (m) => {
-          const data = UI.readForm(m.querySelector('#mainForm'));
-          if (!data.name || !data.name.trim()) { UI.toast('Escribe un nombre', 'err'); return false; }
-          await DB.put('users', { ...this.mainUser, name: data.name.trim(), color: data.color });
-          await this.loadUsers();
-          UI.toast('Perfil actualizado');
-          this.render();
-        } },
-      ],
-      onMount: (m) => UI.bindColorPicker(m),
-    });
-  },
-
   bindSettings(root) {
     this.bindNotifSettings(root);
     const on = (sel, fn) => { const b = root.querySelector(sel); if (b) b.addEventListener('click', fn); };
-    on('#editMain', () => this.editMainProfile());
     on('#seeLanding', () => this.previewLanding());
     on('#seeRepo', () => window.open(this.REPO_URL + '/releases', '_blank', 'noopener'));
     root.querySelectorAll('[data-theme-opt]').forEach(b => b.addEventListener('click', () => {
