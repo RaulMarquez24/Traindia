@@ -9,6 +9,31 @@ const VData = (() => {
   const isExportFormat = (f) => f === FORMAT || f === OLD_FORMAT;
 
   // ---- recolección de datos ----
+  // Documentos (PDFs, fotos) dentro del JSON: el binario va en base64.
+  function bufToB64(buf) {
+    const bytes = new Uint8Array(buf); let bin = '';
+    for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    return btoa(bin);
+  }
+  function b64ToBuf(b64) {
+    const bin = atob(b64); const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return bytes.buffer;
+  }
+  async function filesForExport(userId) {
+    let list = [];
+    try { list = await DB.filesOf(userId); } catch (e) { return []; }
+    const out = [];
+    for (const f of list) {
+      try {
+        const buf = f.data instanceof Blob ? await f.data.arrayBuffer() : f.data;
+        if (!buf) continue;
+        out.push({ id: f.id, name: f.name, type: f.type || '', size: f.size || buf.byteLength, addedAt: f.addedAt || Date.now(), b64: bufToB64(buf) });
+      } catch (e) {}
+    }
+    return out;
+  }
+
   async function gatherProfile(userId, user) {
     return {
       format: FORMAT, version: 2, kind: 'profile',
@@ -20,6 +45,7 @@ const VData = (() => {
         sessions: (await DB.sessionsOf(userId)).filter(s => !s.draft),
         progress: await DB.progressOf(userId),
         nutrition: await DB.nutritionOf(userId),
+        files: await filesForExport(userId),
         places: await DB.getPlaces(),
       },
     };
@@ -523,6 +549,7 @@ const VData = (() => {
     if (key === 'sessions') return `${UI.fmtDateShort(it.date)} · ${UI.esc(it.name || 'Sesión')}`;
     if (key === 'progress') return `${UI.fmtDateShort(it.date)}${it.weight ? ` · ${it.weight} kg` : ''}`;
     if (key === 'nutrition') return UI.esc(it.nombre || 'Pauta');
+    if (key === 'files') return `${UI.esc(it.name || 'Documento')} <span class="dim">· ${Math.max(1, Math.round((it.size || 0) / 1024))} KB</span>`;
     return UI.esc(String(it.id));
   }
 
@@ -541,6 +568,7 @@ const VData = (() => {
       { key: 'sessions', label: 'Sesiones' },
       { key: 'progress', label: 'Progreso' },
       { key: 'nutrition', label: 'Nutrición' },
+      { key: 'files', label: 'Documentos' },
     ].filter(s => (counts[s.key] || []).length);
     const hasData = DATA_SECTIONS.length > 0;
 
@@ -716,7 +744,7 @@ const VData = (() => {
   async function applyImport(app, payload, targetUserId, policy, sections) {
     const data = payload.data || {};
     const duplicate = policy === 'duplicate';
-    const want = sections || new Set(['exercises', 'routines', 'sessions', 'progress', 'nutrition']);
+    const want = sections || new Set(['exercises', 'routines', 'sessions', 'progress', 'nutrition', 'files']);
     let exMap = {}; // idOrigen -> idLocal (para reescribir referencias)
 
     // 1) Ejercicios — SIEMPRE se emparejan por NOMBRE con el catálogo, así que
@@ -763,6 +791,20 @@ const VData = (() => {
     // 5) Nutrición (pauta de alimentación)
     if (want.has('nutrition')) for (const n of (data.nutrition || [])) {
       try { await DB.saveNutrition({ ...n, id: duplicate ? DB.uid('nut') : n.id, userId: targetUserId }); } catch (e) {}
+    }
+
+    // 6) Documentos. Como copia nueva no se repite uno que ya tengas (mismo nombre y tamaño),
+    //    así restaurar tu propia copia no los duplica.
+    if (want.has('files') && (data.files || []).length) {
+      let mine = [];
+      try { mine = await DB.filesOf(targetUserId); } catch (e) {}
+      for (const f of data.files) {
+        if (!f || !f.b64) continue;
+        try {
+          if (duplicate && mine.some(m => m.name === f.name && (m.size || 0) === (f.size || 0))) continue;
+          await DB.put('files', { id: duplicate ? DB.uid('file') : f.id, userId: targetUserId, name: f.name, type: f.type || '', size: f.size || 0, addedAt: f.addedAt || Date.now(), data: b64ToBuf(f.b64) });
+        } catch (e) { console.error('importar documento', e); }
+      }
     }
   }
 
@@ -928,5 +970,5 @@ const VData = (() => {
     return added;
   }
 
-  return { openShare, openExport, startImport, exportDay, importDay, exportNutrition, exportSession, exportProgressEntry, routeImport, checkBackupReminder, backupProfile , createImportedPlan };
+  return { openShare, openExport, startImport, exportRoutine: doExportPlan, exportDay, importDay, exportNutrition, exportSession, exportProgressEntry, routeImport, checkBackupReminder, backupProfile , createImportedPlan };
 })();
