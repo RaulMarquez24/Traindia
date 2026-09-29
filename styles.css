@@ -726,6 +726,21 @@ body[data-view="live"] .install-prompt { display: none !important; }
 /* Con el aviso de instalar visible, los avisos salen por encima de él (no se pisan). */
 body.install-shown .toast { bottom: calc(var(--nav-h) + 104px + var(--safe-bottom)); }
 /* La última vez, en gris dentro de las casillas del entreno */
+/* Entreno: «hecho / no hecho» sencillos agrupados en una tarjeta compacta */
+.chkc-card { padding: 10px 14px 6px; }
+.chkc-head { display: flex; align-items: center; gap: 6px; margin-bottom: 2px; }
+.chkc-head strong { flex: 1; font-size: 15px; }
+.chkc-head .drag-handle { margin-left: -6px; }
+.chkc-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line-soft); }
+.chkc-row:first-of-type { border-top: 0; }
+.chkc-box { flex: none; width: 30px; height: 30px; border-radius: 9px; border: 2px solid var(--line); background: var(--bg-card); color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.chkc-row.on .chkc-box { background: var(--strong); border-color: var(--strong); }
+.chkc-name { flex: 1; min-width: 0; font-size: 15px; font-weight: 600; color: var(--ink); }
+.chkc-name small { display: block; font-size: 12px; font-weight: 400; color: var(--ink-dim); margin-top: 1px; }
+.chkc-row.on .chkc-name { color: var(--ink-soft); }
+.chkc-row.skip .chkc-name { color: var(--ink-dim); text-decoration: line-through; }
+.chkc-no { flex: none; background: none; border: 1px solid var(--line); border-radius: 999px; padding: 5px 11px; font: inherit; font-size: 12px; color: var(--ink-dim); cursor: pointer; }
+.chkc-no.on { background: var(--priority); border-color: var(--priority); color: #fff; }
 .set-f.last-ph::placeholder, .set-wrap.pend .set-f.last-ph::placeholder { color: var(--ink-dim); opacity: .6; font-weight: 500; }
 .toast {
   position: fixed; bottom: calc(var(--nav-h) + 20px + var(--safe-bottom)); left: 50%;

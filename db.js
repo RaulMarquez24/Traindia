@@ -639,6 +639,139 @@ const DB = (() => {
     return updated;
   }
 
+  // ---- Nombres del catálogo antiguo → nombres de gimnasio (una sola vez) ----
+  // Solo se tocan los ejercicios que se llamen EXACTAMENTE como el nombre antiguo (lo que
+  // el usuario ya renombró a mano no cambia). Renombrar cambia también el nombre en los
+  // planes y en las sesiones (el historial y los récords siguen juntos). Si ya existe
+  // uno con el nombre nuevo, se funden en uno conservando todo. «alsoCreate»: el que
+  // iba detrás de la «o» se crea aparte y queda como alternativa.
+  const CATALOG_RENAMES = [
+    { from: 'Sentadilla o prensa', to: 'Sentadilla', alsoCreate: 'Prensa' },
+    { from: 'Press banca o mancuerna', to: 'Press banca', alsoCreate: 'Press con mancuernas' },
+    { from: 'Zancadas o búlgaras', to: 'Zancadas', alsoCreate: 'Sentadilla búlgara' },
+    { from: 'Remo máquina o sentado', to: 'Remo en máquina', alsoCreate: 'Remo sentado' },
+    { from: 'Prensa, hack squat', to: 'Prensa', alsoCreate: 'Sentadilla hack' },
+    { from: 'Remo bajo polea', to: 'Remo sentado' },
+    { from: 'Polea baja', to: 'Remo sentado' },
+    { from: 'Remo máquina cualquiera', to: 'Remo en máquina' },
+    { from: 'Remo mancuerna', to: 'Remo con mancuerna' },
+    { from: 'Press inclinado mancuerna', to: 'Press inclinado con mancuernas' },
+    { from: 'Press inclinado máquina', to: 'Press inclinado en máquina' },
+    { from: 'Press militar mancuerna', to: 'Press militar con mancuernas' },
+    { from: 'Press máquina hombro', to: 'Press de hombro en máquina' },
+    { from: 'Máquina hombro', to: 'Press de hombro en máquina' },
+    { from: 'Press máquina pecho', to: 'Press de pecho en máquina' },
+    { from: 'Press francés mancuerna', to: 'Press francés' },
+    { from: 'Face pull polea', to: 'Face pull' },
+    { from: 'Curl bíceps barra', to: 'Curl con barra' },
+    { from: 'Curl mancuerna', to: 'Curl con mancuernas' },
+    { from: 'Curl cuerda polea', to: 'Curl en polea' },
+    { from: 'Curl alterno (sin fallo)', to: 'Curl alterno' },
+    { from: 'Tríceps pushdown cuerda', to: 'Extensión de tríceps en polea' },
+    { from: 'Tríceps cuerda overhead', to: 'Extensión de tríceps sobre la cabeza' },
+    { from: 'Jalón al pecho prono', to: 'Jalón al pecho' },
+    { from: 'Dominadas asistidas prono', to: 'Dominadas asistidas' },
+    { from: 'Negativas (5-7s)', to: 'Negativas de dominada' },
+    { from: 'Pallof press polea', to: 'Pallof press' },
+    { from: 'Elev. polea', to: 'Elevación lateral en polea' },
+    { from: 'Gemelo', to: 'Gemelos' },
+    { from: 'Gemelo prensa', to: 'Gemelos en prensa' },
+    { from: 'Static hold mancuernas', to: 'Aguante con mancuernas' },
+    { from: 'Landmine', to: 'Landmine press' },
+    { from: 'Goblet', to: 'Sentadilla goblet' },
+    { from: 'Suspensión supina barra parque', to: 'Suspensión supina' },
+    { from: 'Mancuerna', to: 'Curl de muñeca con mancuerna' },
+  ];
+  // Restos de leer mal el plan antiguo: se borran solo si no se usan en ningún sitio.
+  const CATALOG_JUNK = ['Quitarla'];
+
+  async function runCatalogNames() {
+    const s = await getSettings();
+    if (!s || s.catalogNamesV1) return false;
+    const users = await getAll('users');
+    const key = (n) => String(n || '').trim().toLowerCase();
+    const defs = (typeof TEMPLATES !== 'undefined' && TEMPLATES.EXERCISES) || {};
+    // ¿Hay algo que hacer? Si no, solo se marca (sin copia).
+    let pending = false;
+    for (const u of users) {
+      const names = new Set((await exercisesOf(u.id)).map(e => key(e.name)));
+      if (CATALOG_RENAMES.some(r => names.has(key(r.from))) || CATALOG_JUNK.some(j => names.has(key(j)))) { pending = true; break; }
+    }
+    if (pending) await saveInternalBackup('Antes de ordenar los nombres del catálogo');
+
+    for (const u of users) {
+      const routines = await routinesOf(u.id);
+      const sessions = await sessionsOf(u.id);
+      const dirtyR = new Set(), dirtyS = new Set();
+      // Cambia en planes y sesiones las referencias de un ejercicio a otro (id y nombre).
+      const repoint = (fromEx, toEx) => {
+        const match = (e) => (e.exerciseId && e.exerciseId === fromEx.id) || (!e.exerciseId && key(e.name) === key(fromEx.name));
+        routines.forEach(rt => (rt.days || []).forEach(d => (d.blocks || []).forEach(b => (b.exercises || []).forEach(e => {
+          if (match(e)) { e.exerciseId = toEx.id; e.name = toEx.name; dirtyR.add(rt); }
+        }))));
+        sessions.forEach(ss => (ss.entries || []).forEach(e => {
+          if (match(e)) { e.exerciseId = toEx.id; e.name = toEx.name; dirtyS.add(ss); }
+        }));
+      };
+      const all = await exercisesOf(u.id);
+      const byName = new Map(all.map(e => [key(e.name), e]));
+      const removed = new Set();
+      const makeFromDef = async (name) => {
+        const def = defs[name] || {};
+        const type = def.type || classifyType(name, '');
+        const e = { id: uid('ex'), userId: u.id, name, muscleGroup: def.group || 'General', type, substitutes: [], createdAt: Date.now() };
+        if (def.howto) e.howto = def.howto;
+        if (Array.isArray(def.videos) && def.videos.length) { e.videos = def.videos.map(v => ({ ...v })); e.videoUrl = def.videos[0].url; }
+        if ((type === 'time' || type === 'check') && Array.isArray(def.metrics)) e.metrics = def.metrics.slice();
+        await put('exercises', e); byName.set(key(name), e); all.push(e);
+        return e;
+      };
+
+      for (const r of CATALOG_RENAMES) {
+        const from = byName.get(key(r.from));
+        if (!from || removed.has(from.id)) continue;
+        let to = byName.get(key(r.to));
+        if (to && to.id !== from.id) {
+          // Fundir: todo lo de «from» pasa a «to» (historial, planes, suplentes).
+          repoint(from, to);
+          to.substitutes = [...new Set([...(to.substitutes || []), ...(from.substitutes || [])])].filter(x => x !== to.id && x !== from.id);
+          if (!to.howto && from.howto) to.howto = from.howto;
+          if (!exVideos(to).length && exVideos(from).length) { to.videos = exVideos(from); to.videoUrl = to.videos[0].url; }
+          if (!Array.isArray(to.metrics) && Array.isArray(from.metrics)) to.metrics = from.metrics.slice();
+          all.forEach(o => { if (o.substitutes && o.substitutes.includes(from.id)) { o.substitutes = [...new Set(o.substitutes.map(x => x === from.id ? to.id : x))].filter(x => x !== o.id); o._dirty = true; } });
+          to._dirty = true;
+          await del('exercises', from.id); removed.add(from.id); byName.delete(key(r.from));
+        } else {
+          // Renombrar en su sitio (mismo id): planes y sesiones cambian de nombre.
+          const oldName = from.name;
+          from.name = r.to;
+          repoint({ id: from.id, name: oldName }, from);
+          byName.delete(key(r.from)); byName.set(key(r.to), from); from._dirty = true;
+          to = from;
+        }
+        if (r.alsoCreate) {
+          const extra = byName.get(key(r.alsoCreate)) || await makeFromDef(r.alsoCreate);
+          if (extra.id !== to.id && !(to.substitutes || []).includes(extra.id)) { to.substitutes = [...(to.substitutes || []), extra.id]; to._dirty = true; }
+        }
+      }
+      // Restos sin usar
+      for (const j of CATALOG_JUNK) {
+        const e = byName.get(key(j));
+        if (!e || removed.has(e.id)) continue;
+        const usado = routines.some(rt => (rt.days || []).some(d => (d.blocks || []).some(b => (b.exercises || []).some(x => x.exerciseId === e.id))))
+          || sessions.some(ss => (ss.entries || []).some(x => x.exerciseId === e.id || key(x.name) === key(j)));
+        if (usado) continue;
+        await del('exercises', e.id); removed.add(e.id);
+        all.forEach(o => { if (o.substitutes && o.substitutes.includes(e.id)) { o.substitutes = o.substitutes.filter(x => x !== e.id); o._dirty = true; } });
+      }
+      for (const e of all) { if (e._dirty && !removed.has(e.id)) { delete e._dirty; await put('exercises', e); } }
+      for (const rt of dirtyR) await put('routines', rt);
+      for (const ss of dirtyS) await put('sessions', ss);
+    }
+    await saveSettings({ catalogNamesV1: true });
+    return pending;
+  }
+
   // ---- Suplentes predefinidos: parsea PLAN_DATA y los vincula como ejercicios del catálogo ----
   function _tokens(s) { return (s || '').toLowerCase().replace(/[().]/g, ' ').split(/[\s/·,]+/).filter(Boolean); }
   function _bestMatch(orig, names) {
@@ -886,6 +1019,8 @@ const DB = (() => {
     if (!s.cardioTimeMetric) { await addTimeTotalToCardio(); await saveSettings({ cardioTimeMetric: true }); }
     // Aditivo: desmarca los datos antiguos (planType/nombre) una sola vez.
     if (!s.debranded) { await debrandStoredData(); await saveSettings({ debranded: true }); }
+    // Una vez: nombres del catálogo antiguo → nombres de gimnasio (con copia interna antes).
+    try { await runCatalogNames(); } catch (e) { console.error('runCatalogNames', e); }
     const v = s.dataVersion || 0;
     if (v >= 9) return; // la unificación de cardio (v10) la lanza la app aparte (con aviso)
     const defaults = defaultTypeByName();
@@ -986,7 +1121,7 @@ const DB = (() => {
     getSettings, saveSettings,
     getPlaces, savePlaces, ensurePlaces,
     getUsers, getMainUser, createUser,
-    seedForUser, createPlan, ensureTemplateExercises, setActivePlan, deletePlan, restoreDefaultExercises, restoreDefaultRoutine, restoreDefaultDay, updateExercise, migrate, runCardioUnify, cardioUnifyPending, classifyType,
+    seedForUser, createPlan, ensureTemplateExercises, runCatalogNames, setActivePlan, deletePlan, restoreDefaultExercises, restoreDefaultRoutine, restoreDefaultDay, updateExercise, migrate, runCardioUnify, cardioUnifyPending, classifyType,
     saveInternalBackup, listInternalBackups, deleteInternalBackup, restoreInternalBackup,
     filesOf, addFile, hasStore, isFallback, upgradeNow,
     nutritionOf, primaryNutritionOf, saveNutrition,

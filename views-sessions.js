@@ -1126,6 +1126,41 @@ const VSessions = (() => {
   // Remarca en el DOM las series que aún no tienen nada apuntado, y el ejercicio
   // que las contiene. No redibuja: solo cambia clases, así se llama en cada tecla
   // sin perder el foco ni el scroll.
+  // Un «hecho / no hecho» sencillo (una serie, sin datos extra ni nota) cabe en una fila.
+  function isCompactCheck(e) {
+    return (e.type === 'check') && (e.sets || []).length === 1 && !e.note && !checkActiveMetrics(e).length;
+  }
+  function compactGroupHTML(items) {
+    const head = items[0].e.block || 'Por hacer';
+    const hechas = items.filter(({ e }) => e.sets[0].done).length;
+    const rows = items.map(({ e, i }) => {
+      const st = e.sets[0];
+      const sub = [e.target, e.detail].filter(Boolean).join(' · ');
+      const info = (e.exerciseId && _exMeta[e.exerciseId]) ? `<button class="icon-btn" data-howto data-ei="${i}" title="Cómo se hace">${UI.icon('info', 17)}</button>` : '';
+      return `<div class="chkc-row${st.done ? ' on' : ''}${st.skip ? ' skip' : ''}">
+          <button class="chkc-box" data-chk="done" data-ei="${i}" data-si="0" aria-pressed="${st.done ? 'true' : 'false'}" aria-label="Hecho">${st.done ? UI.icon('check', 16) : ''}</button>
+          <span class="chkc-name">${UI.esc(e.name)}${sub ? `<small>${UI.esc(sub)}</small>` : ''}</span>
+          ${info}
+          <button class="chkc-no${st.skip ? ' on' : ''}" data-chk="skip" data-ei="${i}" data-si="0" aria-pressed="${st.skip ? 'true' : 'false'}">No hecho</button>
+        </div>`;
+    }).join('');
+    return `<div class="ex-card chkc-card${hechas < items.length ? ' ex-pend' : ''}" data-sort-id="${items.map(x => x.i).join(',')}">
+        <div class="chkc-head"><button type="button" class="drag-handle" data-drag="card" aria-label="Arrastrar">${UI.icon('grip', 18)}</button><strong>${UI.esc(head)}</strong><span class="ex-prog">${hechas}/${items.length}</span></div>
+        ${rows}
+      </div>`;
+  }
+  function liveEntriesHTML(s) {
+    const out = [];
+    let group = [];
+    const flush = () => { if (group.length) { out.push(group.length > 1 ? compactGroupHTML(group) : entryCardHTML(group[0].e, group[0].i, 'live')); group = []; } };
+    (s.entries || []).forEach((e, i) => {
+      if (isCompactCheck(e) && (!group.length || (group[0].e.block || '') === (e.block || ''))) group.push({ e, i });
+      else { flush(); if (isCompactCheck(e)) group.push({ e, i }); else out.push(entryCardHTML(e, i, 'live')); }
+    });
+    flush();
+    return out.join('');
+  }
+
   function pintarEstado(root, session) {
     root.querySelectorAll('.ex-card').forEach(card => {
       const e = (session.entries || [])[+card.dataset.ei];
@@ -1217,6 +1252,7 @@ const VSessions = (() => {
         (await DB.exercisesOf(app.activeUser.id)).forEach(x => { if (Array.isArray(x.metrics)) metricsById[x.id] = x.metrics; });
         day.blocks.forEach(b => b.exercises.forEach(ex => {
           const e = entryFromExercise(ex);
+          if (b.label) e.block = b.label; // sección del plan (Calentamiento, Pierna…)
           if ((e.type === 'time' || e.type === 'check') && e.exerciseId && metricsById[e.exerciseId]) e.metrics = metricsById[e.exerciseId].slice();
           // Tantas series como diga la prescripción («4×6-8», «3x12», «5×400m»); si no
           // hay número o es hecho/no hecho, una. Las que queden vacías se limpian al terminar.
@@ -1263,7 +1299,7 @@ const VSessions = (() => {
         </div>
       </div>
       <div class="live-entries">
-        ${s.entries.map((e, i) => entryCardHTML(e, i, 'live')).join('') || '<div class="empty-state"><p>Añade ejercicios para empezar.</p></div>'}
+        ${liveEntriesHTML(s) || '<div class="empty-state"><p>Añade ejercicios para empezar.</p></div>'}
       </div>
       <button class="btn ghost block" id="liveAddEx">+ Añadir ejercicio</button>
       <label class="field"><span class="field-label">Notas</span><textarea class="inp" id="liveNotes" rows="2" placeholder="Sensaciones, ajustes…">${UI.esc(s.notes)}</textarea></label>
@@ -1369,7 +1405,7 @@ const VSessions = (() => {
     const redraw = () => {
       const cont = root.querySelector('.live-entries');
       if (!cont) { app.render(); return; }
-      cont.innerHTML = s.entries.map((e, i) => entryCardHTML(e, i, 'live')).join('') || '<div class="empty-state"><p>Añade ejercicios para empezar.</p></div>';
+      cont.innerHTML = liveEntriesHTML(s) || '<div class="empty-state"><p>Añade ejercicios para empezar.</p></div>';
       bindEntries();
       pintarEstado(root, s);
     };
@@ -1383,7 +1419,7 @@ const VSessions = (() => {
     pintarEstado(root, s);
     UI.makeSortable(root.querySelector('.live-entries'), {
       itemSelector: '.ex-card', handleSelector: '[data-drag="card"]',
-      onReorder: (order) => { sync(); s.entries = order.map(i => s.entries[+i]); redraw(); },
+      onReorder: (order) => { sync(); s.entries = order.flatMap(id => String(id).split(',').map(i => s.entries[+i])); redraw(); },
     });
     root.querySelector('#liveAddEx').addEventListener('click', () => { sync(); addExerciseToSession(app, s, () => redraw()); });
     root.querySelector('#liveCancel').addEventListener('click', async () => {
