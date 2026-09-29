@@ -774,7 +774,7 @@ const app = {
                 tipo: d.tipo,
                 mensaje: d.mensaje.trim(),
                 contacto: (d.contacto || '').trim() || '(no indicado)',
-                version: 'v2.48.2',
+                version: 'v2.48.3',
                 perfil: (this.mainUser && this.mainUser.name) || '',
                 navegador: navigator.userAgent,
               }),
@@ -1208,7 +1208,7 @@ const app = {
       <div class="more-group">
         ${row('id="seeLanding"', 'info', 'var(--rest)', 'Ver la presentación', 'Qué es Traindía y cómo funciona')}
         ${row('id="seeRepo"', 'code', 'var(--rest)', 'Código en GitHub', 'Novedades de cada versión', `<span class="chev">↗</span>`)}
-        <div class="more-row set-ver"><span class="more-txt"><span>Versión</span></span><strong>v2.48.2</strong></div>
+        <div class="more-row set-ver"><span class="more-txt"><span>Versión</span></span><strong>v2.48.3</strong></div>
       </div>
 
       <div class="more-sec danger">Zona peligrosa</div>

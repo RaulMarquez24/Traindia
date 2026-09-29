@@ -1043,14 +1043,8 @@ const VPlan = (() => {
           <button class="icon-btn" data-plan-menu="${r.id}" aria-label="Opciones de ${UI.esc(r.name)}">${UI.icon('more', 20)}</button>
         </div>`).join('')}</div>` : '';
 
-    const tpls = typeof TEMPLATES !== 'undefined' ? TEMPLATES.list : [];
-    const create = `<div class="more-sec">Crear un plan</div>
-      <div class="pl-create">
-        ${tpls.length ? `<button class="bk-tile" data-new="tpl"><span class="more-ic" style="background:var(--strong)">${UI.icon('star', 19)}</span><strong>Plantilla</strong><span>Planes completos listos para empezar</span></button>` : ''}
-        <button class="bk-tile" data-new="ai"><span class="more-ic" style="background:var(--strong)">${UI.icon('chat', 19)}</span><strong>De tu entrenador</strong><span>Desde su PDF o fotos, con una IA</span></button>
-        <button class="bk-tile" data-new="custom"><span class="more-ic" style="background:var(--strong)">${UI.icon('plus', 19)}</span><strong>En blanco</strong><span>7 días que montas a tu medida</span></button>
-      </div>`;
-
+    // Crear: un solo botón anclado abajo que abre la ventana de siempre (plantilla, entrenador o en blanco)
+    const create = `<div class="pl-new-wrap"><button class="btn primary block pl-new" id="newPlan">${UI.icon('plus', 17)} Nuevo plan</button></div>`;
     return `<div class="section">${aiBanner}${hero}${othersHTML}${create}</div>`;
   }
 
@@ -1062,11 +1056,8 @@ const VPlan = (() => {
       UI.toast('Plan activado');
     }));
     root.querySelectorAll('[data-plan-menu]').forEach(b => b.addEventListener('click', () => planMenu(app, b.dataset.planMenu)));
-    root.querySelectorAll('[data-new]').forEach(b => b.addEventListener('click', () => {
-      const k = b.dataset.new;
-      if (k === 'ai') VPlanAI.open(app);
-      else createPlanModal(app, k === 'custom' ? 'custom' : null);
-    }));
+    const newPlan = root.querySelector('#newPlan');
+    if (newPlan) newPlan.addEventListener('click', () => createPlanModal(app));
     const aiDismiss = root.querySelector('#aiDismiss');
     if (aiDismiss) aiDismiss.addEventListener('click', () => { VPlanAI.olvidarPrompt(); app.render(); });
     const en = root.querySelector('#editNotes');
