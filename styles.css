@@ -598,6 +598,8 @@ body[data-view="live"] .install-prompt { display: none !important; }
 .cat-row .ex-sub .ex-type { color: var(--strong); }
 .cat-ic { display: inline-flex; align-items: center; gap: 2px; margin-left: 4px; font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: var(--ink-soft); }
 .cat-ic.sub { color: var(--sub-accent); }
+.cat-recs { display: inline-flex; align-items: center; gap: 3px; margin-left: 6px; font-family: 'IBM Plex Mono', monospace; font-size: 10px; font-weight: 600; color: var(--strong); background: var(--strong-bg); padding: 1px 6px; border-radius: 999px; }
+.cat-recs.none { color: var(--ink-dim); background: none; padding: 1px 0; font-weight: 500; }
 .cat-row.flash { animation: catFlash 1.6s ease; }
 @keyframes catFlash { 0%, 30% { background: var(--strong-bg); } 100% { background: transparent; } }
 .cat-empty { text-align: center; padding: 26px 10px; color: var(--ink-dim); font-size: 14px; }
