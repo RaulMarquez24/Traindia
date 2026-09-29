@@ -928,5 +928,5 @@ const VData = (() => {
     return added;
   }
 
-  return { openShare, exportDay, importDay, exportNutrition, exportSession, exportProgressEntry, routeImport, checkBackupReminder, backupProfile , createImportedPlan };
+  return { openShare, openExport, startImport, exportDay, importDay, exportNutrition, exportSession, exportProgressEntry, routeImport, checkBackupReminder, backupProfile , createImportedPlan };
 })();

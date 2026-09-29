@@ -78,41 +78,105 @@ const VPlan = (() => {
     });
   }
 
-  // Selector de lugar: reusar uno existente o crear uno nuevo (especial o no).
-  function pickPlace({ places, onPick }) {
+  // Selector de lugar del día. Los lugares se crean aquí y se guardan para reusarlos;
+  // el lápiz de cada uno lo renombra, lo marca como especial o lo borra (en todos los
+  // días que lo usan). No hay otra pantalla de lugares.
+  //   places: la lista (se modifica en sitio y se guarda) · current: el lugar del día
+  //   onPick(p | null) al elegir (null = sin lugar) · onChange(viejo, nuevo | null) al editar/borrar
+  function pickPlace({ app, places, current, onPick, onChange }) {
     let overlay;
-    overlay = UI.modal({
-      title: 'Lugar de entreno',
-      bodyHTML: `<div class="menu-list">
-        ${places.map(p => `<button class="menu-row" data-place="${UI.esc(p.name)}"><span>${UI.esc(p.name)}${p.special ? ' <span class="badge soon">especial</span>' : ''}</span><span class="chev">›</span></button>`).join('')}
+    const listHTML = () => `<div class="menu-list">
+        <button class="menu-row pk-place${!current ? ' on' : ''}" data-place-none="1"><span class="dim">Sin lugar</span>${!current ? UI.icon('check', 16) : ''}</button>
+        ${places.map((p, i) => `<div class="pk-place-row">
+          <button class="menu-row pk-place${p.name === current ? ' on' : ''}" data-place="${i}"><span>${UI.esc(p.name)}${p.special ? ' <span class="badge soon">especial</span>' : ''}</span>${p.name === current ? UI.icon('check', 16) : ''}</button>
+          <button class="icon-btn" data-place-edit="${i}" aria-label="Editar ${UI.esc(p.name)}">${UI.icon('edit', 16)}</button>
+        </div>`).join('')}
         <button class="menu-row" data-place-new="1"><span>${UI.icon('plus', 16)} Nueva ubicación…</span></button>
-      </div>`,
-      actions: [{ label: 'Cancelar', kind: 'ghost' }],
-      onMount: (root) => {
-        root.querySelectorAll('[data-place]').forEach(b => b.addEventListener('click', () => {
-          const p = places.find(x => x.name === b.dataset.place);
-          UI.closeModal(overlay); onPick(p);
-        }));
-        root.querySelector('[data-place-new]').addEventListener('click', () => {
-          UI.modal({
-            title: 'Nueva ubicación',
-            bodyHTML: `<div id="newPlaceForm">
-              ${UI.field('Nombre', UI.input('name', '', { placeholder: 'Ej: Parque' }))}
-              <label class="mini-check"><input type="checkbox" name="special"> Lugar especial (se resalta en rojo)</label>
-            </div>`,
-            actions: [
-              { label: 'Cancelar', kind: 'ghost' },
-              { label: 'Crear', kind: 'primary', onClick: (r2) => {
-                const d = UI.readForm(r2.querySelector('#newPlaceForm'));
-                if (!d.name.trim()) { UI.toast('Escribe un nombre', 'err'); return false; }
-                UI.closeModal(overlay);
-                onPick({ name: d.name.trim(), special: !!d.special });
-              }},
-            ],
-          });
+      </div>`;
+    const form = (p) => `<div id="placeForm">
+        ${UI.field('Nombre', UI.input('name', p ? p.name : '', { placeholder: 'Ej: Parque' }))}
+        <label class="mini-check"><input type="checkbox" name="special"${p && p.special ? ' checked' : ''}> Lugar especial (se resalta en rojo)</label>
+      </div>`;
+    const readForm = (r2, skipIndex) => {
+      const d = UI.readForm(r2.querySelector('#placeForm'));
+      const name = (d.name || '').trim();
+      if (!name) { UI.toast('Escribe un nombre', 'err'); return null; }
+      if (places.some((x, i) => i !== skipIndex && x.name.toLowerCase() === name.toLowerCase())) { UI.toast('Ya existe esa ubicación', 'err'); return null; }
+      return { name, special: !!d.special };
+    };
+    const bind = (root) => {
+      const body = root.querySelector('.modal-body');
+      const redraw = () => { body.innerHTML = listHTML(); bind(root); };
+      body.querySelector('[data-place-none]').addEventListener('click', () => { UI.closeModal(overlay); onPick(null); });
+      body.querySelectorAll('[data-place]').forEach(b => b.addEventListener('click', () => { UI.closeModal(overlay); onPick(places[+b.dataset.place]); }));
+      body.querySelector('[data-place-new]').addEventListener('click', () => UI.modal({
+        title: 'Nueva ubicación', bodyHTML: form(null),
+        actions: [
+          { label: 'Cancelar', kind: 'ghost' },
+          { label: 'Crear', kind: 'primary', onClick: async (r2) => {
+            const np = readForm(r2, -1); if (!np) return false;
+            places.push(np); await DB.savePlaces(places);
+            UI.closeModal(overlay); onPick(np);
+          } },
+        ],
+      }));
+      body.querySelectorAll('[data-place-edit]').forEach(b => b.addEventListener('click', () => {
+        const i = +b.dataset.placeEdit, old = places[i];
+        UI.modal({
+          title: 'Editar ubicación', bodyHTML: form(old),
+          actions: [
+            { label: 'Borrar', kind: 'ghost danger', onClick: async () => {
+              const usos = await placeUsage(old.name);
+              const ok = await UI.confirm({
+                title: `¿Borrar ${old.name}?`,
+                message: usos.length ? `Está puesto en ${usos.length} día${usos.length === 1 ? '' : 's'} (${usos.slice(0, 4).join(', ')}${usos.length > 4 ? '…' : ''}); se quitará de ${usos.length === 1 ? 'él' : 'ellos'}.` : 'No lo usa ningún día.',
+                confirmLabel: 'Borrar', danger: true,
+              });
+              if (!ok) return false;
+              places.splice(i, 1); await DB.savePlaces(places);
+              await applyPlaceToDays(app, old.name, null);
+              if (onChange) onChange(old.name, null);
+              if (current === old.name) current = '';
+              redraw(); UI.toast('Lugar borrado');
+            } },
+            { label: 'Cancelar', kind: 'ghost' },
+            { label: 'Guardar', kind: 'primary', onClick: async (r2) => {
+              const np = readForm(r2, i); if (!np) return false;
+              places[i] = np; await DB.savePlaces(places);
+              await applyPlaceToDays(app, old.name, np);
+              if (onChange) onChange(old.name, np);
+              if (current === old.name) current = np.name;
+              redraw(); UI.toast('Lugar guardado');
+            } },
+          ],
         });
-      },
+      }));
+    };
+    overlay = UI.modal({
+      title: 'Lugar de entreno', bodyHTML: listHTML(),
+      actions: [{ label: 'Cancelar', kind: 'ghost' }],
+      onMount: bind,
     });
+  }
+  // Días (de todos los planes y perfiles) que usan un lugar, para avisar al borrarlo.
+  async function placeUsage(name) {
+    const out = [];
+    (await DB.getAll('routines')).forEach(rt => (rt.days || []).forEach(d => { if ((d.place || '') === name) out.push(d.name); }));
+    return out;
+  }
+  // Propaga un cambio de lugar a los días que lo usaban (renombrar / especial / borrar).
+  // También en el plan en memoria: el editor del día lo guarda entero al terminar.
+  async function applyPlaceToDays(app, oldName, np) {
+    const fix = (rt) => {
+      let changed = false;
+      (rt.days || []).forEach(d => {
+        if ((d.place || '') !== oldName) return;
+        d.place = np ? np.name : ''; d.placeAccent = np ? !!np.special : false; changed = true;
+      });
+      return changed;
+    };
+    for (const rt of await DB.getAll('routines')) { if (fix(rt)) await DB.put('routines', rt); }
+    if (app && app.routine) fix(app.routine);
   }
 
   // ---------- SEMANA ----------
@@ -608,11 +672,11 @@ const VPlan = (() => {
       const placeBtn = root.querySelector('#dayPlaceBtn');
       if (placeBtn) placeBtn.addEventListener('click', () => {
         syncSafe(root);
-        pickPlace({ places, onPick: (p) => {
-          draft.place = p.name; draft.placeAccent = !!p.special;
-          if (!places.find(x => x.name === p.name)) { places.push(p); DB.savePlaces(places); }
-          rerender(root);
-        } });
+        pickPlace({ app, places, current: draft.place || '',
+          onPick: (p) => { draft.place = p ? p.name : ''; draft.placeAccent = p ? !!p.special : false; rerender(root); },
+          // renombrado / borrado desde el lápiz: el borrador del día también se entera
+          onChange: (oldName, np) => { if ((draft.place || '') === oldName) { draft.place = np ? np.name : ''; draft.placeAccent = np ? !!np.special : false; rerender(root); } },
+        });
       });
       const addPlanB = root.querySelector('#addPlanB');
       if (addPlanB) addPlanB.addEventListener('click', () => { sync(root); draft.planB = draft.planB || []; draft.planB.push({ orig: '', sub: '' }); rerender(root); });
@@ -1377,86 +1441,9 @@ const VPlan = (() => {
   }
 
   // ---------- LUGARES ----------
-  async function places(app) {
-    const list = await DB.getPlaces();
-    const rows = list.map((p, i) => `<div class="profile-card">
-      <div class="profile-meta">
-        <strong>${UI.esc(p.name)} ${p.special ? '<span class="badge soon">especial</span>' : ''}</strong>
-        <span class="dim">${p.special ? 'Se resalta en rojo' : 'Normal'}</span>
-      </div>
-      <div class="profile-actions">
-        <button class="icon-btn" data-edit-place="${i}">${UI.icon('edit', 17)}</button>
-        <button class="icon-btn danger" data-del-place="${i}">${UI.icon('trash', 17)}</button>
-      </div>
-    </div>`).join('');
-    return `<div class="section">
-      <p class="section-intro">Lugares donde entrenas. Los <strong>especiales</strong> se resaltan en rojo (como el parque). Se usan al elegir el lugar de un día.</p>
-      ${rows || '<div class="empty-state"><p>Aún no hay lugares.</p></div>'}
-      <button class="btn primary block" id="addPlace">+ Nueva ubicación</button>
-    </div>`;
-  }
-
-  function placesBind(app, root) {
-    root.querySelector('#addPlace').addEventListener('click', () => editPlace(app, null, -1));
-    root.querySelectorAll('[data-edit-place]').forEach(b => b.addEventListener('click', async () => {
-      const list = await DB.getPlaces(); const i = +b.dataset.editPlace;
-      editPlace(app, list[i], i);
-    }));
-    root.querySelectorAll('[data-del-place]').forEach(b => b.addEventListener('click', async () => {
-      const list = await DB.getPlaces(); const i = +b.dataset.delPlace; const p = list[i];
-      const ok = await UI.confirm({ title: `Eliminar ${p.name}`, message: 'Se quita de la lista de lugares. Los días que ya lo usan conservan su texto.', confirmLabel: 'Eliminar', danger: true });
-      if (!ok) return;
-      list.splice(i, 1); await DB.savePlaces(list); app.render(); UI.toast('Lugar eliminado');
-    }));
-  }
-
-  // Propaga un cambio de lugar a los días de la rutina que lo usaban.
-  async function applyPlaceToDays(app, oldName, newName, special) {
-    const rts = await DB.routinesOf(app.activeUser.id);
-    for (const rt of rts) {
-      let changed = false;
-      (rt.days || []).forEach(d => { if ((d.place || '') === oldName) { d.place = newName; d.placeAccent = special; changed = true; } });
-      if (changed) await DB.put('routines', rt);
-    }
-    await app.refreshRoutine();
-  }
-
-  function editPlace(app, existing, index) {
-    const isNew = !existing;
-    UI.modal({
-      title: isNew ? 'Nueva ubicación' : 'Editar ubicación',
-      bodyHTML: `<div id="placeForm">
-        ${UI.field('Nombre', UI.input('name', existing ? existing.name : '', { placeholder: 'Ej: Parque' }))}
-        <label class="mini-check"><input type="checkbox" name="special"${existing && existing.special ? ' checked' : ''}> Lugar especial (se resalta en rojo)</label>
-      </div>`,
-      actions: [
-        { label: 'Cancelar', kind: 'ghost' },
-        { label: 'Guardar', kind: 'primary', onClick: async (root) => {
-          const d = UI.readForm(root.querySelector('#placeForm'));
-          if (!d.name.trim()) { UI.toast('Escribe un nombre', 'err'); return false; }
-          const name = d.name.trim(), special = !!d.special;
-          const list = await DB.getPlaces();
-          const dup = list.findIndex(p => p.name.toLowerCase() === name.toLowerCase());
-          if (isNew) {
-            if (dup !== -1) { UI.toast('Ya existe esa ubicación', 'err'); return false; }
-            list.push({ name, special });
-          } else {
-            const old = list[index];
-            if (dup !== -1 && dup !== index) { UI.toast('Ya existe esa ubicación', 'err'); return false; }
-            list[index] = { name, special };
-            await applyPlaceToDays(app, old.name, name, special);
-          }
-          await DB.savePlaces(list);
-          app.render();
-          UI.toast('Ubicación guardada');
-        }},
-      ],
-    });
-  }
-
   function emptyRoutine() {
     return `<div class="empty-state"><p>No hay rutina configurada.</p></div>`;
   }
 
-  return { week, weekBind, day, dayBind, normalizeDayTypes, guides, guide, templateOf, guideList, findGuide, planChoicesHTML, bindPlanChoices, templatePreview, info, infoBind, exercises, exercisesBind, places, placesBind, checkDuplicates };
+  return { week, weekBind, day, dayBind, normalizeDayTypes, guides, guide, templateOf, guideList, findGuide, planChoicesHTML, bindPlanChoices, templatePreview, info, infoBind, exercises, exercisesBind, checkDuplicates };
 })();
