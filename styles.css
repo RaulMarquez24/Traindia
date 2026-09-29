@@ -154,6 +154,14 @@ textarea.inp { resize: vertical; line-height: 1.4; }
 .tab.on { background: var(--bg-card); color: var(--strong); box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
 
 /* ---- Filas grandes (Más) ---- */
+/* Guías: vacío que invita a crearlas, acciones y guías propias */
+.guides-empty { text-align: center; background: var(--bg-card); border: 1px dashed var(--line); border-radius: 16px; padding: 24px 18px; margin: 6px 0 14px; }
+.guides-empty-ic { width: 54px; height: 54px; border-radius: 50%; background: var(--strong-bg); color: var(--strong); display: inline-flex; align-items: center; justify-content: center; margin-bottom: 10px; }
+.guides-empty strong { display: block; font-size: 17px; margin-bottom: 6px; }
+.guides-empty p { margin: 0; font-size: 14px; color: var(--ink-dim); line-height: 1.5; }
+.guides-actions { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
+.guide-own { color: var(--strong); }
+.plan-guides-link { margin-top: 14px; }
 /* Menú Más: grupos con filas compactas (un color por grupo) */
 .more-sec { font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-dim); margin: 24px 4px 9px; }
 .more-sec:first-child { margin-top: 2px; }

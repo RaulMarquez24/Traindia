@@ -713,27 +713,222 @@ const VPlan = (() => {
     const r = app && app.routine;
     return (r && r.planType === 'template' && typeof TEMPLATES !== 'undefined') ? TEMPLATES.byId(r.templateId) : null;
   }
+  // Guías del plan activo: las de su plantilla (fijas) + las propias del plan
+  // (escritas a mano o hechas con una IA), guardadas en routine.guides.
+  function ownGuides(app) { return (app && app.routine && Array.isArray(app.routine.guides)) ? app.routine.guides : []; }
   function guideList(app) {
     const t = templateOf(app);
-    return t ? (t.guides || []) : [];
+    const base = t ? (t.guides || []) : [];
+    const own = ownGuides(app).map((g, i) => ({ id: g.id, own: true, number: String(base.length + i + 1).padStart(2, '0'), title: g.title, summary: g.summary || '', content: guideTextHTML(g.text), raw: g }));
+    return [...base, ...own];
   }
   function findGuide(app, id) { return guideList(app).find(x => x.id === id) || null; }
+  // Texto de una guía propia → HTML: «## » subtítulo, «- » lista, **negrita**, línea en blanco = párrafo.
+  function guideTextHTML(text) {
+    const inline = (t) => UI.esc(t).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    const out = []; let list = null, para = [];
+    const flushP = () => { if (para.length) { out.push(`<p>${para.map(inline).join('<br>')}</p>`); para = []; } };
+    const flushL = () => { if (list) { out.push(`<ul>${list.map(li => `<li>${inline(li)}</li>`).join('')}</ul>`); list = null; } };
+    String(text || '').replace(/\r/g, '').split('\n').forEach(line => {
+      const l = line.trim();
+      if (!l) { flushP(); flushL(); return; }
+      if (/^#{1,3}\s+/.test(l)) { flushP(); flushL(); out.push(`<h3>${inline(l.replace(/^#{1,3}\s+/, ''))}</h3>`); return; }
+      if (/^[-*•]\s+/.test(l)) { flushP(); (list || (list = [])).push(l.replace(/^[-*•]\s+/, '')); return; }
+      flushL(); para.push(l);
+    });
+    flushP(); flushL();
+    return out.join('') || '<p class="dim">Esta guía está vacía.</p>';
+  }
+
+  const GUIDES_PROMPT_KEY = 'traindia-guias-prompt-pedido';
+  const guidesPending = () => { try { return localStorage.getItem(GUIDES_PROMPT_KEY) === '1'; } catch (e) { return false; } };
+  const markGuidesPrompt = (on) => { try { if (on) localStorage.setItem(GUIDES_PROMPT_KEY, '1'); else localStorage.removeItem(GUIDES_PROMPT_KEY); } catch (e) {} };
 
   function guides(app) {
     const t = templateOf(app);
-    const cards = guideList(app).map(g => `
+    const list = guideList(app);
+    const r = app.routine;
+    const cards = list.map(g => `
       <a class="guide-card" data-link="guide" data-params='${JSON.stringify({ guideId: g.id })}'>
-        <div class="num">GUÍA ${UI.esc(g.number)}</div>
+        <div class="num">GUÍA ${UI.esc(g.number)}${g.own ? ' · <span class="guide-own">tuya</span>' : ''}</div>
         <h3>${UI.esc(g.title)}</h3>
-        <p>${UI.esc(g.summary)}</p>
+        ${g.summary ? `<p>${UI.esc(g.summary)}</p>` : ''}
       </a>`).join('');
-    return `<div class="week-intro"><div class="eyebrow">${t ? UI.esc(t.name) : 'Documentación detallada'}</div><h2>Guías</h2><p>Información completa sobre cada parte del plan.</p></div><div class="guides-list">${cards || '<p class="dim">Este plan no tiene guías.</p>'}</div>`;
+    const pasteBtn = guidesPending() ? `<button class="btn primary block" id="gPaste">${UI.icon('upload', 16)} Pegar las guías de la IA</button>` : '';
+    const empty = `<div class="guides-empty">
+        <span class="guides-empty-ic">${UI.icon('book', 26)}</span>
+        <strong>Tu plan aún no tiene guías</strong>
+        <p>Una guía es tu chuleta del plan: cómo progresar, la técnica de tus ejercicios, cómo calentar o qué hacer si algo te molesta. Deja que una IA las escriba a partir de tus días y ejercicios (y del PDF de tu entrenador, si lo tienes).</p>
+      </div>`;
+    return `<p class="section-intro">${r ? `Guías de <strong>${UI.esc(r.name)}</strong>. ` : ''}Se consultan en cualquier momento, también sin conexión.</p>
+      ${pasteBtn}
+      ${list.length ? `<div class="guides-list">${cards}</div>` : empty}
+      ${r ? `<div class="guides-actions">
+        <button class="btn ${list.length ? 'ghost' : 'primary'} block" id="gAI">${UI.icon('chat', 16)} ${list.length ? 'Crear más con la IA' : 'Crear guías con la IA'}</button>
+        <button class="btn ghost block" id="gNew">${UI.icon('edit', 16)} Escribir una guía</button>
+      </div>` : ''}`;
+  }
+  function guidesBind(app, root) {
+    const on = (sel, fn) => { const b = root.querySelector(sel); if (b) b.addEventListener('click', fn); };
+    on('#gAI', () => guidesAI(app));
+    on('#gNew', () => editGuide(app, null));
+    on('#gPaste', () => pasteGuides(app));
   }
 
   function guide(app, params) {
     const g = findGuide(app, params.guideId);
     if (!g) return `<div class="empty-state"><p>Guía no encontrada.</p></div>`;
-    return `<div class="guide-content"><div class="guide-eyebrow">GUÍA ${UI.esc(g.number)}</div><h2>${UI.esc(g.title)}</h2>${g.content}</div>`;
+    const tools = g.own ? `<div class="detail-toolbar">
+        <button class="btn ghost" data-g-edit>${UI.icon('edit', 16)} Editar</button>
+        <button class="btn ghost danger" data-g-del>${UI.icon('trash', 16)} Borrar</button>
+      </div>` : '';
+    return `<div class="guide-content"><div class="guide-eyebrow">GUÍA ${UI.esc(g.number)}${g.own ? ' · TUYA' : ''}</div><h2>${UI.esc(g.title)}</h2>${g.content}${tools}</div>`;
+  }
+  function guideBind(app, root, params) {
+    const g = findGuide(app, params.guideId);
+    if (!g || !g.own) return;
+    const e = root.querySelector('[data-g-edit]'); if (e) e.addEventListener('click', () => editGuide(app, g.raw));
+    const d = root.querySelector('[data-g-del]');
+    if (d) d.addEventListener('click', async () => {
+      const ok = await UI.confirm({ title: `¿Borrar «${g.title}»?`, message: 'Se borra esta guía de tu plan.', confirmLabel: 'Borrar', danger: true });
+      if (!ok) return;
+      app.routine.guides = ownGuides(app).filter(x => x.id !== g.id);
+      await saveRoutine(app); app.go('guides', {}, true); UI.toast('Guía borrada');
+    });
+  }
+
+  // Escribir / editar una guía propia.
+  function editGuide(app, existing) {
+    UI.modal({
+      title: existing ? 'Editar guía' : 'Nueva guía', size: 'wide',
+      bodyHTML: `<div id="gForm">
+        ${UI.field('Título', UI.input('title', existing ? existing.title : '', { placeholder: 'Ej: Cómo subo de peso' }))}
+        ${UI.field('Resumen (opcional)', UI.input('summary', existing ? existing.summary || '' : '', { placeholder: 'Una línea: de qué va' }))}
+        ${UI.field('Texto', `<textarea class="inp" name="text" rows="10" placeholder="Escribe lo que quieras recordar…">${UI.esc(existing ? existing.text || '' : '')}</textarea>`)}
+        <p class="field-hint">Truco: empieza una línea con <strong>## </strong> para un subtítulo, con <strong>- </strong> para una lista, y rodea con <strong>**</strong> lo importante.</p>
+      </div>`,
+      actions: [
+        { label: 'Cancelar', kind: 'ghost' },
+        { label: 'Guardar', kind: 'primary', onClick: async (m) => {
+          const d = UI.readForm(m.querySelector('#gForm'));
+          const title = (d.title || '').trim();
+          if (!title) { UI.toast('Ponle un título', 'err'); return false; }
+          const list = ownGuides(app).slice();
+          if (existing) { const i = list.findIndex(x => x.id === existing.id); if (i >= 0) list[i] = { ...list[i], title, summary: (d.summary || '').trim(), text: d.text || '' }; }
+          else list.push({ id: DB.uid('guide'), title, summary: (d.summary || '').trim(), text: d.text || '', source: 'manual', createdAt: Date.now() });
+          app.routine.guides = list;
+          await saveRoutine(app);
+          if (existing) app.render(); else app.go('guides', {}, true);
+          UI.toast('Guía guardada');
+        } },
+      ],
+    });
+  }
+
+  // ---- Guías con una IA: Traindía prepara el texto con TU plan; tú pegas el resultado ----
+  function planSummaryForAI(r) {
+    const lines = [];
+    (r.days || []).forEach(d => {
+      if (d.isRest || d.type === 'rest') { lines.push(`- ${d.name}: descanso`); return; }
+      const exs = (d.blocks || []).flatMap(b => (b.exercises || []).map(x => `${x.name}${x.sets ? ` ${x.sets}` : ''}${x.notes ? ` (${x.notes})` : ''}`));
+      if (!exs.length) return;
+      lines.push(`- ${d.name}${d.focus ? ` (${d.focus})` : ''}: ${exs.join('; ')}`);
+    });
+    return lines.join('\n');
+  }
+  const GUIDE_TOPICS = [
+    { k: 'progresion', label: 'Cómo progresar', desc: 'Cómo progresar en MIS ejercicios: cuándo y cuánto subir peso o repeticiones, qué RIR usar y qué hacer si me estanco.' },
+    { k: 'tecnica', label: 'Técnica de mis ejercicios principales', desc: 'Técnica de los ejercicios principales de mi plan: claves, errores típicos y cómo notarlo.' },
+    { k: 'calentamiento', label: 'Calentamiento', desc: 'Cómo calentar antes de cada día de mi plan, con series de aproximación para los ejercicios pesados.' },
+    { k: 'molestias', label: 'Si algo me molesta', desc: 'Qué hacer si me molesta algo o no tengo una máquina: con qué cambiar cada ejercicio de mi plan.' },
+    { k: 'semana', label: 'Organizar la semana', desc: 'Cómo encaja mi semana, qué hacer si me salto un día y cómo gestionar el cansancio.' },
+  ];
+  function guidesPrompt(r, topics, conDoc) {
+    const T = GUIDE_TOPICS.filter(t => topics.includes(t.k));
+    return [
+      'Eres un entrenador personal. Quiero GUÍAS prácticas para seguir bien mi plan de entrenamiento.',
+      '',
+      `MI PLAN: «${r.name || 'Mi plan'}»`,
+      planSummaryForAI(r) || '(sin ejercicios todavía)',
+      '',
+      conDoc ? 'Te adjunto el documento que me dio mi entrenador: básate en sus indicaciones y no las contradigas. Si algo no está claro, dilo en la guía.\n' : '',
+      'Escribe UNA guía por cada tema:',
+      ...T.map((t, i) => `${i + 1}. ${t.desc}`),
+      '',
+      'Reglas:',
+      '- En español, claro y directo, para leer en el móvil en el gimnasio. Entre 150 y 400 palabras por guía.',
+      '- Habla de MI plan y MIS ejercicios (nómbralos), nada genérico de relleno.',
+      '- No incluyas datos personales.',
+      '',
+      'Devuélvelo SOLO como un bloque de código JSON con esta forma exacta:',
+      '{"formato":"traindia-guias","guias":[{"titulo":"…","resumen":"una línea","texto":"…"}]}',
+      'En "texto": líneas que empiezan por "## " para subtítulos, "- " para listas, **negrita** para lo clave y una línea en blanco entre párrafos.',
+    ].filter((l, i, a) => !(l === '' && a[i - 1] === '')).join('\n');
+  }
+  function guidesAI(app) {
+    const r = app.routine;
+    if (!r) { UI.toast('Primero crea o activa un plan', 'err'); return; }
+    UI.modal({
+      title: 'Guías con la IA', size: 'wide',
+      bodyHTML: `<p class="modal-text">Traindía prepara un texto con <strong>tus días y tus ejercicios</strong> para que una IA (ChatGPT, Gemini, Claude…) escriba las guías. Luego pegas aquí lo que te devuelva.</p>
+        <p class="field-hint" style="margin-top:0">¿Sobre qué?</p>
+        <div class="metric-opts">
+          ${GUIDE_TOPICS.map(t => `<label class="metric-opt"><input type="checkbox" data-topic="${t.k}" checked><span>${t.label}</span></label>`).join('')}
+          <label class="metric-opt"><input type="checkbox" data-doc><span>Le voy a adjuntar el PDF o las fotos de mi entrenador</span></label>
+        </div>
+        <p class="field-hint">Traindía no envía nada a ninguna IA por su cuenta: abres tú la que quieras con el texto ya escrito.</p>`,
+      actions: [
+        { label: 'Cancelar', kind: 'ghost' },
+        { label: 'Continuar', kind: 'primary', onClick: (m) => {
+          const topics = [...m.querySelectorAll('[data-topic]:checked')].map(c => c.dataset.topic);
+          if (!topics.length) { UI.toast('Marca al menos un tema', 'err'); return false; }
+          UI.askAI(guidesPrompt(r, topics, !!m.querySelector('[data-doc]').checked));
+          markGuidesPrompt(true);
+          if (app.currentView === 'guides') setTimeout(() => app.render(), 300); // aparece «Pegar las guías de la IA»
+        } },
+      ],
+    });
+  }
+  function parseGuides(txt) {
+    let t = String(txt || '').trim();
+    const bloque = t.match(/```(?:json)?\s*([\s\S]*?)```/i); if (bloque) t = bloque[1].trim();
+    const i = t.indexOf('{'), j = t.lastIndexOf('}'); if (i >= 0 && j > i) t = t.slice(i, j + 1);
+    const o = JSON.parse(t);
+    const arr = Array.isArray(o) ? o : (o.guias || o.guides || []);
+    return arr.map(g => ({ title: String(g.titulo || g.title || '').trim(), summary: String(g.resumen || g.summary || '').trim(), text: String(g.texto || g.text || '').trim() }))
+      .filter(g => g.title && g.text);
+  }
+  function pasteGuides(app) {
+    UI.modal({
+      title: 'Pegar las guías de la IA', size: 'wide',
+      bodyHTML: `<p class="modal-text">Toca el <strong>botón de copiar</strong> del bloque que te dio la IA y pégalo aquí. Da igual si viene con texto alrededor.</p>
+        <textarea class="inp" id="gpText" rows="7" placeholder='Empieza por {"formato":"traindia-guias"…'></textarea>`,
+      actions: [
+        { label: 'Cancelar', kind: 'ghost' },
+        { label: 'Revisar', kind: 'primary', onClick: (m) => {
+          let list;
+          try { list = parseGuides(m.querySelector('#gpText').value); } catch (e) { UI.toast('No he sabido leer eso. Copia el bloque entero, desde la primera llave.', 'err'); return false; }
+          if (!list.length) { UI.toast('No encuentro guías en ese texto', 'err'); return false; }
+          setTimeout(() => UI.modal({
+            title: `${list.length} guía${list.length === 1 ? '' : 's'} para tu plan`,
+            bodyHTML: `<p class="field-hint" style="margin-top:0">Se añaden a <strong>${UI.esc(app.routine.name)}</strong>. Después puedes editarlas o borrarlas.</p>
+              <div class="check-list" style="max-height:none">${list.map((g, i) => `<label class="check-row"><input type="checkbox" data-g="${i}" checked><span><strong>${UI.esc(g.title)}</strong>${g.summary ? `<br><span class="dim">${UI.esc(g.summary)}</span>` : ''}</span></label>`).join('')}</div>`,
+            actions: [
+              { label: 'Cancelar', kind: 'ghost' },
+              { label: 'Añadir', kind: 'primary', onClick: async (m2) => {
+                const pick = [...m2.querySelectorAll('[data-g]:checked')].map(c => list[+c.dataset.g]);
+                if (!pick.length) { UI.toast('Marca al menos una', 'err'); return false; }
+                app.routine.guides = [...ownGuides(app), ...pick.map(g => ({ id: DB.uid('guide'), ...g, source: 'ia', createdAt: Date.now() }))];
+                await saveRoutine(app);
+                markGuidesPrompt(false);
+                app.go('guides', {}, true);
+                UI.toast(`${pick.length} guía${pick.length === 1 ? '' : 's'} añadida${pick.length === 1 ? '' : 's'}`);
+              } },
+            ],
+          }), 80);
+        } },
+      ],
+    });
   }
 
   // ---------- PLANES (gestor de planes) ----------
@@ -747,9 +942,7 @@ const VPlan = (() => {
       <p class="field-hint" style="margin-top:0">${UI.esc(t.tagline)}</p>
       <div class="block"><ul class="ex-list">${rows.map(([k, v]) => `<li><span class="ex-name">${k}</span><span class="ex-sets">${UI.esc(v)}</span></li>`).join('')}</ul></div>
       <div class="block"><div class="block-label">Qué incluye</div><ul class="ex-list">${(t.highlights || []).map(h => `<li><span class="ex-name">${UI.esc(h)}</span></li>`).join('')}</ul></div>
-      <div class="related-guides"><div class="block-label">Guías</div>
-        ${(t.guides || []).map(g => `<a class="guide-link" data-link="guide" data-params='${JSON.stringify({ guideId: g.id })}'><span>${UI.esc(g.title)}</span><span class="guide-link-arrow">›</span></a>`).join('')}
-      </div>`;
+`;
   }
 
   // Tarjetas para elegir con qué empezar un plan (alta y «Crear plan»).
@@ -824,7 +1017,9 @@ const VPlan = (() => {
       ${(r0.planDuration || r0.planStart) ? `<p class="field-hint" style="margin-top:0">${[r0.planDuration ? `Duración: ${UI.esc(r0.planDuration)}` : '', r0.planStart ? `Empieza: ${UI.esc(UI.fmtDate(r0.planStart))}` : ''].filter(Boolean).join(' · ')}</p>` : ''}
       <div class="block"><ul class="ex-list">${r0.planNotes.map(n => `<li><span class="ex-name">${UI.esc(n)}</span></li>`).join('')}</ul></div>` : '';
     const tplActive = templateOf(app);
-    const planInfo = tplActive ? templateInfoHTML(tplActive) : '';
+    const nG = guideList(app).length;
+    const guidesLink = app.routine ? `<a class="guide-link plan-guides-link" data-link="guides"><span>${UI.icon('book', 16)} Guías de este plan${nG ? ` <span class="dim">(${nG})</span>` : ' <span class="dim">· créalas con la IA</span>'}</span><span class="guide-link-arrow">›</span></a>` : '';
+    const planInfo = (tplActive ? templateInfoHTML(tplActive) : '') + guidesLink;
 
     return `
       <p class="section-intro">Cambia entre tus planes o crea uno nuevo. En <strong>⋯</strong> puedes renombrarlos, duplicarlos, exportarlos o borrarlos.</p>
@@ -1492,5 +1687,5 @@ const VPlan = (() => {
     return `<div class="empty-state"><p>No hay rutina configurada.</p></div>`;
   }
 
-  return { week, weekBind, day, dayBind, normalizeDayTypes, guides, guide, templateOf, guideList, findGuide, planChoicesHTML, bindPlanChoices, templatePreview, info, infoBind, exercises, exercisesBind, checkDuplicates };
+  return { week, weekBind, day, dayBind, normalizeDayTypes, guides, guidesBind, guide, guideBind, templateOf, guideList, findGuide, planChoicesHTML, bindPlanChoices, templatePreview, info, infoBind, exercises, exercisesBind, checkDuplicates };
 })();
