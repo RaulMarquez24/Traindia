@@ -261,14 +261,16 @@ const VData = (() => {
     UI.modal({
       title: 'Compartir',
       bodyHTML: `<div class="share-grid">
+          <button class="share-card share-card-wide" data-act="friend"><span class="share-card-ic" style="background:var(--light)">${UI.icon('users', 26)}</span><span class="share-card-txt"><strong>Con un amigo</strong><span class="dim">Mándale un enlace con tu progreso y os comparáis en Traindía</span></span></button>
           <button class="share-card" data-act="export"><span class="share-card-ic" style="background:var(--strong)">${UI.icon('upload', 26)}</span><strong>Exportar</strong><span class="dim">Tu copia completa o partes sueltas</span></button>
-          <button class="share-card" data-act="import"><span class="share-card-ic" style="background:var(--light)">${UI.icon('swap', 26)}</span><strong>Importar</strong><span class="dim">Trae un archivo o pega el JSON</span></button>
+          <button class="share-card" data-act="import"><span class="share-card-ic" style="background:var(--light)">${UI.icon('swap', 26)}</span><strong>Importar</strong><span class="dim">Un archivo, un JSON o el enlace de un amigo</span></button>
         </div>
-        <p class="field-hint">Todo viaja en archivos JSON que puedes guardar o mandar a un compañero.</p>`,
+        <p class="field-hint">Con un amigo va por enlace (cifrado, de un solo uso). Exportar e importar usan archivos: tu copia completa o partes sueltas.</p>`,
       actions: [{ label: 'Cerrar', kind: 'ghost' }],
       onMount: (root) => {
         root.querySelector('[data-act="export"]').addEventListener('click', () => { UI.closeModal(); openExport(app); });
         root.querySelector('[data-act="import"]').addEventListener('click', () => { UI.closeModal(); startImport(app); });
+        root.querySelector('[data-act="friend"]').addEventListener('click', () => { UI.closeModal(); VShare.start(app); });
       },
     });
   }
