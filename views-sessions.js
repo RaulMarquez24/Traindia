@@ -648,6 +648,17 @@ const VSessions = (() => {
       });
     } catch (e) {}
   }
+  // Preferencias del final del descanso (Ajustes → Durante el entreno). Por defecto, las dos.
+  const prefOn = (k) => { try { return localStorage.getItem(k) !== '0'; } catch (e) { return true; } };
+  const setPref = (k, on) => { try { localStorage.setItem(k, on ? '1' : '0'); } catch (e) {} };
+  const restSoundOn = () => prefOn('traindia.restSound');
+  const restVibrateOn = () => prefOn('traindia.restVibrate');
+  const setRestSound = (on) => setPref('traindia.restSound', on);
+  const setRestVibrate = (on) => setPref('traindia.restVibrate', on);
+  function setRestDefault(app, sec) {
+    app._restDuration = sec;
+    try { localStorage.setItem('traindia.restDuration', String(sec)); } catch (e) {}
+  }
   function getRestDuration(app) {
     if (!app._restDuration) {
       let v = 90;
@@ -887,8 +898,8 @@ const VSessions = (() => {
       app._restPush = null; // el del servidor ya se está enviando: no cancelarlo
       const fuera = document.visibilityState !== 'visible';
       if (fuera && restNotifyOn()) showRestNotification();
-      try { if (navigator.vibrate) navigator.vibrate([220, 110, 220]); } catch (e) {}
-      beep();
+      if (restVibrateOn()) { try { if (navigator.vibrate) navigator.vibrate([220, 110, 220]); } catch (e) {} }
+      if (restSoundOn()) beep();
       UI.toast('⏱ Descanso terminado');
     }
     app._restEndTs = null;
@@ -2056,5 +2067,6 @@ const VSessions = (() => {
   }
 
   return { live, liveBind, list, listBind, detail, detailBind, checkDayAfter, sessionVolume, reportModel, checkResume, liveHasData, restEnsure, TIME_FIELDS, CHECK_FIELDS,
-    notifStatus, setRestNotify, restNotifyOn, testPush, REST_NOTIFY_TEXT };
+    notifStatus, setRestNotify, restNotifyOn, testPush, REST_NOTIFY_TEXT,
+    getRestDuration, setRestDefault, restSoundOn, restVibrateOn, setRestSound, setRestVibrate, fmtClock };
 })();

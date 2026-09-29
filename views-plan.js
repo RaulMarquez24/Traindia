@@ -994,7 +994,7 @@ const VPlan = (() => {
     const activeId = app.routine && app.routine.id;
 
     const planCards = routines.map(r => {
-      const train = (r.days || []).filter(d => !d.isRest);
+      const train = (r.days || []).filter(d => !d.isRest && (d.blocks || []).some(bl => (bl.exercises || []).length)); // días con algo que entrenar
       const optDays = train.filter(d => (d.blocks || []).length && d.blocks.every(b => b.optional)).length; // días enteros opcionales
       const tDays = train.length - optDays;
       const isActive = r.id === activeId;
@@ -1002,7 +1002,7 @@ const VPlan = (() => {
       return `<div class="plan-card${isActive ? ' active' : ''}">
         <div class="plan-card-main">
           <strong>${UI.esc(r.name)} ${typeBadge}${isActive ? ' <span class="badge">Activo</span>' : ''}</strong>
-          <span class="dim">${tDays} días de entreno${optDays ? ` + ${optDays} opcional` : ''}</span>
+          <span class="dim">${!train.length ? 'Aún sin ejercicios' : `${tDays} día${tDays === 1 ? '' : 's'} de entreno${optDays ? ` + ${optDays} opcional` : ''}`}</span>
         </div>
         <span class="plan-card-actions">
           ${isActive ? '' : `<button class="btn ghost small" data-activate="${r.id}">Activar</button>`}
@@ -1012,10 +1012,11 @@ const VPlan = (() => {
     }).join('');
 
     const r0 = app.routine;
-    const notesHTML = (r0 && Array.isArray(r0.planNotes) && r0.planNotes.length) ? `
-      <div class="catalog-title" style="margin-top:8px">Notas del plan</div>
+    const hasNotes = !!(r0 && Array.isArray(r0.planNotes) && r0.planNotes.length);
+    const notesHTML = !r0 ? '' : !hasNotes ? `<button class="guide-link plan-notes-add" id="editNotes"><span>${UI.icon('edit', 16)} Añadir notas a este plan <span class="dim">· objetivos, avisos del entrenador…</span></span><span class="guide-link-arrow">›</span></button>` : `
+      <div class="catalog-title plan-notes-title" style="margin-top:8px">Notas del plan <button class="link-btn" id="editNotes">Editar</button></div>
       ${(r0.planDuration || r0.planStart) ? `<p class="field-hint" style="margin-top:0">${[r0.planDuration ? `Duración: ${UI.esc(r0.planDuration)}` : '', r0.planStart ? `Empieza: ${UI.esc(UI.fmtDate(r0.planStart))}` : ''].filter(Boolean).join(' · ')}</p>` : ''}
-      <div class="block"><ul class="ex-list">${r0.planNotes.map(n => `<li><span class="ex-name">${UI.esc(n)}</span></li>`).join('')}</ul></div>` : '';
+      <div class="block"><ul class="ex-list">${r0.planNotes.map(n => `<li><span class="ex-name">${UI.esc(n)}</span></li>`).join('')}</ul></div>`;
     const tplActive = templateOf(app);
     const nG = guideList(app).length;
     const guidesLink = app.routine ? `<a class="guide-link plan-guides-link" data-link="guides"><span>${UI.icon('book', 16)} Guías de este plan${nG ? ` <span class="dim">(${nG})</span>` : ' <span class="dim">· créalas con la IA</span>'}</span><span class="guide-link-arrow">›</span></a>` : '';
@@ -1040,6 +1041,24 @@ const VPlan = (() => {
     root.querySelectorAll('[data-plan-menu]').forEach(b => b.addEventListener('click', () => planMenu(app, b.dataset.planMenu)));
     const newPlan = root.querySelector('#newPlan');
     if (newPlan) newPlan.addEventListener('click', () => createPlanModal(app));
+    const en = root.querySelector('#editNotes');
+    if (en) en.addEventListener('click', () => {
+      const r = app.routine; if (!r) return;
+      UI.modal({
+        title: 'Notas del plan', size: 'wide',
+        bodyHTML: `<div id="notesForm">${UI.field('Una nota por línea', `<textarea class="inp" name="notes" rows="8" placeholder="Ej: Prioridad: dominadas y carrera&#10;Descansos de 2 min en los básicos">${UI.esc((r.planNotes || []).join('\n'))}</textarea>`)}
+          ${UI.field('Duración (opcional)', UI.input('dur', r.planDuration || '', { placeholder: 'Ej: 8 semanas' }))}</div>`,
+        actions: [
+          { label: 'Cancelar', kind: 'ghost' },
+          { label: 'Guardar', kind: 'primary', onClick: async (m) => {
+            const d = UI.readForm(m.querySelector('#notesForm'));
+            r.planNotes = String(d.notes || '').split('\n').map(x => x.trim()).filter(Boolean);
+            r.planDuration = (d.dur || '').trim() || undefined;
+            await saveRoutine(app); app.render(); UI.toast('Notas guardadas');
+          } },
+        ],
+      });
+    });
     const aiPaste = root.querySelector('#aiPaste');
     if (aiPaste) aiPaste.addEventListener('click', () => VPlanAI.paste(app));
   }

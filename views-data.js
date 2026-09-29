@@ -707,7 +707,7 @@ const VData = (() => {
           await app.loadUsers();
           await app.refreshRoutine();
           app.render();
-          UI.toast(`Importado a ${targetIds.length} perfil(es)`);
+          UI.toast(targetIds.length === 1 ? 'Importado' : `Importado a ${targetIds.length} perfiles`);
         }},
       ],
       onMount: (root) => {
