@@ -771,7 +771,7 @@ const app = {
                 tipo: d.tipo,
                 mensaje: d.mensaje.trim(),
                 contacto: (d.contacto || '').trim() || '(no indicado)',
-                version: 'v2.44.1',
+                version: 'v2.44.2',
                 perfil: (this.mainUser && this.mainUser.name) || '',
                 navegador: navigator.userAgent,
               }),
@@ -826,7 +826,7 @@ const app = {
         <div class="more-group">${g.rows.map(r => `<button class="more-row" ${r.feedback ? 'data-feedback' : `data-link="${r.v}"`}>
           <span class="more-ic" style="background:${g.color}">${UI.icon(r.icon, 20)}</span>
           <span class="more-txt"><strong>${r.label}</strong><span${r.warn ? ' class="warn"' : ''}>${UI.esc(r.sub)}</span></span><span class="chev">›</span></button>`).join('')}</div>`).join('')}
-      <p class="version-foot">Traindía · v2.44.1 · ${Object.keys(this.usersById).length} perfil(es)<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
+      <p class="version-foot">Traindía · v2.44.2 · ${Object.keys(this.usersById).length} perfil(es)<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
     </div>`;
   },
   bindMore(root) {
@@ -948,60 +948,92 @@ const app = {
   },
 
   // ---- Vista COPIAS INTERNAS ----
-  renderBackups() {
+  // Copias y datos, por lo que quieres hacer: 1) estar a salvo (estado de tu copia
+  // completa y hacerla), 2) mover datos (exportar / importar) y 3) las copias
+  // automáticas que la app guarda sola en este móvil.
+  async renderBackups() {
+    const st = await DB.getSettings().catch(() => null);
+    const last = (st && st.lastBackupAt) || 0;
+    const days = last ? Math.floor((Date.now() - last) / 86400000) : -1;
+    const state = days < 0 ? 'never' : days > 7 ? 'old' : 'ok';
+    const when = days < 0 ? 'Nunca has hecho una copia completa' : `Última copia completa ${days === 0 ? 'hoy' : days === 1 ? 'ayer' : `hace ${days} días`}`;
+    const why = { never: 'Tus datos solo viven en este móvil. Si lo pierdes o borras la app, se pierden.',
+      old: 'Hace más de una semana: lo que has apuntado desde entonces no está a salvo.',
+      ok: 'Todo lo apuntado hasta entonces está a salvo fuera del móvil.' }[state];
     const list = DB.listInternalBackups();
-    const fmt = (at) => { try { return new Date(at).toLocaleString('es-ES', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }); } catch (e) { return ''; } };
-    const rows = list.map(b => `
-      <div class="bk-card">
-        <div class="bk-head">
-          <span class="big-row-icon tile" style="background:var(--moderate)">${UI.icon('clock', 18)}</span>
-          <div class="bk-meta"><strong>${UI.esc(b.reason || 'Copia')}</strong><span class="dim">${fmt(b.at)} · ${b.sizeKB} KB</span></div>
-        </div>
-        <div class="bk-actions">
-          <button class="btn ghost small" data-dl="${UI.esc(b.key)}">${UI.icon('upload', 14)} Descargar</button>
-          <button class="btn ghost small" data-restore="${UI.esc(b.key)}">${UI.icon('swap', 14)} Restaurar</button>
-          <button class="btn ghost small danger" data-del="${UI.esc(b.key)}">${UI.icon('trash', 14)} Borrar</button>
-        </div>
-      </div>`).join('');
+    const fmt = (at) => { try { return new Date(at).toLocaleString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }); } catch (e) { return ''; } };
+    const autos = list.length ? list.map(b => `
+        <div class="more-row bk-row">
+          <span class="more-ic" style="background:var(--moderate)">${UI.icon('clock', 18)}</span>
+          <span class="more-txt"><strong class="wrap">${UI.esc(b.reason || 'Copia automática')}</strong><span>${fmt(b.at)} · ${b.sizeKB} KB</span></span>
+          <button class="icon-btn" data-bk-menu="${UI.esc(b.key)}" aria-label="Opciones de la copia">${UI.icon('more', 20)}</button>
+        </div>`).join('')
+      : `<div class="more-row bk-row"><span class="more-txt"><span class="wrap">Aún no hay. Se crean solas antes de cambios grandes (una migración, restaurar…).</span></span></div>`;
     return `<div class="section">
-      <button class="share-hero" data-bk-act="profile">
-        <span class="share-hero-icon">${UI.icon('upload', 26)}</span>
-        <span class="share-hero-txt"><strong>Copia completa</strong><span>TODO tu perfil en un archivo: ejercicios, planes, sesiones, progreso y nutrición. Guárdala fuera del móvil.</span></span>
-      </button>
-      <div class="more-group" style="margin-top:12px">
-        <button class="more-row" data-bk-act="export"><span class="more-ic" style="background:var(--light)">${UI.icon('upload', 17)}</span><span class="more-txt"><strong>Exportar algo concreto</strong><span>Un plan, un día, sesiones, progreso…</span></span><span class="chev">›</span></button>
-        <button class="more-row" data-bk-act="import"><span class="more-ic" style="background:var(--light)">${UI.icon('swap', 17)}</span><span class="more-txt"><strong>Importar</strong><span>Trae un archivo o pega el JSON</span></span><span class="chev">›</span></button>
+      <div class="bk-status ${state}">
+        <div class="bk-status-top">
+          <span class="bk-status-ic">${UI.icon(state === 'ok' ? 'check' : 'warning', 22)}</span>
+          <div class="bk-status-txt"><span class="bk-eyebrow">Tu copia de seguridad</span><strong>${when}</strong></div>
+        </div>
+        <p class="bk-why">${why}</p>
+        <button class="btn primary block" data-bk-act="profile">${UI.icon('download', 17)} ${state === 'never' ? 'Hacer mi primera copia' : 'Hacer copia completa ahora'}</button>
+        <p class="bk-note">Un archivo con todo: ejercicios, planes, sesiones, progreso y nutrición. Guárdalo en Drive, en el correo o en el ordenador.</p>
       </div>
-      <div class="more-sec" style="margin-top:22px">Copias automáticas</div>
-      <p class="section-intro">Copias de seguridad automáticas, guardadas <strong>en este dispositivo</strong> antes de cambios importantes. Se conservan como mucho <strong>2</strong> (al crear una nueva se borra la más antigua).</p>
-      <p class="section-intro" style="color:var(--priority)">⚠️ Viven aquí dentro: si borras los datos de la app, la desinstalas o limpias el navegador, <strong>se pierden igual que el resto</strong>. Para una copia de verdad segura, usa la <strong>Copia completa</strong> de arriba y guarda el archivo fuera del móvil.</p>
-      ${list.length ? rows : '<div class="empty-state"><p class="dim">Aún no hay copias internas.</p></div>'}
+
+      <div class="more-sec">Mover datos</div>
+      <div class="bk-tiles">
+        <button class="bk-tile" data-bk-act="export"><span class="more-ic" style="background:var(--light)">${UI.icon('upload', 20)}</span><strong>Exportar</strong><span>Un plan, un día, sesiones o progreso, para ti o un compañero</span></button>
+        <button class="bk-tile" data-bk-act="import"><span class="more-ic" style="background:var(--light)">${UI.icon('download', 20)}</span><strong>Importar</strong><span>Un archivo o texto de Traindía (también una copia completa)</span></button>
+      </div>
+
+      <div class="more-sec">Copias automáticas · en este móvil</div>
+      <div class="more-group">${autos}</div>
+      <details class="det bk-help"><summary>¿Por qué no bastan las automáticas?</summary>
+        <p class="field-hint">Se guardan <strong>dentro de la app</strong> (como mucho 2; la nueva sustituye a la más antigua). Sirven para deshacer un cambio grande, pero si borras los datos de la app, la desinstalas o pierdes el móvil, <strong>se pierden con todo lo demás</strong>. Para estar a salvo de verdad, haz la <strong>copia completa</strong> y guárdala fuera.</p>
+      </details>
     </div>`;
   },
   bindBackups(root) {
     const act = (k, fn) => { const b = root.querySelector(`[data-bk-act="${k}"]`); if (b) b.addEventListener('click', fn); };
-    act('profile', () => VData.backupProfile(this));
+    act('profile', async () => { await VData.backupProfile(this); this.render(); }); // refresca el estado de la copia
     act('export', () => VData.openExport(this));
     act('import', () => VData.startImport(this));
-    root.querySelectorAll('[data-dl]').forEach(b => b.addEventListener('click', () => {
-      const raw = localStorage.getItem(b.dataset.dl); if (!raw) return;
-      const blob = new Blob([raw], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a'); a.href = url; a.download = 'traindia-copia-interna.json';
-      document.body.appendChild(a); a.click(); a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
-      UI.toast('Copia descargada');
-    }));
-    root.querySelectorAll('[data-restore]').forEach(b => b.addEventListener('click', async () => {
-      const ok = await UI.confirm({ title: 'Restaurar copia', message: 'Se REEMPLAZARÁN todos tus datos actuales (ejercicios, sesiones, plan, progreso y nutrición) por los de esta copia. No se puede deshacer.', confirmLabel: 'Restaurar', danger: true });
-      if (!ok) return;
-      await DB.restoreInternalBackup(b.dataset.restore);
-      UI.toast('Copia restaurada'); location.reload();
-    }));
-    root.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', async () => {
-      const ok = await UI.confirm({ title: 'Borrar copia', message: '¿Eliminar esta copia interna?', confirmLabel: 'Borrar', danger: true });
-      if (!ok) return;
-      DB.deleteInternalBackup(b.dataset.del); this.go('backups', {}, true);
+    const fmt = (at) => { try { return new Date(at).toLocaleString('es-ES', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }); } catch (e) { return ''; } };
+    root.querySelectorAll('[data-bk-menu]').forEach(b => b.addEventListener('click', () => {
+      const key = b.dataset.bkMenu;
+      const bk = DB.listInternalBackups().find(x => x.key === key); if (!bk) return;
+      UI.modal({
+        title: bk.reason || 'Copia automática',
+        bodyHTML: `<p class="field-hint" style="margin-top:0">${fmt(bk.at)} · ${bk.sizeKB} KB</p>
+          <div class="menu-list">
+            <button class="menu-row" data-op="restore"><span>${UI.icon('refresh', 16)} Volver a como estaba entonces</span><span class="chev">›</span></button>
+            <button class="menu-row" data-op="dl"><span>${UI.icon('download', 16)} Descargar esta copia</span><span class="chev">›</span></button>
+            <button class="menu-row danger" data-op="del"><span>${UI.icon('trash', 16)} Borrar esta copia</span><span class="chev">›</span></button>
+          </div>`,
+        actions: [{ label: 'Cerrar', kind: 'ghost' }],
+        onMount: (m) => {
+          m.querySelector('[data-op="dl"]').addEventListener('click', () => {
+            const raw = localStorage.getItem(key); if (!raw) return;
+            const blob = new Blob([raw], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a'); a.href = url; a.download = 'traindia-copia-interna.json';
+            document.body.appendChild(a); a.click(); a.remove();
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
+            UI.closeModal(); UI.toast('Copia descargada');
+          });
+          m.querySelector('[data-op="restore"]').addEventListener('click', async () => {
+            const ok = await UI.confirm({ title: 'Volver a esta copia', message: `Tus datos quedarán como estaban el ${fmt(bk.at)}: se REEMPLAZA todo lo actual (ejercicios, sesiones, planes, progreso y nutrición). No se puede deshacer.`, confirmLabel: 'Restaurar', danger: true });
+            if (!ok) return;
+            await DB.restoreInternalBackup(key);
+            UI.toast('Copia restaurada'); location.reload();
+          });
+          m.querySelector('[data-op="del"]').addEventListener('click', async () => {
+            const ok = await UI.confirm({ title: 'Borrar copia', message: '¿Eliminar esta copia automática?', confirmLabel: 'Borrar', danger: true });
+            if (!ok) return;
+            DB.deleteInternalBackup(key); UI.closeModal(); this.go('backups', {}, true);
+          });
+        },
+      });
     }));
   },
 
@@ -1099,6 +1131,13 @@ const app = {
       chk.checked = st.on;
       const perm = { granted: [true, 'Permitido'], denied: [false, 'Bloqueado'], default: [null, 'Sin pedir'], unsupported: [false, 'No disponible'] }[st.permission] || [null, st.permission];
       const err = st.lastError && st.lastError.msg ? `Último fallo: ${UI.esc(st.lastError.msg)}` : '';
+      const sum = card.querySelector('#notifSummary');
+      if (sum) {
+        const listo = st.on && st.permission === 'granted' && st.server && st.subscribed;
+        sum.textContent = !st.on ? 'Desactivado' : listo ? 'Todo listo' : 'Revisar';
+        sum.className = !st.on ? '' : listo ? 'ok' : 'bad';
+        if (st.on && !listo) { const det = card.querySelector('.set-det'); if (det) det.open = true; } // si algo falla, a la vista
+      }
       box.innerHTML = [
         row(perm[0], 'Permiso del móvil', perm[1], st.permission === 'denied' ? 'Actívalo en Ajustes de Android → Aplicaciones → Traindía (o Chrome) → Notificaciones.' : ''),
         row(st.server, 'Servidor de avisos', st.server ? 'Conectado' : 'No responde', st.server ? '' : 'Sin él, con el móvil bloqueado no llega el aviso.'),
@@ -1120,72 +1159,101 @@ const app = {
     paint();
   },
 
-  renderSettings() {
+  // Ajustes, ordenado: quién eres, cómo se ve, cómo te avisa el entreno, tus datos,
+  // acerca de y, aparte y al final, lo peligroso.
+  async renderSettings() {
     const u = this.mainUser;
     const theme = this.getTheme();
     const themeOpts = [['system', 'Sistema'], ['light', 'Claro'], ['dark', 'Oscuro']];
+    const [ses, st] = await Promise.all([DB.sessionsOf(u.id).catch(() => []), DB.getSettings().catch(() => null)]);
+    const nSes = ses.filter(x => !x.draft).length;
+    const last = (st && st.lastBackupAt) || 0, days = last ? Math.floor((Date.now() - last) / 86400000) : -1;
+    const copia = days < 0 ? 'Aún sin copia completa' : `Última copia ${days === 0 ? 'hoy' : days === 1 ? 'ayer' : `hace ${days} días`}`;
+    const invitados = Object.keys(this.usersById).length - 1;
+    const row = (attrs, icon, color, title, sub, extra = '') => `<button class="more-row" ${attrs}><span class="more-ic" style="background:${color}">${UI.icon(icon, 18)}</span><span class="more-txt"><strong>${title}</strong>${sub ? `<span>${sub}</span>` : ''}</span>${extra || '<span class="chev">›</span>'}</button>`;
     return `<div class="section">
-      <div class="card">
-        <div class="card-label">Perfil principal</div>
-        <div id="mainForm">
-          ${UI.field('Nombre', UI.input('name', u.name))}
-          ${UI.field('Color', UI.colorPicker('color', u.color))}
-        </div>
-        <button class="btn primary" id="saveMain">Guardar perfil</button>
-      </div>
-      <div class="card">
-        <div class="card-label">Tema</div>
+      <button class="set-head" id="editMain">
+        ${UI.avatar(u, 54)}
+        <span class="set-head-txt"><strong>${UI.esc(u.name)}</strong><span>Perfil principal · ${nSes} entreno${nSes === 1 ? '' : 's'}</span></span>
+        <span class="set-head-edit">${UI.icon('edit', 15)} Editar</span>
+      </button>
+
+      <div class="more-sec">Apariencia</div>
+      <div class="more-group"><div class="set-block">
         <div class="seg" id="themeChoices">
           ${themeOpts.map(([v, l]) => `<button type="button" class="seg-opt${theme === v ? ' on' : ''}" data-theme-opt="${v}">${l}</button>`).join('')}
         </div>
-        <p class="field-hint" style="margin-bottom:0">"Sistema" sigue el modo claro/oscuro de tu teléfono.</p>
-      </div>
-      <div class="card" id="notifCard">
-        <div class="card-label">Notificaciones</div>
-        <label class="check-row rest-notif" style="margin-top:0"><input type="checkbox" id="setNotif"${VSessions.restNotifyOn() ? ' checked' : ''}>
-          <span><strong>Aviso de fin de descanso</strong><span class="dim">${UI.esc(VSessions.REST_NOTIFY_TEXT)}</span></span></label>
-        <ul class="notif-status" id="notifStatus"><li class="dim">Comprobando…</li></ul>
-        <button class="btn ghost block" id="notifTest">${UI.icon('clock', 16)} Probar aviso (llega en 10 s)</button>
-        <p class="field-hint" style="margin-bottom:0">Pulsa y <strong>bloquea el móvil</strong>: si a los 10 s te llega la notificación, está todo bien.</p>
-      </div>
-      <div class="card">
-        <div class="card-label">Datos de la app</div>
-        <button class="btn ghost block" id="shareData">Copias y datos (exportar / importar)</button>
-      </div>
-      <div class="card">
-        <div class="card-label">Acerca de Traindía</div>
-        <p class="field-hint" style="margin-top:0">Versión v2.44.1 · © 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
-        <button class="btn ghost block" id="seeLanding">${UI.icon('info', 16)} Ver la presentación</button>
-      </div>
-      <div class="card danger-zone">
-        <div class="card-label">Zona peligrosa</div>
-        <p class="field-hint" style="margin-top:0">Restablece la app al estado inicial: se borran todos los perfiles, sesiones y progreso de este dispositivo. Haz antes una copia.</p>
-        <button class="btn ghost danger small" id="resetApp">Borrar todos los datos</button>
+        <p class="field-hint" style="margin-bottom:0">«Sistema» sigue el modo claro u oscuro de tu móvil.</p>
+      </div></div>
+
+      <div class="more-sec">Durante el entreno</div>
+      <div class="more-group" id="notifCard">
+        <label class="more-row set-switch">
+          <span class="more-ic" style="background:var(--strong)">${UI.icon('clock', 18)}</span>
+          <span class="more-txt"><strong>Aviso de fin de descanso</strong><span class="wrap">${UI.esc(VSessions.REST_NOTIFY_TEXT)}</span></span>
+          <input type="checkbox" class="sw" id="setNotif"${VSessions.restNotifyOn() ? ' checked' : ''}>
+        </label>
+        <details class="set-det">
+          <summary><span>Estado de los avisos</span><strong id="notifSummary">Comprobando…</strong></summary>
+          <ul class="notif-status" id="notifStatus"><li class="dim">Comprobando…</li></ul>
+          <button class="btn ghost block" id="notifTest">${UI.icon('clock', 16)} Probar aviso (llega en 10 s)</button>
+          <p class="field-hint" style="margin-bottom:0">Pulsa y <strong>bloquea el móvil</strong>: si a los 10 s te llega la notificación, está todo bien.</p>
+        </details>
       </div>
 
+      <div class="more-sec">Tus datos</div>
+      <div class="more-group">
+        ${row('data-link="backups"', 'swap', 'var(--light)', 'Copias y datos', UI.esc(copia))}
+        ${row('data-link="profiles"', 'users', 'var(--light)', 'Perfiles', invitados > 0 ? `${invitados} invitado${invitados === 1 ? '' : 's'}` : 'Añade a quien entrene contigo')}
+      </div>
+
+      <div class="more-sec">Acerca de Traindía</div>
+      <div class="more-group">
+        ${row('id="seeLanding"', 'info', 'var(--rest)', 'Ver la presentación', 'Qué es Traindía y cómo funciona')}
+        ${row('id="seeRepo"', 'code', 'var(--rest)', 'Código en GitHub', 'Novedades de cada versión', `<span class="chev">↗</span>`)}
+        <div class="more-row set-ver"><span class="more-txt"><span>Versión</span></span><strong>v2.44.2</strong></div>
+      </div>
+
+      <div class="more-sec danger">Zona peligrosa</div>
+      <div class="more-group danger">
+        ${row('id="resetApp"', 'trash', 'var(--priority)', 'Borrar todos los datos', 'Perfiles, sesiones y progreso de este móvil. Haz antes una copia.')}
+      </div>
+      <p class="version-foot">© 2026 Raúl Márquez</p>
     </div>`;
   },
 
+  // Nombre y color del perfil principal (antes era un formulario fijo en la pantalla).
+  editMainProfile() {
+    const u = this.mainUser;
+    UI.modal({
+      title: 'Tu perfil',
+      bodyHTML: `<div id="mainForm">${UI.field('Nombre', UI.input('name', u.name))}${UI.field('Color', UI.colorPicker('color', u.color))}</div>`,
+      actions: [
+        { label: 'Cancelar', kind: 'ghost' },
+        { label: 'Guardar', kind: 'primary', onClick: async (m) => {
+          const data = UI.readForm(m.querySelector('#mainForm'));
+          if (!data.name || !data.name.trim()) { UI.toast('Escribe un nombre', 'err'); return false; }
+          await DB.put('users', { ...this.mainUser, name: data.name.trim(), color: data.color });
+          await this.loadUsers();
+          UI.toast('Perfil actualizado');
+          this.render();
+        } },
+      ],
+      onMount: (m) => UI.bindColorPicker(m),
+    });
+  },
+
   bindSettings(root) {
-    UI.bindColorPicker(root);
     this.bindNotifSettings(root);
-    const shareBtn = root.querySelector('#shareData');
-    if (shareBtn) shareBtn.addEventListener('click', () => this.go('backups'));
-    const seeLanding = root.querySelector('#seeLanding');
-    if (seeLanding) seeLanding.addEventListener('click', () => this.previewLanding());
+    const on = (sel, fn) => { const b = root.querySelector(sel); if (b) b.addEventListener('click', fn); };
+    on('#editMain', () => this.editMainProfile());
+    on('#seeLanding', () => this.previewLanding());
+    on('#seeRepo', () => window.open(this.REPO_URL + '/releases', '_blank', 'noopener'));
     root.querySelectorAll('[data-theme-opt]').forEach(b => b.addEventListener('click', () => {
       this.setTheme(b.dataset.themeOpt);
       root.querySelectorAll('[data-theme-opt]').forEach(x => x.classList.toggle('on', x === b));
     }));
-    root.querySelector('#saveMain').addEventListener('click', async () => {
-      const data = UI.readForm(root.querySelector('#mainForm'));
-      if (!data.name || !data.name.trim()) { UI.toast('Escribe un nombre', 'err'); return; }
-      await DB.put('users', { ...this.mainUser, name: data.name.trim(), color: data.color });
-      await this.loadUsers();
-      UI.toast('Perfil actualizado');
-      this.render();
-    });
-    root.querySelector('#resetApp').addEventListener('click', async () => {
+    on('#resetApp', async () => {
       const ok = await UI.confirm({
         title: 'Borrar todos los datos',
         message: 'CUIDADO: esto elimina PERMANENTEMENTE todos los perfiles, sesiones, progreso, nutrición y rutinas. La app volverá a la pantalla inicial. No se puede deshacer.',
