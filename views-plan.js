@@ -961,7 +961,9 @@ const VPlan = (() => {
     const usage = buildUsage(app.routine);
     const byId = {};
     list.forEach(e => { byId[e.id] = e; });
-    // Los suplentes de un ejercicio en uso también se consideran en uso.
+    // Los suplentes de un ejercicio en uso también se consideran en uso
+    // (y se apunta de cuál son suplentes, para decirlo en la fila).
+    const subOf = {};
     list.forEach(e => {
       const direct = usage.get(e.id.toLowerCase()) || usage.get(e.name.toLowerCase());
       if (direct && e.substitutes) e.substitutes.forEach(sid => {
@@ -969,6 +971,7 @@ const VPlan = (() => {
         const k = sid.toLowerCase();
         if (!usage.has(k)) usage.set(k, new Set());
         usage.get(k).add('suplente');
+        (subOf[sid] || (subOf[sid] = [])).push(e.name);
       });
     });
     const daysUsing = (e) => {
@@ -999,7 +1002,7 @@ const VPlan = (() => {
       const days = daysUsing(e);
       const recs = recsOf(e);
       return {
-        e, days, used: days.length > 0, recs: recs.n, lastRec: recs.last,
+        e, days, used: days.length > 0, recs: recs.n, lastRec: recs.last, subOf: [...new Set(subOf[e.id] || [])],
         group: e.muscleGroup || 'General',
         type: e.type || 'weight',
         vids: DB.exVideos(e).length,
@@ -1081,9 +1084,11 @@ const VPlan = (() => {
       const e = it.e;
       const realDays = it.days.filter(d => d !== 'suplente');
       const asSub = realDays.length !== it.days.length;
+      // «Suplente de Plancha frontal» (o «de A, B y 2 más» si lo es de varios)
+      const de = it.subOf.length > 2 ? `${it.subOf.slice(0, 2).join(', ')} y ${it.subOf.length - 2} más` : it.subOf.join(' y ');
       const where = !it.used ? 'Sin usar'
-        : realDays.length ? 'En ' + realDays.join(', ') + (asSub ? ' · como suplente' : '')
-        : 'Como suplente';
+        : realDays.length ? 'En ' + realDays.join(', ') + (asSub ? ` · suplente de ${de}` : '')
+        : `Suplente de ${de}`;
       const extras = [
         it.vids ? `<span class="cat-ic" title="Vídeos">${UI.icon('play', 9)}${it.vids}</span>` : '',
         it.subs ? `<span class="cat-ic sub" title="Suplentes">${UI.icon('repeat', 10)}${it.subs}</span>` : '',
