@@ -680,14 +680,17 @@ const DB = (() => {
     { from: 'Landmine', to: 'Landmine press' },
     { from: 'Goblet', to: 'Sentadilla goblet' },
     { from: 'Suspensión supina barra parque', to: 'Suspensión supina' },
-    { from: 'Mancuerna', to: 'Curl de muñeca con mancuerna' },
+    { from: 'Mancuerna', to: 'Curl de muñeca con mancuerna' },
+    // v2: carrera del plan antiguo
+    { from: "Sem. impar — 5-6×400m R 1:30-2'", to: '5-6×400m' },
+    { from: 'Sem. par — 1km test o 2×800m', to: '1km o 2×800m' },
   ];
   // Restos de leer mal el plan antiguo: se borran solo si no se usan en ningún sitio.
   const CATALOG_JUNK = ['Quitarla'];
 
   async function runCatalogNames() {
     const s = await getSettings();
-    if (!s || s.catalogNamesV1) return false;
+    if (!s || s.catalogNamesV2) return false;
     const users = await getAll('users');
     const key = (n) => String(n || '').trim().toLowerCase();
     const defs = (typeof TEMPLATES !== 'undefined' && TEMPLATES.EXERCISES) || {};
@@ -768,7 +771,7 @@ const DB = (() => {
       for (const rt of dirtyR) await put('routines', rt);
       for (const ss of dirtyS) await put('sessions', ss);
     }
-    await saveSettings({ catalogNamesV1: true });
+    await saveSettings({ catalogNamesV1: true, catalogNamesV2: true });
     return pending;
   }
 
