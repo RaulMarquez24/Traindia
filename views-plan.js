@@ -1028,10 +1028,30 @@ const VPlan = (() => {
       return [...s];
     };
 
+    // Registros: en cuántos entrenos guardados sale cada ejercicio (y el último).
+    const recById = {}, recByName = {};
+    (await DB.sessionsOf(app.activeUser.id)).filter(ss => !ss.draft).forEach(ss => {
+      const seen = new Set();
+      (ss.entries || []).forEach(en => {
+        if (!(en.sets || []).length) return;
+        const k = en.exerciseId ? 'id:' + en.exerciseId : 'n:' + (en.name || '').trim().toLowerCase();
+        if (seen.has(k)) return; seen.add(k);
+        const tgt = en.exerciseId ? recById : recByName;
+        const kk = en.exerciseId || (en.name || '').trim().toLowerCase();
+        const r = tgt[kk] || (tgt[kk] = { n: 0, last: '' });
+        r.n++; if ((ss.date || '') > r.last) r.last = ss.date || '';
+      });
+    });
+    const recsOf = (e) => {
+      const a = recById[e.id] || { n: 0, last: '' }, b = recByName[e.name.trim().toLowerCase()] || { n: 0, last: '' };
+      return { n: a.n + b.n, last: a.last > b.last ? a.last : b.last };
+    };
+
     const items = list.map(e => {
       const days = daysUsing(e);
+      const recs = recsOf(e);
       return {
-        e, days, used: days.length > 0,
+        e, days, used: days.length > 0, recs: recs.n, lastRec: recs.last,
         group: e.muscleGroup || 'General',
         type: e.type || 'weight',
         vids: DB.exVideos(e).length,
@@ -1120,11 +1140,12 @@ const VPlan = (() => {
         it.vids ? `<span class="cat-ic" title="Vídeos">${UI.icon('play', 9)}${it.vids}</span>` : '',
         it.subs ? `<span class="cat-ic sub" title="Suplentes">${UI.icon('repeat', 10)}${it.subs}</span>` : '',
       ].join('');
+      const recs = it.recs ? `<span class="cat-recs" title="Entrenos en los que lo has apuntado">${UI.icon('activity', 10)}${it.recs} registro${it.recs === 1 ? '' : 's'}</span>` : '<span class="cat-recs none">Sin registros</span>';
       const deletable = !it.used && !e.isDefault;
       return `<li class="cat-row${it.used ? '' : ' unused'}" data-edit="${e.id}" tabindex="0" role="button">
         <span class="ex-name-wrap">
           <span class="ex-name">${UI.esc(e.name)}${e.isDefault ? ' <span class="badge def">def</span>' : ''}</span>
-          <span class="ex-sub"><span class="ex-type">${TYPE_NAME[it.type] || it.type}</span> · ${UI.esc(where)}${extras}</span>
+          <span class="ex-sub"><span class="ex-type">${TYPE_NAME[it.type] || it.type}</span> · ${UI.esc(where)}${extras}${recs}</span>
         </span>
         <span class="ex-actions">
           ${deletable ? `<button class="icon-btn danger" data-del="${e.id}" aria-label="Eliminar">${UI.icon('trash', 17)}</button>` : ''}
@@ -1217,10 +1238,21 @@ const VPlan = (() => {
       const del = t.closest('[data-del]');
       if (del) {
         const ex = await DB.get('exercises', del.dataset.del);
-        const msg = ex.isDefault
-          ? 'No se usa en ningún día. Es un ejercicio predefinido: se quitará del catálogo pero podrás recuperarlo con “Restaurar predefinidos”. No afecta a las sesiones ya registradas.'
-          : 'No se usa en ningún día. Se eliminará del catálogo. No afecta a las sesiones ya registradas.';
-        const ok = await UI.confirm({ title: `Eliminar ${ex.name}`, message: msg, confirmLabel: 'Eliminar', danger: true });
+        const it = items.find(x => x.e.id === ex.id) || { recs: 0 };
+        let ok;
+        if (it.recs) {
+          // Con registros no se borra con un simple «sí»: hay que escribir BORRAR.
+          ok = await UI.confirm({
+            title: `¿Borrar ${ex.name}?`,
+            message: `Lo has apuntado en ${it.recs} entreno${it.recs === 1 ? '' : 's'}${it.lastRec ? ` (el último, el ${UI.fmtDate(it.lastRec)})` : ''}. Esas sesiones se conservan, pero dejarás de ver su progreso en Progreso → Por ejercicio. Si solo quieres dejar de usarlo, basta con quitarlo de tus días.`,
+            confirmLabel: 'Borrar igualmente', danger: true, requireText: 'BORRAR',
+          });
+        } else {
+          const msg = ex.isDefault
+            ? 'No se usa en ningún día y no tiene registros. Es un ejercicio predefinido: se quitará del catálogo pero podrás recuperarlo con “Restaurar predefinidos”.'
+            : 'No se usa en ningún día y no tiene registros. Se eliminará del catálogo.';
+          ok = await UI.confirm({ title: `Eliminar ${ex.name}`, message: msg, confirmLabel: 'Eliminar', danger: true });
+        }
         if (!ok) return;
         await DB.del('exercises', ex.id);
         await refresh();
