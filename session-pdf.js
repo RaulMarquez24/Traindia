@@ -7,6 +7,7 @@
 // cambian por equivalentes antes de escribir.
 const VSessionPDF = (() => {
   const JSPDF_URL = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/4.2.1/jspdf.umd.min.js';
+  const APP_URL = 'https://traindia.raulmarquez.dev/';
   let _loading = null;
   function loadJsPDF() {
     if (window.jspdf && window.jspdf.jsPDF) return Promise.resolve(window.jspdf.jsPDF);
@@ -182,7 +183,13 @@ const VSessionPDF = (() => {
       doc.setPage(p);
       doc.setDrawColor(...C.line); doc.setLineWidth(0.3); doc.line(M, H - 12, W - M, H - 12);
       font('normal', 8, C.dim);
-      doc.text('Hecho con Traindía · traindia.raulmarquez.dev', M, H - 7.5);
+      const pre = 'Hecho con Traindía · ';
+      doc.text(pre, M, H - 7.5);
+      const lx = M + doc.getTextWidth(pre) + 0.8; // medido con la fuente del texto de antes (+ aire tras el ·)
+      // Enlace de verdad (se puede tocar en el visor del móvil), no solo texto
+      font('bold', 8, C.accent);
+      doc.textWithLink('traindia.raulmarquez.dev', lx, H - 7.5, { url: APP_URL });
+      font('normal', 8, C.dim);
       doc.text(`${p} / ${total}`, W - M, H - 7.5, { align: 'right' });
     }
     doc.setProperties({ title: clean(`${m.name} · ${m.dateTxt}`), subject: 'Resultados del entreno', creator: 'Traindía' });
