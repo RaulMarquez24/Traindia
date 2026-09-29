@@ -1179,6 +1179,9 @@ html.js-seq .seq-ui img { max-height: calc(var(--alto) - 230px); width: auto; ma
 .share-card-ic { width: 50px; height: 50px; border-radius: 13px; display: flex; align-items: center; justify-content: center; color: #fff; }
 .share-card strong { font-size: 17px; font-weight: 700; }
 .share-card .dim { font-size: 12px; line-height: 1.35; }
+.share-card-wide { grid-column: 1 / -1; flex-direction: row; align-items: center; gap: 14px; }
+.share-card-wide .share-card-ic { flex: none; }
+.share-card-txt { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 
 /* Héroe de "Compartir": la copia completa, con más peso que el resto */
 .share-hero { display: flex; align-items: center; gap: 14px; width: 100%; text-align: left; cursor: pointer;
