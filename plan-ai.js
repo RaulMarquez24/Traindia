@@ -414,5 +414,5 @@ ${extra.join('\n')}
 Devuelve únicamente el JSON, en un bloque de código, y como archivo descargable si puedes.`;
   }
 
-  return { open, paste, preview, normalizar, buildPrompt, pidioPrompt, KIND };
+  return { open, paste, preview, normalizar, buildPrompt, pidioPrompt, olvidarPrompt: () => marcarPrompt(false), KIND };
 })();

@@ -932,14 +932,12 @@ const VPlan = (() => {
   }
 
   // ---------- PLANES (gestor de planes) ----------
-  const PLAN_TYPE_LABEL = { custom: 'Personalizado', template: 'Plantilla' };
 
   // Ficha de una plantilla: datos, puntos fuertes y guías.
   function templateInfoHTML(t) {
     const rows = [['Objetivo', t.goal], ['Frecuencia', t.frequency], ['Sesión', t.sessionTime], ['Nivel', t.level], ['Material', t.equipment]];
     return `
-      <div class="catalog-title" style="margin-top:8px">Sobre este plan</div>
-      <p class="field-hint" style="margin-top:0">${UI.esc(t.tagline)}</p>
+      <p class="field-hint" style="margin-top:6px">${UI.esc(t.tagline)}</p>
       <div class="block"><ul class="ex-list">${rows.map(([k, v]) => `<li><span class="ex-name">${k}</span><span class="ex-sets">${UI.esc(v)}</span></li>`).join('')}</ul></div>
       <div class="block"><div class="block-label">Qué incluye</div><ul class="ex-list">${(t.highlights || []).map(h => `<li><span class="ex-name">${UI.esc(h)}</span></li>`).join('')}</ul></div>
 `;
@@ -989,46 +987,71 @@ const VPlan = (() => {
     });
   }
 
+  // Planes, por lo que quieres hacer: 1) tu plan activo (su semana de un vistazo,
+  // notas y guías), 2) cambiar a otro de tus planes y 3) crear uno nuevo.
+  function planStats(r) {
+    const train = (r.days || []).filter(d => !d.isRest && (d.blocks || []).some(bl => (bl.exercises || []).length)); // días con algo que entrenar
+    const optDays = train.filter(d => (d.blocks || []).length && d.blocks.every(b => b.optional)).length;
+    const tDays = train.length - optDays;
+    return { train, text: !train.length ? 'Aún sin ejercicios' : `${tDays} día${tDays === 1 ? '' : 's'} de entreno${optDays ? ` + ${optDays} opcional` : ''}` };
+  }
+  function weekStrip(r) {
+    const L = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
+    const days = (r.days || []).slice().sort((a, b) => (a.order || 0) - (b.order || 0));
+    return `<div class="pl-week" aria-hidden="true">${days.map((d, i) => {
+      const has = (d.blocks || []).some(bl => (bl.exercises || []).length);
+      const t = d.isRest || d.type === 'rest' ? 'rest' : !has ? 'empty' : (d.type || 'none');
+      const letter = days.length === 7 ? L[i] : (d.name || '?').charAt(0).toUpperCase();
+      return `<span class="pl-day t-${UI.esc(t)}" title="${UI.esc(d.name)}"><b>${letter}</b><i></i></span>`;
+    }).join('')}</div>`;
+  }
   async function info(app) {
     const routines = (await DB.routinesOf(app.activeUser.id)).sort((a, b) => (a.order || 0) - (b.order || 0));
-    const activeId = app.routine && app.routine.id;
-
-    const planCards = routines.map(r => {
-      const train = (r.days || []).filter(d => !d.isRest && (d.blocks || []).some(bl => (bl.exercises || []).length)); // días con algo que entrenar
-      const optDays = train.filter(d => (d.blocks || []).length && d.blocks.every(b => b.optional)).length; // días enteros opcionales
-      const tDays = train.length - optDays;
-      const isActive = r.id === activeId;
-      const typeBadge = `<span class="badge${(r.planType === 'custom') ? ' guest' : ''}">${PLAN_TYPE_LABEL[r.planType] || 'Personalizado'}</span>`;
-      return `<div class="plan-card${isActive ? ' active' : ''}">
-        <div class="plan-card-main">
-          <strong>${UI.esc(r.name)} ${typeBadge}${isActive ? ' <span class="badge">Activo</span>' : ''}</strong>
-          <span class="dim">${!train.length ? 'Aún sin ejercicios' : `${tDays} día${tDays === 1 ? '' : 's'} de entreno${optDays ? ` + ${optDays} opcional` : ''}`}</span>
-        </div>
-        <span class="plan-card-actions">
-          ${isActive ? '' : `<button class="btn ghost small" data-activate="${r.id}">Activar</button>`}
-          <button class="icon-btn" data-plan-menu="${r.id}" aria-label="Opciones de ${UI.esc(r.name)}">${UI.icon('more', 20)}</button>
-        </span>
-      </div>`;
-    }).join('');
-
     const r0 = app.routine;
-    const hasNotes = !!(r0 && Array.isArray(r0.planNotes) && r0.planNotes.length);
-    const notesHTML = !r0 ? '' : !hasNotes ? `<button class="guide-link plan-notes-add" id="editNotes"><span>${UI.icon('edit', 16)} Añadir notas a este plan <span class="dim">· objetivos, avisos del entrenador…</span></span><span class="guide-link-arrow">›</span></button>` : `
-      <div class="catalog-title plan-notes-title" style="margin-top:8px">Notas del plan <button class="link-btn" id="editNotes">Editar</button></div>
-      ${(r0.planDuration || r0.planStart) ? `<p class="field-hint" style="margin-top:0">${[r0.planDuration ? `Duración: ${UI.esc(r0.planDuration)}` : '', r0.planStart ? `Empieza: ${UI.esc(UI.fmtDate(r0.planStart))}` : ''].filter(Boolean).join(' · ')}</p>` : ''}
-      <div class="block"><ul class="ex-list">${r0.planNotes.map(n => `<li><span class="ex-name">${UI.esc(n)}</span></li>`).join('')}</ul></div>`;
-    const tplActive = templateOf(app);
+    const others = routines.filter(r => !r0 || r.id !== r0.id);
+    const tpl = templateOf(app);
     const nG = guideList(app).length;
-    const guidesLink = app.routine ? `<a class="guide-link plan-guides-link" data-link="guides"><span>${UI.icon('book', 16)} Guías de este plan${nG ? ` <span class="dim">(${nG})</span>` : ' <span class="dim">· créalas con la IA</span>'}</span><span class="guide-link-arrow">›</span></a>` : '';
-    const planInfo = (tplActive ? templateInfoHTML(tplActive) : '') + guidesLink;
+    const notes = (r0 && Array.isArray(r0.planNotes)) ? r0.planNotes : [];
 
-    return `
-      <p class="section-intro">Cambia entre tus planes o crea uno nuevo. En <strong>⋯</strong> puedes renombrarlos, duplicarlos, exportarlos o borrarlos.</p>
-      ${planCards}
-      <button class="btn ghost block" id="newPlan">${UI.icon('plus', 16)} Crear plan</button>
-      ${VPlanAI.pidioPrompt() ? `<button class="btn primary block" id="aiPaste">${UI.icon('upload', 16)} Pegar el resultado de la IA</button>` : ''}
-      ${notesHTML}
-      ${planInfo}`;
+    const aiBanner = VPlanAI.pidioPrompt() ? `<div class="pl-ai-banner">
+        <span>${UI.icon('chat', 18)}</span>
+        <div><strong>¿Ya tienes la respuesta de la IA?</strong><span>Pégala y Traindía monta el plan de tu entrenador.</span></div>
+        <button class="btn primary small" id="aiPaste">Pegar</button>
+        <button class="icon-btn" id="aiDismiss" aria-label="Ahora no">${UI.icon('x', 16)}</button>
+      </div>` : '';
+
+    const hero = r0 ? `<div class="pl-hero">
+        <div class="pl-hero-top">
+          <div class="pl-hero-txt"><span class="bk-eyebrow">Tu plan activo</span><strong>${UI.esc(r0.name)}</strong>
+            <span>${planStats(r0).text}${tpl && tpl.name !== r0.name ? ` · plantilla ${UI.esc(tpl.name)}` : ''}</span></div>
+          <button class="icon-btn" data-plan-menu="${r0.id}" aria-label="Opciones del plan">${UI.icon('more', 20)}</button>
+        </div>
+        ${weekStrip(r0)}
+        <button class="btn ghost block" data-link="week">${UI.icon('calendar', 16)} Ver la semana</button>
+        <div class="more-group pl-hero-rows">
+          <button class="more-row" id="editNotes"><span class="more-ic" style="background:var(--moderate)">${UI.icon('edit', 17)}</span><span class="more-txt"><strong>Notas del plan</strong><span>${notes.length ? `${notes.length} nota${notes.length === 1 ? '' : 's'}${r0.planDuration ? ` · ${UI.esc(r0.planDuration)}` : ''}` : 'Objetivos, avisos del entrenador…'}</span></span><span class="chev">›</span></button>
+          <button class="more-row" data-link="guides"><span class="more-ic" style="background:var(--moderate)">${UI.icon('book', 17)}</span><span class="more-txt"><strong>Guías</strong><span>${nG ? `${nG} guía${nG === 1 ? '' : 's'} de este plan` : 'Créalas con la IA a partir del plan'}</span></span><span class="chev">›</span></button>
+        </div>
+        ${notes.length ? `<ul class="pl-notes">${notes.slice(0, 4).map(n => `<li>${UI.esc(n)}</li>`).join('')}${notes.length > 4 ? `<li class="dim">y ${notes.length - 4} más…</li>` : ''}</ul>` : ''}
+        ${tpl ? `<details class="det pl-tpl"><summary>Sobre esta plantilla</summary>${templateInfoHTML(tpl)}</details>` : ''}
+      </div>` : `<div class="guides-empty"><strong>Aún no tienes ningún plan</strong><p>Empieza con una plantilla, con el plan de tu entrenador o en blanco.</p></div>`;
+
+    const othersHTML = others.length ? `<div class="more-sec">Otros planes</div>
+      <div class="more-group">${others.map(r => `<div class="more-row pl-other">
+          <span class="more-txt"><strong>${UI.esc(r.name)}</strong><span>${planStats(r).text}</span></span>
+          <button class="btn ghost small" data-activate="${r.id}">Activar</button>
+          <button class="icon-btn" data-plan-menu="${r.id}" aria-label="Opciones de ${UI.esc(r.name)}">${UI.icon('more', 20)}</button>
+        </div>`).join('')}</div>` : '';
+
+    const tpls = typeof TEMPLATES !== 'undefined' ? TEMPLATES.list : [];
+    const create = `<div class="more-sec">Crear un plan</div>
+      <div class="pl-create">
+        ${tpls.length ? `<button class="bk-tile" data-new="tpl"><span class="more-ic" style="background:var(--strong)">${UI.icon('star', 19)}</span><strong>Plantilla</strong><span>Planes completos listos para empezar</span></button>` : ''}
+        <button class="bk-tile" data-new="ai"><span class="more-ic" style="background:var(--strong)">${UI.icon('chat', 19)}</span><strong>De tu entrenador</strong><span>Desde su PDF o fotos, con una IA</span></button>
+        <button class="bk-tile" data-new="custom"><span class="more-ic" style="background:var(--strong)">${UI.icon('plus', 19)}</span><strong>En blanco</strong><span>7 días que montas a tu medida</span></button>
+      </div>`;
+
+    return `<div class="section">${aiBanner}${hero}${othersHTML}${create}</div>`;
   }
 
   function infoBind(app, root) {
@@ -1039,8 +1062,13 @@ const VPlan = (() => {
       UI.toast('Plan activado');
     }));
     root.querySelectorAll('[data-plan-menu]').forEach(b => b.addEventListener('click', () => planMenu(app, b.dataset.planMenu)));
-    const newPlan = root.querySelector('#newPlan');
-    if (newPlan) newPlan.addEventListener('click', () => createPlanModal(app));
+    root.querySelectorAll('[data-new]').forEach(b => b.addEventListener('click', () => {
+      const k = b.dataset.new;
+      if (k === 'ai') VPlanAI.open(app);
+      else createPlanModal(app, k === 'custom' ? 'custom' : null);
+    }));
+    const aiDismiss = root.querySelector('#aiDismiss');
+    if (aiDismiss) aiDismiss.addEventListener('click', () => { VPlanAI.olvidarPrompt(); app.render(); });
     const en = root.querySelector('#editNotes');
     if (en) en.addEventListener('click', () => {
       const r = app.routine; if (!r) return;
@@ -1116,8 +1144,8 @@ const VPlan = (() => {
     });
   }
 
-  function createPlanModal(app) {
-    let type = typeof TEMPLATES !== 'undefined' && TEMPLATES.list.length ? `tpl:${TEMPLATES.list[0].id}` : 'custom';
+  function createPlanModal(app, preset) {
+    let type = preset || (typeof TEMPLATES !== 'undefined' && TEMPLATES.list.length ? `tpl:${TEMPLATES.list[0].id}` : 'custom');
     UI.modal({
       title: 'Crear plan', size: 'wide',
       bodyHTML: `<div id="newPlanForm">
