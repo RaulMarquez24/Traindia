@@ -231,8 +231,8 @@ const app = {
       week:     { render: (a, p) => VPlan.week(a, p),     bind: (a, r, p) => VPlan.weekBind(a, r, p) },
       day:      { render: (a, p) => VPlan.day(a, p),      bind: (a, r, p) => VPlan.dayBind(a, r, p) },
       exercises:{ render: (a, p) => VPlan.exercises(a, p),bind: (a, r, p) => VPlan.exercisesBind(a, r, p) },
-      guides:   { render: (a, p) => VPlan.guides(a, p) },
-      guide:    { render: (a, p) => VPlan.guide(a, p) },
+      guides:   { render: (a, p) => VPlan.guides(a, p), bind: (a, r, p) => VPlan.guidesBind(a, r, p) },
+      guide:    { render: (a, p) => VPlan.guide(a, p),  bind: (a, r, p) => VPlan.guideBind(a, r, p) },
       info:     { render: (a, p) => VPlan.info(a, p),      bind: (a, r, p) => VPlan.infoBind(a, r, p) },
 
       sessions: { render: (a, p) => VSessions.list(a, p),   bind: (a, r, p) => VSessions.listBind(a, r, p) },
@@ -771,7 +771,7 @@ const app = {
                 tipo: d.tipo,
                 mensaje: d.mensaje.trim(),
                 contacto: (d.contacto || '').trim() || '(no indicado)',
-                version: 'v2.45.0',
+                version: 'v2.46.0',
                 perfil: (this.mainUser && this.mainUser.name) || '',
                 navegador: navigator.userAgent,
               }),
@@ -808,7 +808,7 @@ const app = {
     const groups = [
       { title: 'Entreno', color: 'var(--moderate)', rows: [
         { v: 'info', icon: 'calendar', label: 'Planes', sub: this.routine ? `${this.routine.name}${plans.length > 1 ? ` · ${n(plans.length, 'plan', 'planes')}` : ''}` : 'Crea tu primer plan' },
-        ...(guides.length ? [{ v: 'guides', icon: 'book', label: 'Guías', sub: `${n(guides.length, 'guía', 'guías')} de tu plan` }] : []),
+        { v: 'guides', icon: 'book', label: 'Guías', sub: guides.length ? `${n(guides.length, 'guía', 'guías')} de tu plan` : 'Créalas con la IA a partir de tu plan' },
         { v: 'exercises', icon: 'tag', label: 'Ejercicios', sub: exs.length ? `${n(exs.length, 'ejercicio', 'ejercicios')} en tu catálogo` : 'Tu catálogo, vacío por ahora' },
         { v: 'docs', icon: 'notebook', label: 'Documentos', sub: docs.length ? `${n(docs.length, 'guardado', 'guardados')} · a mano en el entreno` : 'PDFs y fotos, a mano en el entreno' },
       ] },
@@ -826,7 +826,7 @@ const app = {
         <div class="more-group">${g.rows.map(r => `<button class="more-row" ${r.feedback ? 'data-feedback' : `data-link="${r.v}"`}>
           <span class="more-ic" style="background:${g.color}">${UI.icon(r.icon, 20)}</span>
           <span class="more-txt"><strong>${r.label}</strong><span${r.warn ? ' class="warn"' : ''}>${UI.esc(r.sub)}</span></span><span class="chev">›</span></button>`).join('')}</div>`).join('')}
-      <p class="version-foot">Traindía · v2.45.0 · ${Object.keys(this.usersById).length} perfil(es)<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
+      <p class="version-foot">Traindía · v2.46.0 · ${Object.keys(this.usersById).length} perfil(es)<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
     </div>`;
   },
   bindMore(root) {
@@ -1193,7 +1193,7 @@ const app = {
       <div class="more-group">
         ${row('id="seeLanding"', 'info', 'var(--rest)', 'Ver la presentación', 'Qué es Traindía y cómo funciona')}
         ${row('id="seeRepo"', 'code', 'var(--rest)', 'Código en GitHub', 'Novedades de cada versión', `<span class="chev">↗</span>`)}
-        <div class="more-row set-ver"><span class="more-txt"><span>Versión</span></span><strong>v2.45.0</strong></div>
+        <div class="more-row set-ver"><span class="more-txt"><span>Versión</span></span><strong>v2.46.0</strong></div>
       </div>
 
       <div class="more-sec danger">Zona peligrosa</div>
