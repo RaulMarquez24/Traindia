@@ -330,7 +330,7 @@ const VData = (() => {
       (d.blocks || []).forEach(b => (b.exercises || []).forEach(e => { if (e.exerciseId && idMap[e.exerciseId]) e.exerciseId = idMap[e.exerciseId]; }));
     });
     const { id: _i, userId: _u, isPrimary: _p, days: _d, ...rest } = routine; // resto de datos del plan, tal cual
-    const rec = { ...rest, id: DB.uid('rt'), userId: targetUserId, planType: (routine.planType === 'cnp' ? 'guided' : routine.planType) || 'guided', name, days: newDays, order: Date.now(), createdAt: Date.now(), isPrimary: false };
+    const rec = { ...rest, id: DB.uid('rt'), userId: targetUserId, planType: routine.planType === 'template' ? 'template' : 'custom', name, days: newDays, order: Date.now(), createdAt: Date.now(), isPrimary: false };
     await DB.put('routines', rec);
     return rec;
   }
@@ -807,7 +807,7 @@ const VData = (() => {
     const created = [], updated = [], enriched = [];
     // Campos que son de ESTE catálogo y no se copian del archivo; todo lo demás
     // (vídeos, técnica, métricas y cualquier campo futuro) viaja tal cual.
-    const OWN = new Set(['id', 'userId', 'substitutes', 'createdAt', 'isDefault']);
+    const OWN = new Set(['id', 'userId', 'substitutes', 'createdAt', 'isDefault', 'defaultKey']); // (isDefault/defaultKey: marcas antiguas, no se copian)
     const payloadOf = (ie) => Object.fromEntries(Object.entries(ie).filter(([k, v]) => !OWN.has(k) && v !== undefined));
     for (const ie of (importedExercises || [])) {
       const key = (ie.name || '').trim().toLowerCase();

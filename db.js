@@ -319,109 +319,6 @@ const DB = (() => {
   }
   // Lo que se apunta en la cinta: tiempo total, km y kcal; por serie, velocidad e inclinación.
   const CINTA_METRICS = ['distance', 'kcal', 'time', 'speed', 'incline'];
-  // Nombre canónico de un cardio de máquina del plan antiguo («Cinta Z2 conversacional»
-  // → «Cinta» con la etiqueta «Z2 conversacional»), para no volver a crear variantes.
-  function canonCardio(name) {
-    const c = cardioCanon(name);
-    return c ? { name: c.machine, label: c.label } : { name: (name || '').trim(), label: '' };
-  }
-
-  // Grupo muscular INDIVIDUAL de cada ejercicio predefinido (uno solo, nunca combinado).
-  const MUSCLE_GROUP = {
-    'Press banca o mancuerna': 'Pecho',
-    'Press inclinado mancuerna': 'Pecho',
-    'Press militar mancuerna': 'Hombro',
-    'Fondos máquina sentado': 'Tríceps',
-    'Tríceps cuerda overhead': 'Tríceps',
-    'Cinta Z2 conversacional': 'Cardio',
-    'Sentadilla o prensa': 'Pierna',
-    'Peso muerto rumano': 'Pierna',
-    'Hip thrust': 'Glúteo',
-    'Zancadas o búlgaras': 'Pierna',
-    'Gemelo': 'Pierna',
-    'Dominadas asistidas prono': 'Espalda',
-    'Remo con barra': 'Espalda',
-    'Jalón al pecho prono': 'Espalda',
-    'Remo bajo polea': 'Espalda',
-    'Curl bíceps barra': 'Bíceps',
-    'Curl martillo': 'Bíceps',
-    'Cinta Z2 muy suave': 'Cardio',
-    'Elevación lateral': 'Hombro',
-    'Tríceps pushdown cuerda': 'Tríceps',
-    'Curl alterno (sin fallo)': 'Bíceps',
-    'Dead hang prono c/grips': 'Agarre',
-    'Static hold mancuernas': 'Agarre',
-    'Curl muñeca lateral polea': 'Antebrazo',
-    'Pronosupinación mancuerna de pie': 'Antebrazo',
-    "Captain's chair (rod./piernas)": 'Core',
-    'Crunch máquina abdominal': 'Core',
-    'Pallof press polea': 'Core',
-    'Plancha frontal': 'Core',
-    'Cinta Z2': 'Cardio',
-    'Progresivo + movilidad': 'Movilidad',
-    "Sem. impar — 5-6×400m R 1:30-2'": 'Carrera',
-    'Sem. par — 1km test o 2×800m': 'Carrera',
-    'Suspensión supina barra parque': 'Agarre',
-    '5-10-5 con conos': 'Agilidad',
-    'Slaloms · salidas · giros': 'Agilidad',
-    'Cadera · dorsal · hombro': 'Movilidad',
-    'Jalón al pecho supino': 'Espalda',
-    'Remo máquina o sentado': 'Espalda',
-    'Face pull polea': 'Hombro',
-    'Estiramientos cadera/lumbar': 'Movilidad',
-    'Cinta Z2 o paseo': 'Cardio',
-    'Drenaje · compresión · frío': 'Recuperación',
-  };
-  function muscleGroupFor(name) {
-    const n = (name || '').trim();
-    if (MUSCLE_GROUP[n]) return MUSCLE_GROUP[n];
-    const lc = n.toLowerCase();
-    for (const k in MUSCLE_GROUP) { if (k.toLowerCase() === lc) return MUSCLE_GROUP[k]; }
-    return null;
-  }
-
-  // Mapa nombre(min)->tipo de todos los ejercicios predefinidos (PLAN_DATA).
-  function defaultTypeByName() {
-    const map = new Map();
-    if (typeof PLAN_DATA === 'undefined') return map;
-    PLAN_DATA.days.forEach(d => {
-      if (d.isRest || !d.blocks) return;
-      d.blocks.forEach(b => b.exercises.forEach(ex => {
-        map.set(ex.name.trim().toLowerCase(), classifyType(ex.name, ex.sets));
-      }));
-    });
-    return map;
-  }
-
-  // Crea (idempotente) el catálogo de ejercicios predefinidos para un usuario.
-  // Devuelve { map: nombre->{id,type}, added }. Los predefinidos llevan isDefault:true.
-  async function ensureDefaultExercises(userId) {
-    if (typeof PLAN_DATA === 'undefined') return { map: new Map(), added: 0 };
-    const existing = await exercisesOf(userId);
-    const byName = new Map(existing.map(e => [e.name.trim().toLowerCase(), e]));
-    const map = new Map();
-    let added = 0;
-    for (const d of PLAN_DATA.days) {
-      if (d.isRest || !d.blocks) continue;
-      for (const b of d.blocks) {
-        for (const ex of b.exercises) {
-          const key = ex.name.trim().toLowerCase();
-          if (map.has(key)) continue;
-          const cn = canonCardio(ex.name).name, ckey = cn.toLowerCase();
-          if (byName.has(ckey)) { const e = byName.get(ckey); map.set(key, { id: e.id, type: e.type, name: e.name }); continue; }
-          const type = cn !== ex.name.trim() ? 'time' : classifyType(ex.name, ex.sets);
-          const metrics = defaultMetricsFor(cn, type);
-          const rec = { id: uid('ex'), userId, name: cn, muscleGroup: muscleGroupFor(ex.name) || 'General', type, isDefault: true, defaultKey: cn, createdAt: Date.now() };
-          if (metrics) rec.metrics = metrics;
-          await put('exercises', rec);
-          added++;
-          byName.set(ckey, rec);
-          map.set(key, { id: rec.id, type, name: rec.name });
-        }
-      }
-    }
-    return { map, added };
-  }
 
   // Agrupa una lista de ejercicios en bloques por categoría (grupo muscular),
   // respetando el orden de primera aparición de cada categoría.
@@ -434,37 +331,6 @@ const DB = (() => {
     });
     return order.map(g => ({ label: g, optional: groups[g].length > 0 && groups[g].every(e => e.optional), exercises: groups[g] }));
   }
-
-  // Construye los 7 días por defecto desde PLAN_DATA, con los ejercicios agrupados
-  // por categoría individual (Pecho, Hombro, Tríceps, Cardio…), enlazados al catálogo.
-  function buildDefaultDays(map) {
-    return PLAN_DATA.days.map((d, i) => {
-      const day = {
-        id: d.id, name: d.name, type: d.type, typeLabel: d.typeLabel,
-        focus: d.focus || '', place: d.place || '', placeAccent: !!d.placeAccent,
-        duration: d.duration || '', isRest: !!d.isRest, order: i, isDefault: true,
-        blocks: [], substitutes: d.substitutes ? d.substitutes.map(s => ({ ...s })) : [],
-        substitutesTitle: d.substitutesTitle || '', relatedGuides: d.relatedGuides ? [...d.relatedGuides] : [],
-      };
-      if (!d.isRest && d.blocks) {
-        const flat = [];
-        d.blocks.forEach(b => b.exercises.forEach(ex => {
-          const m = map.get(ex.name.trim().toLowerCase());
-          const cc = canonCardio(ex.name);
-          const row = { exerciseId: m ? m.id : null, name: (m && m.name) || cc.name, sets: ex.sets, type: m ? m.type : classifyType(ex.name, ex.sets), priority: !!ex.priority, optional: !!ex.optional };
-          if (cc.label) row.label = cc.label;
-          flat.push(row);
-        }));
-        day.blocks = groupIntoBlocks(flat, e => muscleGroupFor(e.name) || 'General');
-      }
-      return day;
-    });
-  }
-
-  // Nombre genérico: es una plantilla para cualquiera, no el plan de una persona.
-  const PLAN_NAME = 'Plan completo';
-  const OLD_PLAN_NAME = 'Plan CNP'; // nombre anterior; se renombra en la migración
-  function routineName() { return PLAN_NAME; }
 
   const WEEKDAYS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
   // 7 días vacíos editables para un plan personalizado (sin guías ni contenido).
@@ -492,7 +358,7 @@ const DB = (() => {
       let e = byName.get(key(n));
       if (!e) {
         const type = def.type || classifyType(n, '');
-        e = { id: uid('ex'), userId, name: n, muscleGroup: def.group || muscleGroupFor(n) || 'General', type, substitutes: [], createdAt: Date.now() };
+        e = { id: uid('ex'), userId, name: n, muscleGroup: def.group || 'General', type, substitutes: [], createdAt: Date.now() };
         if (def.howto) e.howto = def.howto;
         if (Array.isArray(def.videos) && def.videos.length) { e.videos = def.videos.map(v => ({ ...v })); e.videoUrl = def.videos[0].url; }
         const metrics = Array.isArray(def.metrics) ? def.metrics : defaultMetricsFor(n, type);
@@ -561,40 +427,26 @@ const DB = (() => {
     }));
   }
 
-  // Crea un plan (rutina). type: 'guided' (el plan completo antiguo) | 'custom' (7 días
-  // vacíos) | 'template' (una plantilla de templates.js, con opts.templateId).
-  // Todos conservan el catálogo de ejercicios. Si activate, pasa a ser el plan activo.
-  async function createPlan(userId, type = 'guided', { name, activate = true, templateId } = {}) {
-    const isCustom = type === 'custom';
+  // Crea un plan (rutina). type: 'custom' (7 días vacíos) | 'template' (una plantilla de
+  // templates.js, con opts.templateId). Si activate, pasa a ser el plan activo.
+  async function createPlan(userId, type = 'custom', { name, activate = true, templateId } = {}) {
     const tpl = type === 'template' && typeof TEMPLATES !== 'undefined' ? TEMPLATES.byId(templateId) : null;
     if (type === 'template' && !tpl) throw new Error('Plantilla no encontrada');
-    // La plantilla trae su propio catálogo; un plan en blanco, el catálogo base de las
-    // plantillas; el del plan completo antiguo, solo para ese plan.
-    if (isCustom && typeof TEMPLATES !== 'undefined') await ensureBaseCatalog(userId);
-    const { map } = (tpl || (isCustom && typeof TEMPLATES !== 'undefined')) ? { map: null } : await ensureDefaultExercises(userId);
+    // La plantilla trae su propio catálogo; un plan en blanco, el catálogo base de las plantillas.
+    if (!tpl && typeof TEMPLATES !== 'undefined') await ensureBaseCatalog(userId);
     const routine = tpl
       ? { id: uid('rt'), userId, planType: 'template', templateId: tpl.id, name: name || tpl.name,
           days: buildTemplateDays(tpl, await ensureTemplateExercises(userId, tpl)),
           order: Date.now(), createdAt: Date.now(), isPrimary: false, dayTypeUnset: true }
-      : {
-      id: uid('rt'), userId, planType: isCustom ? 'custom' : 'guided',
-      name: name || (isCustom ? 'Mi plan' : routineName()),
-      days: isCustom ? buildEmptyDays() : buildDefaultDays(map),
-      order: Date.now(), createdAt: Date.now(), isPrimary: false,
-    };
+      : { id: uid('rt'), userId, planType: 'custom', name: name || 'Mi plan', days: buildEmptyDays(),
+          order: Date.now(), createdAt: Date.now(), isPrimary: false };
     if (activate) {
       const others = await routinesOf(userId);
       for (const r of others) { if (r.isPrimary) { r.isPrimary = false; await put('routines', r); } }
       routine.isPrimary = true;
     }
     await put('routines', routine);
-    if (!isCustom && !tpl) await seedSubstitutes(userId); // suplentes del plan completo antiguo
     return routine;
-  }
-
-  // ---- Semilla inicial (primer arranque) — envoltura por compatibilidad ----
-  async function seedForUser(userId) {
-    return createPlan(userId, 'guided', { activate: true });
   }
 
   // Conmuta el plan activo (mueve el flag isPrimary).
@@ -609,21 +461,6 @@ const DB = (() => {
   // Elimina un plan (rutina). No toca sesiones ni progreso.
   async function deletePlan(routineId) {
     return del('routines', routineId);
-  }
-
-  // Restaura ejercicios predefinidos que falten (no duplica). Devuelve nº añadidos.
-  async function restoreDefaultExercises(userId) {
-    return (await ensureDefaultExercises(userId)).added;
-  }
-
-  // Restaura el plan original sobre la rutina principal (sobreescribe los días).
-  async function restoreDefaultRoutine(userId) {
-    const { map } = await ensureDefaultExercises(userId);
-    let rt = await primaryRoutineOf(userId);
-    const days = buildDefaultDays(map);
-    if (rt) { rt.days = days; rt.name = rt.name || routineName(); await put('routines', rt); }
-    else { rt = { id: uid('rt'), userId, planType: 'guided', name: routineName(), days, order: 0, createdAt: Date.now(), isPrimary: true }; await put('routines', rt); }
-    return rt;
   }
 
   // Edita un ejercicio y propaga el cambio a toda la app:
@@ -792,81 +629,6 @@ const DB = (() => {
     return pending;
   }
 
-  // ---- Suplentes predefinidos: parsea PLAN_DATA y los vincula como ejercicios del catálogo ----
-  function _tokens(s) { return (s || '').toLowerCase().replace(/[().]/g, ' ').split(/[\s/·,]+/).filter(Boolean); }
-  function _bestMatch(orig, names) {
-    const ot = _tokens(orig);
-    if (!ot.length) return null;
-    let best = null, bestScore = 0;
-    for (const nm of names) {
-      const nt = _tokens(nm);
-      let score = 0;
-      for (const t of ot) if (nt.some(x => x.startsWith(t) || t.startsWith(x))) score++;
-      if (score > bestScore) { bestScore = score; best = nm; }
-    }
-    return (bestScore >= Math.ceil(ot.length * 0.6) && bestScore >= 1) ? best : null;
-  }
-  function _splitAlts(sub) { return (sub || '').split(/\s+o\s+/i).map(s => s.trim()).filter(Boolean); }
-  function _cap(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : s; }
-
-  // Idempotente. Vincula suplentes por ejercicio y guarda en la rutina los "Plan B" no mapeables.
-  async function seedSubstitutes(userId) {
-    if (typeof PLAN_DATA === 'undefined') return;
-    const exs = await exercisesOf(userId);
-    const byName = new Map(exs.map(e => [e.name.trim().toLowerCase(), e]));
-    const ensureAlt = async (name, group, type) => {
-      if (cardioCanon(name)) { name = canonCardio(name).name; group = 'Cardio'; type = 'time'; }
-      const key = name.trim().toLowerCase();
-      if (byName.has(key)) return byName.get(key);
-      const rec = { id: uid('ex'), userId, name: _cap(name.trim()), muscleGroup: group || 'General', type: type || 'weight', isDefault: true, defaultKey: _cap(name.trim()), substitutes: [], createdAt: Date.now() };
-      const m = defaultMetricsFor(rec.name, rec.type); if (m) rec.metrics = m;
-      await put('exercises', rec);
-      byName.set(key, rec);
-      return rec;
-    };
-
-    const dayPlanB = {};
-    for (const d of PLAN_DATA.days) {
-      if (!d.substitutes || !d.substitutes.length) continue;
-      const dayExNames = (d.blocks || []).flatMap(b => b.exercises.map(e => canonCardio(e.name).name));
-      const leftover = [];
-      for (const { orig, sub } of d.substitutes) {
-        const matchName = _bestMatch(orig, dayExNames);
-        const source = matchName ? byName.get(matchName.trim().toLowerCase()) : null;
-        if (!source) { leftover.push({ orig, sub }); continue; }
-        source.substitutes = source.substitutes || [];
-        for (const alt of _splitAlts(sub)) {
-          const altEx = await ensureAlt(alt, source.muscleGroup, source.type);
-          if (altEx.id !== source.id && !source.substitutes.includes(altEx.id)) source.substitutes.push(altEx.id);
-        }
-        await put('exercises', source);
-      }
-      dayPlanB[d.id] = leftover;
-    }
-
-    const rt = await primaryRoutineOf(userId);
-    if (rt) {
-      (rt.days || []).forEach(d => { if (dayPlanB[d.id]) d.planB = dayPlanB[d.id]; });
-      await put('routines', rt);
-    }
-  }
-
-  // Restaura SOLO un día al plan original (sobreescribe ese día). Devuelve el día o null si no es predefinido.
-  async function restoreDefaultDay(userId, dayId) {
-    if (typeof PLAN_DATA === 'undefined') return null;
-    if (!PLAN_DATA.days.some(d => d.id === dayId)) return null; // no es un día predefinido
-    const { map } = await ensureDefaultExercises(userId);
-    const rebuilt = buildDefaultDays(map).find(d => d.id === dayId);
-    const rt = await primaryRoutineOf(userId);
-    if (!rt || !rebuilt) return null;
-    const idx = rt.days.findIndex(d => d.id === dayId);
-    if (idx === -1) { rebuilt.order = rt.days.length; rt.days.push(rebuilt); }
-    else { rebuilt.order = rt.days[idx].order; rt.days[idx] = rebuilt; }
-    await put('routines', rt);
-    return rebuilt;
-  }
-
-  // Migración idempotente: corrige tipos mal puestos en predefinidos y rellena type en rutinas.
   // ---- Unificación de cardio (v10): Cinta*/Bici*/Elíptic* → una máquina + etiqueta ----
   const CARDIO_FAMILIES = [
     { re: /^cinta\b\s*/i, machine: 'Cinta' },
@@ -936,7 +698,7 @@ const DB = (() => {
         const c = cardioCanon(e.name); if (!c) continue;
         let canon = canonByMachine[c.machine];
         if (!canon) {
-          canon = { id: uid('ex'), userId: u.id, name: c.machine, type: 'time', muscleGroup: 'Cardio', metrics: c.machine === 'Cinta' ? [...new Set([...CINTA_METRICS, ...(e.metrics || [])])] : Array.isArray(e.metrics) ? e.metrics.slice() : ['distance', 'kcal'], substitutes: [], isDefault: true, defaultKey: c.machine, createdAt: Date.now() };
+          canon = { id: uid('ex'), userId: u.id, name: c.machine, type: 'time', muscleGroup: 'Cardio', metrics: c.machine === 'Cinta' ? [...new Set([...CINTA_METRICS, ...(e.metrics || [])])] : Array.isArray(e.metrics) ? e.metrics.slice() : ['distance', 'kcal'], substitutes: [], createdAt: Date.now() };
           canonByMachine[c.machine] = canon;
         } else if (Array.isArray(e.metrics)) {
           canon.metrics = [...new Set([...(canon.metrics || []), ...e.metrics])];
@@ -1048,18 +810,52 @@ const DB = (() => {
     }
   }
 
-  // Aditivo: quita la marca antigua de los datos ya guardados sin perder nada —
-  // planType 'cnp' → 'guided' y nombre 'Plan CNP…' → 'Plan completo'. Idempotente.
-  async function debrandStoredData() {
+  // Una vez: se retira el plan de inicio antiguo (ya no vive en el código).
+  //  - Los planes que nacieron de él se quedan tal cual, como planes personalizados.
+  //  - Sus ejercicios predefinidos se quedan solo si se usan: con registros en alguna
+  //    sesión o puestos en algún plan (quitarlos rompería ese plan). Los demás se borran.
+  //  - Los que se quedan pasan a ser ejercicios normales (editables y borrables).
+  async function retireLegacyPlan() {
+    const s = await getSettings();
+    if (!s || s.legacyPlanRetiredV1) return false;
     const users = await getAll('users');
+    let pending = false;
     for (const u of users) {
-      for (const rt of await routinesOf(u.id)) {
+      if ((await exercisesOf(u.id)).some(e => e.isDefault || e.defaultKey)) { pending = true; break; }
+      if ((await routinesOf(u.id)).some(r => !['custom', 'template'].includes(r.planType) || (r.days || []).some(d => d.isDefault))) { pending = true; break; }
+    }
+    if (pending) await saveInternalBackup('Antes de retirar el plan de inicio');
+    const key = (n) => String(n || '').trim().toLowerCase();
+    for (const u of users) {
+      const routines = await routinesOf(u.id);
+      const sessions = await sessionsOf(u.id);
+      for (const rt of routines) {
         let ch = false;
-        if (rt.planType === 'cnp') { rt.planType = 'guided'; ch = true; }
-        if (rt.name === OLD_PLAN_NAME || /^Plan CNP\b/.test(rt.name || '')) { rt.name = PLAN_NAME; ch = true; }
+        if (!['custom', 'template'].includes(rt.planType)) { rt.planType = 'custom'; rt.dayTypeUnset = true; ch = true; }
+        (rt.days || []).forEach(d => { if (d.isDefault) { delete d.isDefault; ch = true; } });
         if (ch) await put('routines', rt);
       }
+      const usedIds = new Set(), usedNames = new Set();
+      const mark = (x) => { if (x.exerciseId) usedIds.add(x.exerciseId); usedNames.add(key(x.name)); };
+      sessions.forEach(ss => (ss.entries || []).forEach(mark));
+      routines.forEach(rt => (rt.days || []).forEach(d => (d.blocks || []).forEach(b => (b.exercises || []).forEach(mark))));
+      const all = await exercisesOf(u.id);
+      const removed = new Set();
+      for (const e of all) {
+        if (!(e.isDefault || e.defaultKey)) continue;
+        if (usedIds.has(e.id) || usedNames.has(key(e.name))) continue;
+        await del('exercises', e.id); removed.add(e.id);
+      }
+      for (const e of all) {
+        if (removed.has(e.id)) continue;
+        let ch = false;
+        if (e.isDefault !== undefined || e.defaultKey !== undefined) { delete e.isDefault; delete e.defaultKey; ch = true; }
+        if ((e.substitutes || []).some(id => removed.has(id))) { e.substitutes = e.substitutes.filter(id => !removed.has(id)); ch = true; }
+        if (ch) await put('exercises', e);
+      }
     }
+    await saveSettings({ legacyPlanRetiredV1: true });
+    return pending;
   }
 
   async function migrate() {
@@ -1067,14 +863,12 @@ const DB = (() => {
     if (!s) return;
     // Aditivo, independiente del aviso de unificación (v10): añade 'time' al cardio existente.
     if (!s.cardioTimeMetric) { await addTimeTotalToCardio(); await saveSettings({ cardioTimeMetric: true }); }
-    // Aditivo: desmarca los datos antiguos (planType/nombre) una sola vez.
-    if (!s.debranded) { await debrandStoredData(); await saveSettings({ debranded: true }); }
     // Una vez: nombres del catálogo antiguo → nombres de gimnasio (con copia interna antes).
     try { await runCatalogNames(); } catch (e) { console.error('runCatalogNames', e); }
     try { await tidyCardioVariants(); } catch (e) { console.error('tidyCardioVariants', e); }
+    try { await retireLegacyPlan(); } catch (e) { console.error('retireLegacyPlan', e); }
     const v = s.dataVersion || 0;
     if (v >= 9) return; // la unificación de cardio (v10) la lanza la app aparte (con aviso)
-    const defaults = defaultTypeByName();
     const users = await getAll('users');
     for (const u of users) {
       const exs = await exercisesOf(u.id);
@@ -1082,22 +876,17 @@ const DB = (() => {
       const byId = {}, byName = {};
       for (const e of exs) {
         let needPut = false;
-        const dt = defaults.get(e.name.trim().toLowerCase());
-        if (dt && e.type === 'weight' && dt !== 'weight') { e.type = dt; needPut = true; }
-        if (dt && e.isDefault === undefined) { e.isDefault = true; e.defaultKey = e.name.trim(); needPut = true; }
-        const mg = muscleGroupFor(e.name); // grupo individual (solo predefinidos conocidos)
-        if (mg && e.muscleGroup !== mg) { e.muscleGroup = mg; needPut = true; }
         // datos a registrar por defecto en ejercicios de tiempo (v9)
         if (e.type === 'time' && e.metrics === undefined) { e.metrics = defaultMetricsFor(e.name, 'time'); needPut = true; }
         if (needPut) await put('exercises', e);
         typeByName.set(e.name.trim().toLowerCase(), e.type);
         byId[e.id] = e; byName[e.name.trim().toLowerCase()] = e;
       }
-      // grupo de un ejercicio de día: por catálogo (id/nombre) y, si no, por el mapa
+      // grupo de un ejercicio de día: por catálogo (id/nombre)
       const groupOf = (ex) => {
         const bi = ex.exerciseId && byId[ex.exerciseId];
         const bn = byName[(ex.name || '').trim().toLowerCase()];
-        return (bi && bi.muscleGroup) || (bn && bn.muscleGroup) || muscleGroupFor(ex.name) || 'General';
+        return (bi && bi.muscleGroup) || (bn && bn.muscleGroup) || 'General';
       };
       const rts = await routinesOf(u.id);
       for (const rt of rts) {
@@ -1113,8 +902,7 @@ const DB = (() => {
           }
         });
         // (antes se renombraba aquí el plan principal: pisaba el nombre que hubiera puesto el usuario)
-        // tipo de plan: las rutinas antiguas son el plan completo (guiado)
-        if (!rt.planType) { rt.planType = 'guided'; }
+        if (!rt.planType) { rt.planType = 'custom'; }
         await put('routines', rt);
       }
       // garantizar exactamente un plan activo por usuario
@@ -1123,7 +911,6 @@ const DB = (() => {
         after.sort((a, b) => (a.order || 0) - (b.order || 0));
         after[0].isPrimary = true; await put('routines', after[0]);
       }
-      await seedSubstitutes(u.id); // vincula suplentes a los ya sembrados (idempotente)
     }
     await saveSettings({ dataVersion: 9 });
   }
@@ -1172,7 +959,7 @@ const DB = (() => {
     getSettings, saveSettings,
     getPlaces, savePlaces, ensurePlaces,
     getUsers, getMainUser, createUser,
-    seedForUser, createPlan, ensureTemplateExercises, runCatalogNames, tidyCardioVariants, setActivePlan, deletePlan, restoreDefaultExercises, restoreDefaultRoutine, restoreDefaultDay, updateExercise, migrate, runCardioUnify, cardioUnifyPending, classifyType,
+    createPlan, ensureTemplateExercises, runCatalogNames, tidyCardioVariants, retireLegacyPlan, setActivePlan, deletePlan, updateExercise, migrate, runCardioUnify, cardioUnifyPending, classifyType,
     saveInternalBackup, listInternalBackups, deleteInternalBackup, restoreInternalBackup,
     filesOf, addFile, hasStore, isFallback, upgradeNow,
     nutritionOf, primaryNutritionOf, saveNutrition,

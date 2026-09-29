@@ -182,14 +182,9 @@ const VPlan = (() => {
   }
 
   // ---------- DÍA ----------
-  function isDefaultDay(d) {
-    return typeof PLAN_DATA !== 'undefined' && PLAN_DATA.days.some(x => x.id === d.id);
-  }
-
   async function day(app, params) {
     const d = (app.routine?.days || []).find(x => x.id === params.dayId);
     if (!d) return `<div class="empty-state"><p>Día no encontrado.</p></div>`;
-    const restoreBtn = (isDefaultDay(d) && app.isFullPlan()) ? `<button class="btn ghost" data-act="restore-day">${UI.icon('refresh', 16)} Restaurar día</button>` : '';
     const byId = {};
     (await DB.exercisesOf(app.activeUser.id)).forEach(e => { byId[e.id] = e; });
     const subsLine = (ex) => {
@@ -213,7 +208,6 @@ const VPlan = (() => {
         <div class="detail-toolbar">
           <button class="btn ghost" data-act="edit-day">${UI.icon('edit', 16)} Editar día</button>
           <button class="btn ghost" data-act="swap-day">${UI.icon('swap', 16)} Intercambiar</button>
-          ${restoreBtn}
         </div>`;
     }
 
@@ -234,7 +228,6 @@ const VPlan = (() => {
         </div>
         <div class="detail-toolbar">
           <button class="btn ghost" data-act="swap-day">${UI.icon('swap', 16)} Intercambiar</button>
-          ${restoreBtn}
         </div>`;
     }
 
@@ -288,7 +281,6 @@ const VPlan = (() => {
         <button class="btn ghost" data-act="edit-day">${UI.icon('edit', 16)} Editar día</button>
         <button class="btn ghost" data-act="share-day">${UI.icon('upload', 16)} Compartir</button>
         <button class="btn ghost" data-act="swap-day">${UI.icon('swap', 16)} Intercambiar</button>
-        ${restoreBtn}
       </div>`;
   }
 
@@ -320,19 +312,6 @@ const VPlan = (() => {
     if (share) share.addEventListener('click', () => VData.exportDay(app, d.id));
     const swap = root.querySelector('[data-act="swap-day"]');
     if (swap) swap.addEventListener('click', () => swapDayFlow(app, d));
-    const restore = root.querySelector('[data-act="restore-day"]');
-    if (restore) restore.addEventListener('click', async () => {
-      const ok = await UI.confirm({
-        title: `Restaurar ${d.name}`,
-        message: `CUIDADO: esto devuelve SOLO el día "${d.name}" al entrenamiento predefinido y BORRA tus cambios en este día (ejercicios, series, orden…). No se puede deshacer. No afecta a los demás días, ni a tus sesiones o progreso.`,
-        confirmLabel: 'Sí, restaurar día', danger: true, requireText: 'RESTAURAR',
-      });
-      if (!ok) return;
-      await DB.restoreDefaultDay(app.activeUser.id, d.id);
-      await app.refreshRoutine();
-      app.go('day', { dayId: d.id }, true);
-      UI.toast('Día restaurado');
-    });
   }
 
   // Intercambia el CONTENIDO de dos días (mantiene id, nombre y posición/semana).
@@ -665,16 +644,14 @@ const VPlan = (() => {
   }
 
   // ---------- GUÍAS (estáticas) ----------
-  // Vienen del plan activo: su plantilla (templates.js) o, en el plan completo
-  // antiguo, PLAN_DATA. Un plan personalizado no tiene guías.
+  // Vienen de la plantilla del plan activo (templates.js). Un plan personalizado no tiene guías.
   function templateOf(app) {
     const r = app && app.routine;
     return (r && r.planType === 'template' && typeof TEMPLATES !== 'undefined') ? TEMPLATES.byId(r.templateId) : null;
   }
   function guideList(app) {
     const t = templateOf(app);
-    if (t) return t.guides || [];
-    return (app && app.isFullPlan() && typeof PLAN_DATA !== 'undefined') ? PLAN_DATA.guides : [];
+    return t ? (t.guides || []) : [];
   }
   function findGuide(app, id) { return guideList(app).find(x => x.id === id) || null; }
 
@@ -696,7 +673,7 @@ const VPlan = (() => {
   }
 
   // ---------- PLANES (gestor de planes) ----------
-  const PLAN_TYPE_LABEL = { guided: 'Completo', custom: 'Personalizado', template: 'Plantilla' };
+  const PLAN_TYPE_LABEL = { custom: 'Personalizado', template: 'Plantilla' };
 
   // Ficha de una plantilla: datos, puntos fuertes y guías.
   function templateInfoHTML(t) {
@@ -764,7 +741,7 @@ const VPlan = (() => {
       const optDays = train.filter(d => (d.blocks || []).length && d.blocks.every(b => b.optional)).length; // días enteros opcionales
       const tDays = train.length - optDays;
       const isActive = r.id === activeId;
-      const typeBadge = `<span class="badge${(r.planType === 'custom') ? ' guest' : ''}">${PLAN_TYPE_LABEL[r.planType] || 'Completo'}</span>`;
+      const typeBadge = `<span class="badge${(r.planType === 'custom') ? ' guest' : ''}">${PLAN_TYPE_LABEL[r.planType] || 'Personalizado'}</span>`;
       return `<div class="plan-card${isActive ? ' active' : ''}">
         <div class="plan-card-main">
           <strong>${UI.esc(r.name)} ${typeBadge}${isActive ? ' <span class="badge">Activo</span>' : ''}</strong>
@@ -783,35 +760,7 @@ const VPlan = (() => {
       ${(r0.planDuration || r0.planStart) ? `<p class="field-hint" style="margin-top:0">${[r0.planDuration ? `Duración: ${UI.esc(r0.planDuration)}` : '', r0.planStart ? `Empieza: ${UI.esc(UI.fmtDate(r0.planStart))}` : ''].filter(Boolean).join(' · ')}</p>` : ''}
       <div class="block"><ul class="ex-list">${r0.planNotes.map(n => `<li><span class="ex-name">${UI.esc(n)}</span></li>`).join('')}</ul></div>` : '';
     const tplActive = templateOf(app);
-    const planInfo = tplActive ? templateInfoHTML(tplActive) : app.isFullPlan() ? `
-      <div class="catalog-title" style="margin-top:8px">Sobre este plan</div>
-      <div class="block"><div class="block-label">Datos atleta</div>
-        <ul class="ex-list">
-          <li><span class="ex-name">Altura</span><span class="ex-sets">168 cm</span></li>
-          <li><span class="ex-name">Peso</span><span class="ex-sets">60-65 kg</span></li>
-          <li><span class="ex-name">Sede actual</span><span class="ex-sets">Basic Fit</span></li>
-          <li><span class="ex-name">Sede junio</span><span class="ex-sets">Go Fit</span></li>
-        </ul></div>
-      <div class="block"><div class="block-label">Objetivos prioritarios</div>
-        <ul class="ex-list">
-          <li><span class="ex-name priority">Dominadas</span><span class="ex-sets">★ alta</span></li>
-          <li><span class="ex-name priority">Suspensión supina</span><span class="ex-sets">★ alta</span></li>
-          <li><span class="ex-name">1 km carrera</span><span class="ex-sets">media</span></li>
-          <li><span class="ex-name">Agilidad / circuito</span><span class="ex-sets">media</span></li>
-          <li><span class="ex-name">Fuerza general</span><span class="ex-sets">base</span></li>
-        </ul></div>
-      <div class="block"><div class="block-label">Estructura</div>
-        <ul class="ex-list">
-          <li><span class="ex-name">Días entreno</span><span class="ex-sets">5</span></li>
-          <li><span class="ex-name">Días ligeros</span><span class="ex-sets">1</span></li>
-          <li><span class="ex-name">Descanso</span><span class="ex-sets">1 (vie)</span></li>
-          <li><span class="ex-name">Duración fase</span><span class="ex-sets">8-10 sem</span></li>
-        </ul></div>
-      <div class="related-guides"><div class="block-label">Guías clave</div>
-        <a class="guide-link" data-link="guide" data-params='${JSON.stringify({ guideId: 'logica-semana' })}'><span>Lógica de la semana</span><span class="guide-link-arrow">›</span></a>
-        <a class="guide-link" data-link="guide" data-params='${JSON.stringify({ guideId: 'analisis-nivel' })}'><span>Análisis de tu nivel</span><span class="guide-link-arrow">›</span></a>
-        <a class="guide-link" data-link="guide" data-params='${JSON.stringify({ guideId: 'progresion-dominadas' })}'><span>Progresión de dominadas</span><span class="guide-link-arrow">›</span></a>
-      </div>` : '';
+    const planInfo = tplActive ? templateInfoHTML(tplActive) : '';
 
     return `
       <div class="week-intro"><div class="eyebrow">Tus planes</div><h2>Planes</h2><p>Cambia entre planes o crea uno nuevo. El plan activo decide qué guías y contenido ves.</p></div>
@@ -912,7 +861,7 @@ const VPlan = (() => {
   }
 
   // Agrupa los ejercicios idénticos en clusters { keep, remove[] }. Conserva uno
-  // por cluster con prioridad: usado en el plan > predefinido > con más suplentes.
+  // por cluster con prioridad: usado en el plan > con más suplentes.
   async function mergeableClusters(app) {
     const list = await DB.exercisesOf(app.activeUser.id);
     const routines = await DB.routinesOf(app.activeUser.id);
@@ -925,7 +874,6 @@ const VPlan = (() => {
       if (g.length < 2) return;
       g.sort((a, b) =>
         ((usedIds.has(b.id) ? 1 : 0) - (usedIds.has(a.id) ? 1 : 0))
-        || ((b.isDefault ? 1 : 0) - (a.isDefault ? 1 : 0))
         || ((b.substitutes || []).length - (a.substitutes || []).length));
       clusters.push({ keep: g[0], remove: g.slice(1) });
     });
@@ -1084,7 +1032,7 @@ const VPlan = (() => {
       <div id="catalogBody"></div>
       ${removableDup.length ? `<button class="btn ghost danger block" id="cleanDups" style="margin-top:16px">${UI.icon('trash', 16)} Eliminar ${removableDup.length} duplicado${removableDup.length === 1 ? '' : 's'} idéntico${removableDup.length === 1 ? '' : 's'}</button>` : ''}
       <details class="det cat-help"><summary>¿Cómo funciona el catálogo?</summary>
-        <p class="field-hint">Catálogo de <strong>${UI.esc(app.activeUser.name)}</strong>. Un ejercicio está <strong>en uso</strong> si aparece en algún día de tu plan (o es suplente de uno que lo está); si lo quitas de todos los días pasa a <strong>sin usar</strong>. Los predefinidos <span class="badge def">def</span> no se borran (siempre están disponibles); los tuyos sin usar, sí. Toca un ejercicio para editarlo.</p>
+        <p class="field-hint">Catálogo de <strong>${UI.esc(app.activeUser.name)}</strong>. Un ejercicio está <strong>en uso</strong> si aparece en algún día de tu plan (o es suplente de uno que lo está); si lo quitas de todos los días pasa a <strong>sin usar</strong>. Los que no usas se pueden borrar; si tienen registros, te pide confirmarlo. Toca un ejercicio para editarlo.</p>
       </details>
     </div>`;
   }
@@ -1141,10 +1089,10 @@ const VPlan = (() => {
         it.subs ? `<span class="cat-ic sub" title="Suplentes">${UI.icon('repeat', 10)}${it.subs}</span>` : '',
       ].join('');
       const recs = it.recs ? `<span class="cat-recs" title="Entrenos en los que lo has apuntado">${UI.icon('activity', 10)}${it.recs} registro${it.recs === 1 ? '' : 's'}</span>` : '<span class="cat-recs none">Sin registros</span>';
-      const deletable = !it.used && !e.isDefault;
+      const deletable = !it.used;
       return `<li class="cat-row${it.used ? '' : ' unused'}" data-edit="${e.id}" tabindex="0" role="button">
         <span class="ex-name-wrap">
-          <span class="ex-name">${UI.esc(e.name)}${e.isDefault ? ' <span class="badge def">def</span>' : ''}</span>
+          <span class="ex-name">${UI.esc(e.name)}</span>
           <span class="ex-sub"><span class="ex-type">${TYPE_NAME[it.type] || it.type}</span> · ${UI.esc(where)}${extras}${recs}</span>
         </span>
         <span class="ex-actions">
@@ -1248,9 +1196,7 @@ const VPlan = (() => {
             confirmLabel: 'Borrar igualmente', danger: true, requireText: 'BORRAR',
           });
         } else {
-          const msg = ex.isDefault
-            ? 'No se usa en ningún día y no tiene registros. Es un ejercicio predefinido: se quitará del catálogo pero podrás recuperarlo con “Restaurar predefinidos”.'
-            : 'No se usa en ningún día y no tiene registros. Se eliminará del catálogo.';
+          const msg = 'No se usa en ningún día y no tiene registros. Se eliminará del catálogo.';
           ok = await UI.confirm({ title: `Eliminar ${ex.name}`, message: msg, confirmLabel: 'Eliminar', danger: true });
         }
         if (!ok) return;

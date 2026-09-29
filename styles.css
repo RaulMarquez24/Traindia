@@ -186,7 +186,6 @@ textarea.inp { resize: vertical; line-height: 1.4; }
 .profile-actions { display: flex; gap: 4px; }
 .badge { font-family: 'IBM Plex Mono', monospace; font-size: 9px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; padding: 2px 7px; border-radius: 4px; background: var(--strong-bg); color: var(--strong); }
 .badge.guest { background: var(--sub-bg); color: var(--sub-accent); }
-.badge.def { background: var(--line-soft); color: var(--ink-dim); }
 .badge.soon { background: var(--moderate-bg); color: var(--moderate); }
 .type-sel { max-width: 110px; font-size: 13px; padding: 6px 8px; }
 .plan-card { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; background: var(--bg-card); border: 1px solid var(--line); border-radius: 14px; padding: 16px; margin-bottom: 10px; }

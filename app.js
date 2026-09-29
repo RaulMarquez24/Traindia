@@ -438,15 +438,8 @@ const app = {
       const tplId = planType.startsWith('tpl:') ? planType.slice(4) : null;
       // «Plan de tu entrenador»: se empieza con uno en blanco y se abre el importador.
       await DB.createPlan(user.id, tplId ? 'template' : 'custom', { activate: true, templateId: tplId });
-      if (tplId || planType === 'custom' || planType === 'ai') {
-        // Todo nace en el formato actual: nada que migrar (y las migraciones añadirían
-        // el catálogo del plan completo antiguo, que aquí solo sería ruido).
-        await DB.saveSettings({ mainUserId: user.id, activeUserId: user.id, seeded: true, version: 2, dataVersion: 10, cardioTimeMetric: true, debranded: true });
-      } else {
-        await DB.saveSettings({ mainUserId: user.id, activeUserId: user.id, seeded: true, version: 2, dataVersion: 8 });
-        await DB.migrate();
-        await DB.runCardioUnify(); // usuario nuevo: cardio ya unificado de inicio, sin aviso
-      }
+      // Todo nace en el formato actual: nada que migrar.
+      await DB.saveSettings({ mainUserId: user.id, activeUserId: user.id, seeded: true, version: 2, dataVersion: 10, cardioTimeMetric: true, legacyPlanRetiredV1: true });
       host.remove();
       this.markHasProfile(); // ya hay perfil: se oculta la presentación y se muestra la app
       document.getElementById('appShell').style.display = '';
@@ -461,7 +454,6 @@ const app = {
     });
   },
 
-  isFullPlan() { return !this.routine || !['custom', 'template'].includes(this.routine.planType); }, // el plan completo antiguo (sus guías y datos); las plantillas llevan las suyas
 
   // ---- Presentación (landing) vs app ----
   // Por defecto el HTML muestra la presentación; en cuanto hay perfil se marca el <html>
@@ -780,7 +772,7 @@ const app = {
                 tipo: d.tipo,
                 mensaje: d.mensaje.trim(),
                 contacto: (d.contacto || '').trim() || '(no indicado)',
-                version: 'v2.42.9',
+                version: 'v2.43.1',
                 perfil: (this.mainUser && this.mainUser.name) || '',
                 navegador: navigator.userAgent,
               }),
@@ -816,7 +808,7 @@ const app = {
     return `<div class="section">
       ${rows.map(r => `<button class="big-row" ${r.modal ? 'data-share' : r.landing ? 'data-landing' : `data-link="${r.v}"`}><span class="big-row-icon tile" style="background:${r.color}">${UI.icon(r.icon, 20)}</span><span class="big-row-text"><strong>${r.label}</strong><span class="dim">${r.sub}</span></span><span class="chev">›</span></button>`).join('')}
       <button class="big-row" data-feedback><span class="big-row-icon tile" style="background:var(--strong)">${UI.icon('chat', 20)}</span><span class="big-row-text"><strong>Sugerencias y reportes</strong><span class="dim">Envíame ideas o fallos</span></span><span class="chev">›</span></button>
-      <p class="version-foot">Traindía · v2.42.9 · ${Object.keys(this.usersById).length} perfil(es)<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
+      <p class="version-foot">Traindía · v2.43.1 · ${Object.keys(this.usersById).length} perfil(es)<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
     </div>`;
   },
   bindMore(root) {
@@ -1129,11 +1121,6 @@ const app = {
         <button class="btn ghost block" id="notifTest">${UI.icon('clock', 16)} Probar aviso (llega en 10 s)</button>
         <p class="field-hint" style="margin-bottom:0">Pulsa y <strong>bloquea el móvil</strong>: si a los 10 s te llega la notificación, está todo bien.</p>
       </div>
-      ${this.isFullPlan() ? `<div class="card">
-        <div class="card-label">Datos predefinidos</div>
-        <p class="field-hint" style="margin-top:0;margin-bottom:10px">Los ejercicios predefinidos nunca se borran. Si has cambiado tu rutina, puedes volver al plan original.</p>
-        <button class="btn ghost block" id="restorePlan">Restaurar plan original</button>
-      </div>` : ''}
       <div class="card">
         <div class="card-label">Datos de la app</div>
         <button class="btn ghost block" id="shareData">Compartir datos (exportar / importar)</button>
@@ -1143,7 +1130,7 @@ const app = {
         <p class="field-hint" style="margin-top:0">Restablece la app al estado inicial: se borran todos los perfiles, sesiones y progreso de este dispositivo. Haz antes una copia.</p>
         <button class="btn ghost danger small" id="resetApp">Borrar todos los datos</button>
       </div>
-      <p class="version-foot">Traindía · v2.42.9</p>
+      <p class="version-foot">Traindía · v2.43.1</p>
     </div>`;
   },
 
@@ -1163,18 +1150,6 @@ const app = {
       await this.loadUsers();
       UI.toast('Perfil actualizado');
       this.render();
-    });
-    const restorePlanBtn = root.querySelector('#restorePlan');
-    if (restorePlanBtn) restorePlanBtn.addEventListener('click', async () => {
-      const ok = await UI.confirm({
-        title: 'Restaurar plan original',
-        message: 'CUIDADO: esto SOBREESCRIBE los 7 días con el plan predefinido y BORRA todas las ediciones que hayas hecho en tu rutina (ejercicios, series, orden…). No se puede deshacer. Tus sesiones registradas y tu progreso NO se tocan.',
-        confirmLabel: 'Sí, restaurar plan', danger: true, requireText: 'RESTAURAR',
-      });
-      if (!ok) return;
-      await DB.restoreDefaultRoutine(this.mainUser.id);
-      await this.refreshRoutine();
-      UI.toast('Plan restaurado');
     });
     root.querySelector('#resetApp').addEventListener('click', async () => {
       const ok = await UI.confirm({
