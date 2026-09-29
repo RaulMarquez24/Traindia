@@ -771,7 +771,7 @@ const app = {
                 tipo: d.tipo,
                 mensaje: d.mensaje.trim(),
                 contacto: (d.contacto || '').trim() || '(no indicado)',
-                version: 'v2.44.3',
+                version: 'v2.45.0',
                 perfil: (this.mainUser && this.mainUser.name) || '',
                 navegador: navigator.userAgent,
               }),
@@ -826,7 +826,7 @@ const app = {
         <div class="more-group">${g.rows.map(r => `<button class="more-row" ${r.feedback ? 'data-feedback' : `data-link="${r.v}"`}>
           <span class="more-ic" style="background:${g.color}">${UI.icon(r.icon, 20)}</span>
           <span class="more-txt"><strong>${r.label}</strong><span${r.warn ? ' class="warn"' : ''}>${UI.esc(r.sub)}</span></span><span class="chev">›</span></button>`).join('')}</div>`).join('')}
-      <p class="version-foot">Traindía · v2.44.3 · ${Object.keys(this.usersById).length} perfil(es)<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
+      <p class="version-foot">Traindía · v2.45.0 · ${Object.keys(this.usersById).length} perfil(es)<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
     </div>`;
   },
   bindMore(root) {
@@ -890,7 +890,7 @@ const app = {
       <p class="section-intro">Desde el móvil también puedes mandarlos con <strong>Compartir → Traindía</strong>.</p>
       <button class="btn primary block" id="docAdd">${UI.icon('plus', 15)} Añadir documento</button>
       ${(this._docs || []).length ? rows : '<div class="empty-state"><p class="dim">Todavía no has añadido ninguno.</p></div>'}
-      <p class="section-intro" style="color:var(--priority)">⚠️ Se guardan <strong>en este dispositivo</strong> y no entran en las copias ni en el export: si borras los datos de la app, hay que volver a añadirlos.</p>
+      <p class="field-hint">Van incluidos en la <strong>copia completa</strong> (Más → Copias y datos): si cambias de móvil, vuelven con ella.</p>
     </div>`;
   },
   bindDocs(root) {
@@ -977,7 +977,7 @@ const app = {
         </div>
         <p class="bk-why">${why}</p>
         <button class="btn primary block" data-bk-act="profile">${UI.icon('download', 17)} ${state === 'never' ? 'Hacer mi primera copia' : 'Hacer copia completa ahora'}</button>
-        <p class="bk-note">Un archivo con todo: ejercicios, planes, sesiones, progreso y nutrición. Guárdalo en Drive, en el correo o en el ordenador.</p>
+        <p class="bk-note">Un archivo con todo: ejercicios, planes, sesiones, progreso, nutrición y documentos. Guárdalo en Drive, en el correo o en el ordenador.</p>
       </div>
 
       <div class="more-sec">Mover datos</div>
@@ -1193,7 +1193,7 @@ const app = {
       <div class="more-group">
         ${row('id="seeLanding"', 'info', 'var(--rest)', 'Ver la presentación', 'Qué es Traindía y cómo funciona')}
         ${row('id="seeRepo"', 'code', 'var(--rest)', 'Código en GitHub', 'Novedades de cada versión', `<span class="chev">↗</span>`)}
-        <div class="more-row set-ver"><span class="more-txt"><span>Versión</span></span><strong>v2.44.3</strong></div>
+        <div class="more-row set-ver"><span class="more-txt"><span>Versión</span></span><strong>v2.45.0</strong></div>
       </div>
 
       <div class="more-sec danger">Zona peligrosa</div>

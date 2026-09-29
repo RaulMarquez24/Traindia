@@ -813,7 +813,7 @@ const VPlan = (() => {
         </div>
         <span class="plan-card-actions">
           ${isActive ? '' : `<button class="btn ghost small" data-activate="${r.id}">Activar</button>`}
-          ${isActive ? '' : `<button class="icon-btn danger" data-del-plan="${r.id}" title="Eliminar plan">${UI.icon('trash', 17)}</button>`}
+          <button class="icon-btn" data-plan-menu="${r.id}" aria-label="Opciones de ${UI.esc(r.name)}">${UI.icon('more', 20)}</button>
         </span>
       </div>`;
     }).join('');
@@ -827,10 +827,10 @@ const VPlan = (() => {
     const planInfo = tplActive ? templateInfoHTML(tplActive) : '';
 
     return `
-      <div class="week-intro"><div class="eyebrow">Tus planes</div><h2>Planes</h2><p>Cambia entre planes o crea uno nuevo. El plan activo decide qué guías y contenido ves.</p></div>
+      <p class="section-intro">Cambia entre tus planes o crea uno nuevo. En <strong>⋯</strong> puedes renombrarlos, duplicarlos, exportarlos o borrarlos.</p>
       ${planCards}
       <button class="btn ghost block" id="newPlan">${UI.icon('plus', 16)} Crear plan</button>
-      <button class="btn ${VPlanAI.pidioPrompt() ? 'primary' : 'ghost'} block" id="aiPaste">${UI.icon('upload', 16)} Pegar el resultado de la IA</button>
+      ${VPlanAI.pidioPrompt() ? `<button class="btn primary block" id="aiPaste">${UI.icon('upload', 16)} Pegar el resultado de la IA</button>` : ''}
       ${notesHTML}
       ${planInfo}`;
   }
@@ -842,17 +842,64 @@ const VPlan = (() => {
       app.render();
       UI.toast('Plan activado');
     }));
-    root.querySelectorAll('[data-del-plan]').forEach(b => b.addEventListener('click', async () => {
-      const ok = await UI.confirm({ title: 'Eliminar plan', message: 'Se borra este plan (sus días y rutina). Tus sesiones y progreso NO se tocan.', confirmLabel: 'Eliminar', danger: true });
-      if (!ok) return;
-      await DB.deletePlan(b.dataset.delPlan);
-      app.render();
-      UI.toast('Plan eliminado');
-    }));
+    root.querySelectorAll('[data-plan-menu]').forEach(b => b.addEventListener('click', () => planMenu(app, b.dataset.planMenu)));
     const newPlan = root.querySelector('#newPlan');
     if (newPlan) newPlan.addEventListener('click', () => createPlanModal(app));
     const aiPaste = root.querySelector('#aiPaste');
     if (aiPaste) aiPaste.addEventListener('click', () => VPlanAI.paste(app));
+  }
+
+  // Menú «⋯» de un plan: activar, renombrar, duplicar, exportar y borrar.
+  async function planMenu(app, planId) {
+    const uid = app.activeUser.id;
+    const plans = await DB.routinesOf(uid);
+    const rt = plans.find(x => x.id === planId); if (!rt) return;
+    const isActive = app.routine && app.routine.id === rt.id;
+    const done = async (msg) => { await app.refreshRoutine(); app.render(); if (msg) UI.toast(msg); };
+    const ov = UI.modal({
+      title: rt.name || 'Plan',
+      bodyHTML: `<div class="menu-list">
+        ${isActive ? '' : `<button class="menu-row" data-op="activate"><span>${UI.icon('check', 16)} Activar este plan</span><span class="chev">›</span></button>`}
+        <button class="menu-row" data-op="rename"><span>${UI.icon('edit', 16)} Renombrar</span><span class="chev">›</span></button>
+        <button class="menu-row" data-op="dup"><span>${UI.icon('repeat', 16)} Duplicar</span><span class="chev">›</span></button>
+        <button class="menu-row" data-op="export"><span>${UI.icon('upload', 16)} Exportar</span><span class="chev">›</span></button>
+        <button class="menu-row danger" data-op="del"><span>${UI.icon('trash', 16)} Borrar</span><span class="chev">›</span></button>
+      </div>`,
+      actions: [{ label: 'Cerrar', kind: 'ghost' }],
+      onMount: (m) => {
+        const on = (op, fn) => { const x = m.querySelector(`[data-op="${op}"]`); if (x) x.addEventListener('click', () => { UI.closeModal(ov); fn(); }); };
+        on('activate', async () => { await DB.setActivePlan(uid, rt.id); await done('Plan activado'); });
+        on('rename', () => UI.modal({
+          title: 'Renombrar plan',
+          bodyHTML: `<div id="rnForm">${UI.field('Nombre', UI.input('name', rt.name || '', { placeholder: 'Ej: Fuerza otoño' }))}</div>`,
+          actions: [
+            { label: 'Cancelar', kind: 'ghost' },
+            { label: 'Guardar', kind: 'primary', onClick: async (r2) => {
+              const name = (UI.readForm(r2.querySelector('#rnForm')).name || '').trim();
+              if (!name) { UI.toast('Escribe un nombre', 'err'); return false; }
+              rt.name = name; await DB.put('routines', rt); await done('Plan renombrado');
+            } },
+          ],
+          onMount: (r2) => { const i = r2.querySelector('input[name="name"]'); if (i) { i.focus(); i.select(); } },
+        }));
+        on('dup', async () => {
+          const copy = JSON.parse(JSON.stringify(rt));
+          copy.id = DB.uid('rt'); copy.name = `${rt.name || 'Plan'} (copia)`; copy.isPrimary = false;
+          copy.order = Date.now(); copy.createdAt = Date.now();
+          (copy.days || []).forEach(d => { d.id = DB.uid('day'); }); // días propios: las sesiones del original no se mezclan
+          await DB.put('routines', copy); await done('Plan duplicado: está debajo, sin activar');
+        });
+        on('export', () => VData.exportRoutine(app, rt));
+        on('del', async () => {
+          if (plans.length === 1) { UI.toast('Es tu único plan: crea otro antes de borrarlo', 'err'); return; }
+          const ok = await UI.confirm({ title: `¿Borrar ${rt.name || 'este plan'}?`, message: `Se borra el plan (sus días y ejercicios asignados). Tus sesiones, registros y progreso NO se tocan.${isActive ? ' Como es el activo, pasará a activo otro de tus planes.' : ''}`, confirmLabel: 'Borrar plan', danger: true });
+          if (!ok) return;
+          await DB.deletePlan(rt.id);
+          if (isActive) { const next = plans.filter(x => x.id !== rt.id).sort((a, b) => (a.order || 0) - (b.order || 0))[0]; if (next) await DB.setActivePlan(uid, next.id); }
+          await done('Plan borrado');
+        });
+      },
+    });
   }
 
   function createPlanModal(app) {
