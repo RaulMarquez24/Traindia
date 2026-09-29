@@ -664,6 +664,14 @@ body[data-view="live"] .install-prompt { display: none !important; }
 .ex-list li.cat-row { cursor: pointer; transition: background .15s ease; padding-right: 10px; }
 .ex-list li.cat-row:active, .ex-list li.cat-row:focus-visible { background: var(--line-soft); outline: none; }
 .ex-list li.cat-row.unused .ex-name { color: var(--ink-dim); }
+.cat-use4 .seg-opt { display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 7px 4px; font-size: 13px; line-height: 1.15; min-width: 0; }
+.cat-use4 .seg-opt > span:first-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.cat-picks { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 6px; }
+.cat-pick { display: flex; align-items: center; gap: 6px; min-width: 0; padding: 9px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg-card); color: var(--ink); font: 600 14px 'Inter Tight', sans-serif; cursor: pointer; white-space: nowrap; overflow: hidden; }
+.cat-pick .dim { font-weight: 500; color: var(--ink-dim); }
+.cat-pick svg { margin-left: auto; flex: none; color: var(--ink-dim); }
+.cat-pick.on { border-color: var(--strong); color: var(--strong); }
+.menu-row.on { border-color: var(--strong); }
 .cat-row .ex-sub { display: flex; align-items: center; flex-wrap: wrap; gap: 0 5px; }
 .cat-row .ex-sub .ex-type { color: var(--strong); }
 .cat-ic { display: inline-flex; align-items: center; gap: 2px; margin-left: 4px; font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: var(--ink-soft); }

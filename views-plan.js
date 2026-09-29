@@ -1257,7 +1257,10 @@ const VPlan = (() => {
   const EX_UI_KEY = 'traindia.exCatalog';
   const exUI = (() => {
     const def = { q: '', use: 'all', type: '', cat: '' };
-    try { return Object.assign(def, JSON.parse(sessionStorage.getItem(EX_UI_KEY) || '{}')); } catch (e) { return def; }
+    let o = def;
+    try { o = Object.assign(def, JSON.parse(sessionStorage.getItem(EX_UI_KEY) || '{}')); } catch (e) {}
+    if (!['all', 'used', 'past', 'never'].includes(o.use)) o.use = 'all'; // «Sin usar» ya no existe: se parte en dos
+    return o;
   })();
   function saveExUI() { try { sessionStorage.setItem(EX_UI_KEY, JSON.stringify(exUI)); } catch (e) {} }
 
@@ -1309,6 +1312,8 @@ const VPlan = (() => {
       const recs = recsOf(e);
       return {
         e, days, used: days.length > 0, recs: recs.n, lastRec: recs.last, subOf: [...new Set(subOf[e.id] || [])],
+        // en uso (en tu plan) · usado antes (sin plan, pero con registros) · nunca usado
+        state: days.length > 0 ? 'used' : recs.n ? 'past' : 'never',
         group: e.muscleGroup || 'General',
         type: e.type || 'weight',
         vids: DB.exVideos(e).length,
@@ -1332,16 +1337,15 @@ const VPlan = (() => {
           <button class="btn primary cat-new" id="addEx" aria-label="Nuevo ejercicio">${UI.icon('plus', 16)}<span>Nuevo</span></button>
         </div>
         <div class="cat-filters"><div>
-          <div class="seg cat-use" id="catUse"></div>
-          <div class="chips-scroll" id="catTypes"></div>
-          <div class="chips-scroll" id="catCats"></div>
+          <div class="seg cat-use cat-use4" id="catUse"></div>
+          <div class="cat-picks" id="catPicks"></div>
         </div></div>
       </div>
       <div class="cat-count" id="catCount"></div>
       <div id="catalogBody"></div>
       ${removableDup.length ? `<button class="btn ghost danger block" id="cleanDups" style="margin-top:16px">${UI.icon('trash', 16)} Eliminar ${removableDup.length} duplicado${removableDup.length === 1 ? '' : 's'} idéntico${removableDup.length === 1 ? '' : 's'}</button>` : ''}
       <details class="det cat-help"><summary>¿Cómo funciona el catálogo?</summary>
-        <p class="field-hint">Catálogo de <strong>${UI.esc(app.activeUser.name)}</strong>. Un ejercicio está <strong>en uso</strong> si aparece en algún día de tu plan (o es suplente de uno que lo está); si lo quitas de todos los días pasa a <strong>sin usar</strong>. Los que no usas se pueden borrar; si tienen registros, te pide confirmarlo. Toca un ejercicio para editarlo.</p>
+        <p class="field-hint">Catálogo de <strong>${UI.esc(app.activeUser.name)}</strong>. <strong>En uso</strong>: está en algún día de tu plan activo (o es suplente de uno que lo está). <strong>Antes</strong> (usados antes): ya no están en tu plan, pero los apuntaste alguna vez (por ejemplo, de un plan anterior); su historial sigue en Progreso. <strong>Nunca usados</strong>: ni en tu plan ni con registros; son los que puedes borrar sin perder nada. Toca un ejercicio para editarlo.</p>
       </details>
     </div>`;
   }
@@ -1376,7 +1380,7 @@ const VPlan = (() => {
 
     const matches = (it, skip) =>
       (!exUI.q || it.search.includes(UI.norm(exUI.q))) &&
-      (skip === 'use' || exUI.use === 'all' || (exUI.use === 'used' ? it.used : !it.used)) &&
+      (skip === 'use' || exUI.use === 'all' || it.state === exUI.use) &&
       (skip === 'type' || !exUI.type || it.type === exUI.type) &&
       (skip === 'cat' || !exUI.cat || it.group === exUI.cat);
     const countBy = (skip, key) => {
@@ -1392,16 +1396,17 @@ const VPlan = (() => {
       const asSub = realDays.length !== it.days.length;
       // «Suplente de Plancha frontal» (o «de A, B y 2 más» si lo es de varios)
       const de = it.subOf.length > 2 ? `${it.subOf.slice(0, 2).join(', ')} y ${it.subOf.length - 2} más` : it.subOf.join(' y ');
-      const where = !it.used ? 'Sin usar'
+      const cuando = it.lastRec ? ` · último, ${UI.fmtDateShort(it.lastRec)}` : '';
+      const where = it.state === 'past' ? `Usado antes${cuando}` : it.state === 'never' ? 'Nunca usado'
         : realDays.length ? 'En ' + realDays.join(', ') + (asSub ? ` · suplente de ${de}` : '')
         : `Suplente de ${de}`;
       const extras = [
         it.vids ? `<span class="cat-ic" title="Vídeos">${UI.icon('play', 9)}${it.vids}</span>` : '',
         it.subs ? `<span class="cat-ic sub" title="Suplentes">${UI.icon('repeat', 10)}${it.subs}</span>` : '',
       ].join('');
-      const recs = it.recs ? `<span class="cat-recs" title="Entrenos en los que lo has apuntado">${UI.icon('activity', 10)}${it.recs} registro${it.recs === 1 ? '' : 's'}</span>` : '<span class="cat-recs none">Sin registros</span>';
+      const recs = it.recs ? `<span class="cat-recs" title="Entrenos en los que lo has apuntado">${UI.icon('activity', 10)}${it.recs} registro${it.recs === 1 ? '' : 's'}</span>` : ''; // sin registros: nada (era ruido)
       const deletable = !it.used;
-      return `<li class="cat-row${it.used ? '' : ' unused'}" data-edit="${e.id}" tabindex="0" role="button">
+      return `<li class="cat-row${it.state === 'never' ? ' unused' : it.state === 'past' ? ' past' : ''}" data-edit="${e.id}" tabindex="0" role="button">
         <span class="ex-name-wrap">
           <span class="ex-name">${UI.esc(e.name)}</span>
           <span class="ex-sub"><span class="ex-type">${TYPE_NAME[it.type] || it.type}</span> · ${UI.esc(where)}${extras}${recs}</span>
@@ -1414,24 +1419,18 @@ const VPlan = (() => {
 
     const paint = () => {
       const all = items.length;
-      const useC = countBy('use', it => it.used ? 'used' : 'unused');
+      const useC = countBy('use', it => it.state);
       const useOpts = [
-        { v: 'all', l: 'Todos', n: (useC.used || 0) + (useC.unused || 0) },
+        { v: 'all', l: 'Todos', n: (useC.used || 0) + (useC.past || 0) + (useC.never || 0) },
         { v: 'used', l: 'En uso', n: useC.used || 0 },
-        { v: 'unused', l: 'Sin usar', n: useC.unused || 0 },
+        { v: 'past', l: 'Antes', n: useC.past || 0 }, // usados antes: sin plan, pero con registros
+        { v: 'never', l: 'Nunca', n: useC.never || 0 },
       ];
-      $('#catUse').innerHTML = useOpts.map(o => `<button class="seg-opt${exUI.use === o.v ? ' on' : ''}" data-use="${o.v}">${o.l} <span class="cat-n">${o.n}</span></button>`).join('');
+      $('#catUse').innerHTML = useOpts.map(o => `<button class="seg-opt${exUI.use === o.v ? ' on' : ''}" data-use="${o.v}"><span>${o.l}</span><span class="cat-n">${o.n}</span></button>`).join('');
 
-      const typeC = countBy('type', it => it.type);
-      $('#catTypes').innerHTML = TYPE_FILTERS
-        .filter(t => !t.v || typeC[t.v] || exUI.type === t.v)
-        .map(t => `<button class="chip${exUI.type === t.v ? ' on' : ''}" data-type="${t.v}">${t.l}${t.v ? ` <span class="cat-n">${typeC[t.v] || 0}</span>` : ''}</button>`).join('');
-
-      const catC = countBy('cat', it => it.group);
-      const cats = [...new Set(items.map(it => it.group))].sort((a, b) => a.localeCompare(b))
-        .filter(c => catC[c] || exUI.cat === c);
-      $('#catCats').innerHTML = `<button class="chip${exUI.cat ? '' : ' on'}" data-cat="">Todas las categorías</button>` +
-        cats.map(c => `<button class="chip${exUI.cat === c ? ' on' : ''}" data-cat="${UI.esc(c)}">${UI.esc(c)} <span class="cat-n">${catC[c] || 0}</span></button>`).join('');
+      const tName = (TYPE_FILTERS.find(t => t.v === exUI.type) || TYPE_FILTERS[0]).l;
+      $('#catPicks').innerHTML = `<button class="cat-pick${exUI.type ? ' on' : ''}" data-pick="type"><span class="dim">Tipo</span> ${UI.esc(exUI.type ? tName : 'Todos')} ${UI.icon('chevronDown', 14)}</button>
+        <button class="cat-pick${exUI.cat ? ' on' : ''}" data-pick="cat"><span class="dim">Categoría</span> ${UI.esc(exUI.cat || 'Todas')} ${UI.icon('chevronDown', 14)}</button>`;
 
       const shown = items.filter(it => matches(it));
       $('#catCount').innerHTML = `<span>${filtersOn() ? `${shown.length} de ${all}` : all} ejercicio${all === 1 ? '' : 's'}</span>` +
@@ -1458,6 +1457,22 @@ const VPlan = (() => {
     };
 
     const set = (patch) => { Object.assign(exUI, patch); saveExUI(); paint(); };
+    const pick = (what) => {
+      const isType = what === 'type';
+      const c = countBy(what, it => isType ? it.type : it.group);
+      const opts = isType
+        ? TYPE_FILTERS.filter(t => !t.v || c[t.v] || exUI.type === t.v).map(t => ({ v: t.v, l: t.v ? t.l : 'Todos los tipos', n: t.v ? (c[t.v] || 0) : null }))
+        : [{ v: '', l: 'Todas las categorías', n: null }, ...[...new Set(items.map(it => it.group))].sort((a, b) => a.localeCompare(b)).filter(g => c[g] || exUI.cat === g).map(g => ({ v: g, l: g, n: c[g] || 0 }))];
+      const cur = isType ? exUI.type : exUI.cat;
+      const ov = UI.modal({
+        title: isType ? 'Tipo de ejercicio' : 'Categoría',
+        bodyHTML: `<div class="menu-list">${opts.map((o, i) => `<button class="menu-row${o.v === cur ? ' on' : ''}" data-o="${i}"><span>${UI.esc(o.l)}${o.n != null ? ` <span class="cat-n">${o.n}</span>` : ''}</span>${o.v === cur ? UI.icon('check', 16) : ''}</button>`).join('')}</div>`,
+        actions: [{ label: 'Cerrar', kind: 'ghost' }],
+        onMount: (m) => m.querySelectorAll('[data-o]').forEach(b => b.addEventListener('click', () => {
+          const o = opts[+b.dataset.o]; UI.closeModal(ov); set(isType ? { type: o.v } : { cat: o.v });
+        })),
+      });
+    };
 
     // Recarga los datos y repinta SOLO la lista: se conservan filtros, búsqueda y
     // posición. Si se indica un id, se resalta esa fila.
@@ -1490,6 +1505,7 @@ const VPlan = (() => {
     host.addEventListener('click', async (ev) => {
       const t = ev.target;
       const use = t.closest('[data-use]'); if (use) { set({ use: use.dataset.use }); return; }
+      const pk = t.closest('[data-pick]'); if (pk) { pick(pk.dataset.pick); return; }
       const ty = t.closest('[data-type]'); if (ty) { set({ type: ty.dataset.type }); return; }
       const cat = t.closest('[data-cat]'); if (cat) { set({ cat: cat.dataset.cat }); return; }
       if (t.closest('[data-reset]')) { search.value = ''; set({ q: '', use: 'all', type: '', cat: '' }); return; }
