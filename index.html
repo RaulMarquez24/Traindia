@@ -903,7 +903,7 @@
   <div style="flex:1">
     <h1 id="headerTitle">Traindía</h1>
   </div>
-  <button class="header-btn" id="dataBtn" aria-label="Compartir / Datos" title="Importar / Exportar"><svg class="ic" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 21V3M3 7l4-4 4 4M17 3v18M21 17l-4 4-4-4"/></svg></button>
+  <button class="header-btn" id="dataBtn" aria-label="Compartir: exportar o importar" title="Compartir: exportar o importar"><svg class="ic" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7"/><path d="M16 6l-4-4-4 4"/><path d="M12 2v13"/></svg></button>
   <button class="user-chip" id="userChip" aria-label="Perfil"></button>
 </header>
 
@@ -1012,7 +1012,7 @@
       const dismissed = +localStorage.getItem('traindia-install-dismissed') || 0;
       ok = localStorage.getItem('traindia-first-workout') === '1' && Date.now() - dismissed > 14 * 86400000;
     } catch (e) {}
-    if (ok) document.getElementById('installPrompt').classList.add('show');
+    if (ok) { document.getElementById('installPrompt').classList.add('show'); document.body.classList.add('install-shown'); }
   };
   document.getElementById('installBtn')?.addEventListener('click', async () => {
     if (deferredPrompt) {
@@ -1020,10 +1020,12 @@
       const { outcome } = await deferredPrompt.userChoice;
       deferredPrompt = null;
       document.getElementById('installPrompt').classList.remove('show');
+      document.body.classList.remove('install-shown');
     }
   });
   document.getElementById('installClose')?.addEventListener('click', () => {
     document.getElementById('installPrompt').classList.remove('show');
+    document.body.classList.remove('install-shown');
     try { localStorage.setItem('traindia-install-dismissed', String(Date.now())); } catch (e) {}
   });
 </script>

@@ -350,8 +350,15 @@ const VProgress = (() => {
   }
 
   // ====================================================
-  function render(app, params) {
-    const tab = params.tab || 'body';
+  async function render(app, params) {
+    // Sin pestaña elegida: «Corporal» si hay medidas; si no, «Por ejercicio» (donde
+    // están los datos de quien solo entrena). Se guarda en params para bind().
+    if (!params.tab) {
+      let body = [];
+      try { body = await DB.progressOf(app.activeUser.id); } catch (e) {}
+      params.tab = body.length ? 'body' : 'exercise';
+    }
+    const tab = params.tab;
     const tabs = [
       { id: 'body', label: 'Corporal' },
       { id: 'exercise', label: 'Por ejercicio' },

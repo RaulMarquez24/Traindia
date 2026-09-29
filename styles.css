@@ -723,6 +723,10 @@ body[data-view="live"] .install-prompt { display: none !important; }
 .picker-tag { font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: var(--ink-dim); letter-spacing: 0.04em; text-transform: uppercase; }
 
 /* ---- Toast ---- */
+/* Con el aviso de instalar visible, los avisos salen por encima de él (no se pisan). */
+body.install-shown .toast { bottom: calc(var(--nav-h) + 104px + var(--safe-bottom)); }
+/* La última vez, en gris dentro de las casillas del entreno */
+.set-f.last-ph::placeholder, .set-wrap.pend .set-f.last-ph::placeholder { color: var(--ink-dim); opacity: .6; font-weight: 500; }
 .toast {
   position: fixed; bottom: calc(var(--nav-h) + 20px + var(--safe-bottom)); left: 50%;
   transform: translateX(-50%) translateY(20px); background: var(--ink); color: var(--bg); padding: 10px 18px;

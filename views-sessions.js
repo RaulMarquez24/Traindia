@@ -497,6 +497,15 @@ const VSessions = (() => {
     if (t.hr) parts.push(`${t.hr} ppm`);
     return parts.join(' · ');
   }
+  // La serie equivalente de la última vez (la misma posición o, si hubo menos, la
+  // última), para enseñarla en gris dentro de las casillas y usarla al tocar ✓.
+  function lastSetFor(entry, si) {
+    const prev = _lastTimeMap && _lastTimeMap[keyForEntry(entry)];
+    const type = entry.type || 'weight';
+    if (!prev || prev.type !== type || (type !== 'weight' && type !== 'reps') || !prev.sets.length) return null;
+    return prev.sets[Math.min(si, prev.sets.length - 1)];
+  }
+
   function lastTimeHTML(entry) {
     const prev = _lastTimeMap && _lastTimeMap[keyForEntry(entry)];
     if (!prev) return '';
@@ -1015,10 +1024,15 @@ const VSessions = (() => {
 
       // weight / reps: fila principal + dropsets opcionales
       let mainFields;
+      // En vivo, las casillas enseñan en gris lo de la última vez (si no hay nada escrito).
+      const last = mode === 'live' ? lastSetFor(entry, si) : null;
+      const phR = last && last.reps ? String(last.reps) : 'reps';
+      const phW = last && last.weight ? String(last.weight) : 'kg';
+      const lc = (ph, def) => ph !== def ? ' last-ph' : '';
       if (type === 'reps') {
-        mainFields = `<input class="inp set-f set-reps" data-f="reps" data-ei="${ei}" data-si="${si}" type="number" min="0" value="${UI.esc(s.reps)}" placeholder="reps"${dis}>${loadChipHTML(s, ei, si, dis)}`;
+        mainFields = `<input class="inp set-f set-reps${lc(phR, 'reps')}" data-f="reps" data-ei="${ei}" data-si="${si}" type="number" min="0" value="${UI.esc(s.reps)}" placeholder="${UI.esc(phR)}"${dis}>${loadChipHTML(s, ei, si, dis)}`;
       } else {
-        mainFields = `<input class="inp set-f" data-f="reps" data-ei="${ei}" data-si="${si}" type="number" min="0" value="${UI.esc(s.reps)}" placeholder="reps"${dis}><span class="set-x">×</span><input class="inp set-f" data-f="weight" data-ei="${ei}" data-si="${si}" type="number" min="0" step="0.5" value="${UI.esc(s.weight)}" placeholder="kg"${dis}>`;
+        mainFields = `<input class="inp set-f${lc(phR, 'reps')}" data-f="reps" data-ei="${ei}" data-si="${si}" type="number" min="0" value="${UI.esc(s.reps)}" placeholder="${UI.esc(phR)}"${dis}><span class="set-x">×</span><input class="inp set-f${lc(phW, 'kg')}" data-f="weight" data-ei="${ei}" data-si="${si}" type="number" min="0" step="0.5" value="${UI.esc(s.weight)}" placeholder="${UI.esc(phW)}"${dis}>`;
       }
       const drops = (s.drops || []).map((d, di) => {
         let df;
@@ -1312,7 +1326,14 @@ const VSessions = (() => {
         sync(); s.entries.splice(+b.dataset.ei, 1); redraw();
       }));
       root.querySelectorAll('[data-done]').forEach(b => b.addEventListener('click', () => {
-        sync(); const set = s.entries[+b.dataset.ei].sets[+b.dataset.si]; set.done = !set.done; redraw();
+        sync();
+        const entry = s.entries[+b.dataset.ei], si = +b.dataset.si, set = entry.sets[si];
+        // ✓ sin haber escrito nada: se apunta lo mismo que la última vez (lo que se veía en gris).
+        if (!set.done && !setHasData(set)) {
+          const last = lastSetFor(entry, si);
+          if (last) { if (last.reps) set.reps = last.reps; if (last.weight) set.weight = last.weight; if (last.load != null && last.load !== '') { set.load = last.load; if (last.loadMode) set.loadMode = last.loadMode; } }
+        }
+        set.done = !set.done; redraw();
       }));
       root.querySelectorAll('[data-chk]').forEach(b => b.addEventListener('click', () => {
         sync(); marcarCheck(s.entries[+b.dataset.ei].sets[+b.dataset.si], b.dataset.chk); redraw();
@@ -1384,6 +1405,17 @@ const VSessions = (() => {
       if (!algoHecho) {
         UI.toast(algoApuntado ? 'Marca algo como hecho o apunta alguna serie' : 'Registra al menos una serie', 'err');
         return;
+      }
+      // Ejercicios sin nada apuntado: se avisa antes de guardar (al guardar desaparecen).
+      const sinApuntar = s.entries.filter(e => !conDatos(e).length).map(e => e.name);
+      if (sinApuntar.length) {
+        const lista = sinApuntar.slice(0, 4).join(', ') + (sinApuntar.length > 4 ? ` y ${sinApuntar.length - 4} más` : '');
+        const ok = await UI.confirm({
+          title: sinApuntar.length === 1 ? 'Te queda 1 ejercicio sin apuntar' : `Te quedan ${sinApuntar.length} ejercicios sin apuntar`,
+          message: `${lista}. Si terminas ahora, se guarda solo lo que has apuntado.`,
+          confirmLabel: 'Terminar igualmente',
+        });
+        if (!ok) return;
       }
       // limpiar series vacías y entradas sin series
       s.entries.forEach(e => { e.sets = conDatos(e); });
