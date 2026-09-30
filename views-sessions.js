@@ -15,6 +15,8 @@ const VSessions = (() => {
     { key: 'kcal', label: 'Kcal', unit: 'kcal', ph: 'kcal', step: '1', scope: 'total' },
     { key: 'hr', label: 'Pulsaciones', unit: 'ppm', ph: 'ppm', step: '1', scope: 'total' },
     { key: 'pace', label: 'Ritmo', unit: 'min/km', ph: '', step: '1', scope: 'set' }, // de cada serie: tiempo ÷ distancia de la serie (editable)
+    { key: 'sdist', label: 'Distancia', unit: 'm', ph: 'metros', step: '1', scope: 'set' },   // la de esa serie (370 m en vez de 400)
+    { key: 'shr', label: 'Pulsaciones', unit: 'ppm', ph: 'ppm', step: '1', scope: 'set' },     // al acabar la serie
     { key: 'speed', label: 'Velocidad', unit: 'km/h', ph: 'km/h', step: '0.1', scope: 'set' },
     { key: 'incline', label: 'Inclinación', unit: '%', ph: 'incl %', step: '0.5', scope: 'set' },
     { key: 'level', label: 'Nivel', unit: '', ph: 'nivel', step: '1', scope: 'set' },
@@ -199,16 +201,23 @@ const VSessions = (() => {
     const n = (entry.sets || []).filter(x => parseInt(x.time) > 0).length;
     return dist > 0 && n ? dist / n : 0;
   }
+  // Distancia propia de la serie en km (la apuntada en metros, o la antigua en km).
+  const setKm = (set) => { const m = parseFloat(String(set.sdist || '').replace(',', '.')); return m > 0 ? m / 1000 : (set.distance ? parseFloat(set.distance) : 0); };
+  // Distancia hecha sumando las series: la suya si la apuntaste, si no la del objetivo.
+  function sumKm(entry) {
+    const d = repDistKm({ ...entry, totals: {} }); // solo objetivo/nombre (sin repartir el total)
+    return (entry.sets || []).reduce((a, x) => a + (setKm(x) || (parseInt(x.time) > 0 ? d : 0)), 0);
+  }
   function setPaceSec(entry, set, distKm) {
     if (set.pace != null && set.pace !== '') return parseInt(set.pace) || 0;
-    const d = set.distance ? parseFloat(set.distance) : (distKm != null ? distKm : repDistKm(entry));
+    const d = setKm(set) || (distKm != null ? distKm : repDistKm(entry));
     const sec = parseInt(set.time) || 0;
     return d > 0 && sec > 0 ? Math.round(sec / d) : 0;
   }
   // Ritmo medio de todas las series con ritmo (ponderado por distancia).
   function avgPaceSec(entry) {
     const d = repDistKm(entry); let sec = 0, km = 0;
-    (entry.sets || []).forEach(x => { const p = setPaceSec(entry, x, d), dist = x.distance ? parseFloat(x.distance) : d; if (p && dist > 0) { sec += p * dist; km += dist; } });
+    (entry.sets || []).forEach(x => { const p = setPaceSec(entry, x, d), dist = setKm(x) || d; if (p && dist > 0) { sec += p * dist; km += dist; } });
     return km > 0 ? Math.round(sec / km) : 0;
   }
   const fmtPace = (sec) => sec > 0 ? `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}` : '';
@@ -340,7 +349,7 @@ const VSessions = (() => {
     // Ejercicios de "hecho / no hecho": el dato es la marca. «No hecho» (skip) también
     // se registra; solo lo que se queda sin marcar se considera vacío.
     if (s && s.check) return !!s.done || !!s.skip;
-    return s.reps || s.weight || s.time || s.speed || s.level || s.incline || s.load || s.distance || s.kcal ||
+    return s.reps || s.weight || s.time || s.speed || s.level || s.incline || s.load || s.distance || s.kcal || s.sdist || s.shr ||
       (s.drops && s.drops.some(dropHasData));
   }
   // «Hecho / no hecho»: tocar una opción la marca; tocar la que ya está marcada la
@@ -400,7 +409,9 @@ const VSessions = (() => {
       if (set.weight) parts.push(`${set.weight} kg`);
       const ls = loadSuffix(set).trim(); if (ls) parts.push(ls); // lastre/asistencia (suspensiones/colgadas)
       const ex = cardioExtra(set); if (ex) parts.push(ex);
+      if (set.sdist) parts.push(`${set.sdist} m`);
       if (entry && paceOn(entry)) { const p = setPaceSec(entry, set); if (p) parts.push(`${fmtPace(p)} /km`); }
+      if (set.shr) parts.push(`${set.shr} ppm`);
       v = parts.join(' · ') || '0s';
       if (set.label) v = `${set.label} · ${v}`;
     } else if (type === 'reps') {
@@ -546,12 +557,13 @@ const VSessions = (() => {
       const totalSec = (t.time != null && t.time !== '') ? parseInt(t.time) : prev.sets.reduce((a, s) => a + (parseInt(s.time) || 0), 0);
       if (totalSec) parts.push(fmtClock(totalSec));
     }
-    const dist = t.distance ? parseFloat(t.distance) : prev.sets.reduce((a, s) => a + (parseFloat(s.distance) || 0), 0);
+    const dist = t.distance ? parseFloat(t.distance) : sumKm(prev);
     const kc = t.kcal ? parseFloat(t.kcal) : prev.sets.reduce((a, s) => a + (parseFloat(s.kcal) || 0), 0);
     if (dist) parts.push(`${Math.round(dist * 100) / 100} km`);
     if (kc) parts.push(`${Math.round(kc)} kcal`);
     if (t.hr) parts.push(`${t.hr} ppm`);
     if (active.has('pace')) { const p = avgPaceSec(prev); if (p) parts.push(`ritmo medio ${fmtPace(p)} /km`); }
+    { const hrs = prev.sets.map(x => parseFloat(x.shr)).filter(v => v > 0); if (hrs.length && !t.hr) parts.push(`${Math.round(hrs.reduce((a, b) => a + b, 0) / hrs.length)} ppm de media`); }
     return parts.join(' · ');
   }
   // La serie equivalente de la última vez (la misma posición o, si hubo menos, la
@@ -1085,7 +1097,12 @@ const VSessions = (() => {
           ${(() => { const ms = timeSetMetrics(entry); return ms.length ? `<div class="set-extra">${ms.map(k => {
             if (k === 'load') return loadChipHTML(s, ei, si, dis); // lastre/asistencia = chip tocable (± kg)
             if (k === 'pace') return paceChipHTML(entry, s, ei, si, dis); // ritmo de la serie (se calcula solo)
-            const f = TIME_FIELD[k]; return `<input class="inp set-f" data-f="${k}" data-ei="${ei}" data-si="${si}" type="number" min="0" step="${f.step}" value="${UI.esc(s[k] || '')}" placeholder="${f.ph}"${dis}>`;
+            const f = TIME_FIELD[k];
+            if (k === 'sdist' || k === 'shr') {
+              // Distancia: en gris la que se usa si no la cambias (la del objetivo, p. ej. 400)
+              const rd = k === 'sdist' ? Math.round(repDistKm({ ...entry, totals: {} }) * 1000) : 0;
+              return `<span class="chk-f"><input class="inp set-f" data-f="${k}" data-ei="${ei}" data-si="${si}" type="number" min="0" step="${f.step}" value="${UI.esc(s[k] || '')}" placeholder="${rd || '—'}"${dis}><span class="set-x">${f.unit}</span></span>`;
+            } return `<input class="inp set-f" data-f="${k}" data-ei="${ei}" data-si="${si}" type="number" min="0" step="${f.step}" value="${UI.esc(s[k] || '')}" placeholder="${f.ph}"${dis}>`;
           }).join('')}</div>` : ''; })()}
           ${footBtns}
         </div>`;
@@ -1167,7 +1184,8 @@ const VSessions = (() => {
       if (!wrap || !pv) return;
       const mm = wrap.querySelector('[data-f="timemin"]'), ss = wrap.querySelector('[data-f="timesec"]');
       const sec = (parseInt(mm && mm.value) || 0) * 60 + (parseInt(ss && ss.value) || 0);
-      let km = parseFloat(pb.dataset.km) || 0;
+      const own = wrap.querySelector('[data-f="sdist"]');
+      let km = own && parseFloat(String(own.value).replace(',', '.')) > 0 ? parseFloat(String(own.value).replace(',', '.')) / 1000 : (parseFloat(pb.dataset.km) || 0);
       if (!km) { // sin distancia en el objetivo: la total repartida entre las series con tiempo
         const card = pb.closest('.ex-card'); const di = card && card.querySelector('.ex-total-f[data-tf="distance"]');
         const dist = di ? parseFloat(String(di.value).replace(',', '.')) : 0;
@@ -1891,12 +1909,13 @@ const VSessions = (() => {
       const totalSec = (t.time != null && t.time !== '') ? parseInt(t.time) : (e.sets || []).reduce((a, set) => a + (parseInt(set.time) || 0), 0);
       if (totalSec) parts.push(`${fmtClock(totalSec)} total`);
     }
-    const dist = t.distance ? parseFloat(t.distance) : (e.sets || []).reduce((a, set) => a + (parseFloat(set.distance) || 0), 0); // compat viejas
+    const dist = t.distance ? parseFloat(t.distance) : sumKm(e); // la de cada serie (o la del objetivo)
     const kc = t.kcal ? parseFloat(t.kcal) : (e.sets || []).reduce((a, set) => a + (parseFloat(set.kcal) || 0), 0);
     if (dist) parts.push(`${Math.round(dist * 100) / 100} km`);
     if (kc) parts.push(`${Math.round(kc)} kcal`);
     if (t.hr) parts.push(`${t.hr} ppm`);
     if (active.has('pace')) { const p = avgPaceSec(e); if (p) parts.push(`ritmo medio ${fmtPace(p)} /km`); }
+    { const hrs = (e.sets || []).map(x => parseFloat(x.shr)).filter(v => v > 0); if (hrs.length && !t.hr) parts.push(`${Math.round(hrs.reduce((a, b) => a + b, 0) / hrs.length)} ppm de media`); }
     return parts.join(' · ');
   }
 
