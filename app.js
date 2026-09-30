@@ -112,6 +112,8 @@ const app = {
     const text = this.decodeShared(buf);
     const parsed = this.parseExport(text);
     if (parsed) { VData.routeImport(this, parsed); return true; }
+    // El mensaje de un amigo con su enlace de «Compartir mi progreso» (reenviado a Traindía): se abre.
+    if (typeof VShare !== 'undefined' && VShare.parseLink(text)) { await VShare.open(this, text); return true; }
     // Parece texto (JSON, .txt, o solo llegó el texto del mensaje) pero no es un
     // export: decir QUÉ ha llegado en vez de ofrecer guardarlo como documento.
     const pareceTexto = kind === 'text' || /json|text/i.test(type) || /\.(json|txt)$/i.test(name)
@@ -145,8 +147,11 @@ const app = {
     UI.modal({
       title: 'No se puede importar',
       bodyHTML: soloTexto
-        ? `<p class="modal-text">Ha llegado <strong>solo el texto del mensaje</strong>, sin el archivo.</p>
-           <p class="modal-text dim">Pasa a veces al compartir desde un chat. Prueba a abrir el documento (tócalo para verlo) y compartirlo desde ahí, o en Traindía: <strong>Compartir → Importar → elegir archivo</strong>.</p>`
+        ? `<p class="modal-text">WhatsApp ha mandado <strong>solo el texto del mensaje</strong>, sin el archivo. Es cosa de WhatsApp: a veces lo hace al compartir desde el chat.</p>
+           <ul class="nut-check">
+             <li><strong>Si era un archivo de Traindía</strong>: ábrelo en el chat (tócalo) y compártelo desde el visor, o guárdalo y en Traindía ve a <strong>Compartir → Importar → elegir archivo</strong>.</li>
+             <li><strong>Para pasaros el progreso</strong>, mejor <strong>Compartir → Con un amigo</strong>: es un enlace, basta con tocarlo en el chat y funciona también en iPhone.</li>
+           </ul>`
         : `<p class="modal-text">Ha llegado <strong>${UI.esc(name)}</strong>, pero no es un archivo exportado de Traindía (o está incompleto).</p>
            <p class="modal-text dim">Si es el plan que te pasaron, en Traindía usa <strong>Compartir → Importar → elegir archivo</strong>.</p>`,
       actions: [
@@ -792,7 +797,7 @@ const app = {
                 tipo: d.tipo,
                 mensaje: d.mensaje.trim(),
                 contacto: (d.contacto || '').trim() || '(no indicado)',
-                version: 'v2.48.6',
+                version: 'v2.48.7',
                 perfil: (this.mainUser && this.mainUser.name) || '',
                 navegador: navigator.userAgent,
               }),
@@ -852,7 +857,7 @@ const app = {
         <div class="more-group">${g.rows.map(r => `<button class="more-row" ${r.feedback ? 'data-feedback' : `data-link="${r.v}"`}>
           <span class="more-ic" style="background:${g.color}">${UI.icon(r.icon, 20)}</span>
           <span class="more-txt"><strong>${r.label}</strong><span${r.warn ? ' class="warn"' : ''}>${UI.esc(r.sub)}</span></span><span class="chev">›</span></button>`).join('')}</div>`).join('')}
-      <p class="version-foot">Traindía · v2.48.6<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
+      <p class="version-foot">Traindía · v2.48.7<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
     </div>`;
   },
   bindMore(root) {
