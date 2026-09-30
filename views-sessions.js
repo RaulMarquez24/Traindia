@@ -14,7 +14,7 @@ const VSessions = (() => {
     { key: 'distance', label: 'Distancia', unit: 'km', ph: 'km', step: '0.01', scope: 'total' },
     { key: 'kcal', label: 'Kcal', unit: 'kcal', ph: 'kcal', step: '1', scope: 'total' },
     { key: 'hr', label: 'Pulsaciones', unit: 'ppm', ph: 'ppm', step: '1', scope: 'total' },
-    { key: 'pace', label: 'Ritmo medio', unit: 'min/km', ph: '', step: '1', scope: 'total' }, // se calcula con tiempo y distancia (editable)
+    { key: 'pace', label: 'Ritmo', unit: 'min/km', ph: '', step: '1', scope: 'set' }, // de cada serie: tiempo ÷ distancia de la serie (editable)
     { key: 'speed', label: 'Velocidad', unit: 'km/h', ph: 'km/h', step: '0.1', scope: 'set' },
     { key: 'incline', label: 'Inclinación', unit: '%', ph: 'incl %', step: '0.5', scope: 'set' },
     { key: 'level', label: 'Nivel', unit: '', ph: 'nivel', step: '1', scope: 'set' },
@@ -184,28 +184,51 @@ const VSessions = (() => {
 
   // Tiempo TOTAL del ejercicio (cardio): editable; vacío = suma de las series.
   // onPick(totalSec|null) — null = volver a usar la suma.
-  // Ritmo medio (segundos por km): el que se haya puesto a mano o, si no, tiempo total ÷ distancia.
-  function entryTotalSec(entry) {
+  // ---- Ritmo por serie (segundos por km) ----
+  // Distancia de cada serie: la suya (compat) · la del objetivo o el nombre si solo
+  // hay una («5×400m» → 0,4 km) · o la distancia total repartida entre las series.
+  function repDistKm(entry) {
+    for (const src of [entry.target, entry.name]) {
+      const found = [...String(src || '').matchAll(/(\d+(?:[.,]\d+)?)\s*(km|m)(?![a-zñ])/gi)]
+        .map(m => parseFloat(m[1].replace(',', '.')) / (m[2].toLowerCase() === 'km' ? 1 : 1000)).filter(v => v > 0);
+      const uniq = [...new Set(found)];
+      if (uniq.length === 1) return uniq[0]; // si hay dos («1km o 2×800m») no se adivina
+    }
     const t = entry.totals || {};
-    return (t.time != null && t.time !== '') ? parseInt(t.time) : (entry.sets || []).reduce((a, s) => a + (parseInt(s.time) || 0), 0);
+    const dist = t.distance ? parseFloat(String(t.distance).replace(',', '.')) : 0;
+    const n = (entry.sets || []).filter(x => parseInt(x.time) > 0).length;
+    return dist > 0 && n ? dist / n : 0;
   }
-  function entryPaceSec(entry) {
-    const t = entry.totals || {};
-    if (t.pace != null && t.pace !== '') return parseInt(t.pace) || 0;
-    const dist = t.distance ? parseFloat(String(t.distance).replace(',', '.')) : (entry.sets || []).reduce((a, s) => a + (parseFloat(s.distance) || 0), 0);
-    const sec = entryTotalSec(entry);
-    return dist > 0 && sec > 0 ? Math.round(sec / dist) : 0;
+  function setPaceSec(entry, set, distKm) {
+    if (set.pace != null && set.pace !== '') return parseInt(set.pace) || 0;
+    const d = set.distance ? parseFloat(set.distance) : (distKm != null ? distKm : repDistKm(entry));
+    const sec = parseInt(set.time) || 0;
+    return d > 0 && sec > 0 ? Math.round(sec / d) : 0;
+  }
+  // Ritmo medio de todas las series con ritmo (ponderado por distancia).
+  function avgPaceSec(entry) {
+    const d = repDistKm(entry); let sec = 0, km = 0;
+    (entry.sets || []).forEach(x => { const p = setPaceSec(entry, x, d), dist = x.distance ? parseFloat(x.distance) : d; if (p && dist > 0) { sec += p * dist; km += dist; } });
+    return km > 0 ? Math.round(sec / km) : 0;
   }
   const fmtPace = (sec) => sec > 0 ? `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}` : '';
-  function pickPace(entry, onPick) {
-    const cur = (entry.totals && entry.totals.pace) ? parseInt(entry.totals.pace) : '';
-    const auto = entryPaceSec({ ...entry, totals: { ...(entry.totals || {}), pace: '' } });
+  const paceOn = (entry) => (entry.type || 'time') === 'time' && timeActiveMetrics(entry).includes('pace');
+  function paceChipHTML(entry, set, ei, si, dis) {
+    const d = repDistKm(entry);
+    const fixed = set.pace != null && set.pace !== '';
+    const p = setPaceSec(entry, set, d);
+    return `<button type="button" class="set-pace${fixed ? ' on' : ''}" data-set-pace data-ei="${ei}" data-si="${si}" data-km="${d || ''}"${fixed ? ' data-fixed="1"' : ''}${dis} title="Ritmo de la serie">${UI.icon('activity', 12)} <span class="pace-val">${p ? fmtPace(p) : '—'}</span> /km</button>`;
+  }
+  function pickPace(entry, set, onPick) {
+    const cur = (set.pace != null && set.pace !== '') ? parseInt(set.pace) : '';
+    const d = repDistKm(entry);
+    const auto = setPaceSec(entry, { ...set, pace: '' }, d);
     UI.modal({
-      title: 'Ritmo medio',
+      title: 'Ritmo de la serie',
       bodyHTML: `<div class="set-row" style="grid-template-columns:1fr auto 1fr auto;max-width:260px;align-items:center">
           <input class="inp set-f" id="pcMin" type="number" min="0" value="${cur !== '' ? Math.floor(cur / 60) : ''}" placeholder="min"><span class="set-x">:</span><input class="inp set-f" id="pcSec" type="number" min="0" max="59" value="${cur !== '' ? cur % 60 : ''}" placeholder="seg"><span class="dim" style="margin-left:6px">/km</span>
         </div>
-        <p class="field-hint">${auto ? `Calculado con el tiempo y la distancia: <strong>${fmtPace(auto)} /km</strong>. Ponlo a mano solo si tu reloj o la cinta te da otro.` : 'Pon el tiempo total y la distancia y se calcula solo, o escríbelo a mano.'}</p>`,
+        <p class="field-hint">${auto ? `Calculado con el tiempo de la serie y ${d >= 1 ? `${Math.round(d * 100) / 100} km` : `${Math.round(d * 1000)} m`}: <strong>${fmtPace(auto)} /km</strong>.` : 'Se calcula con el tiempo de la serie y su distancia (sale del objetivo, p. ej. «5×400m», o de la distancia total entre las series).'} Ponlo a mano solo si tu reloj te da otro.</p>`,
       actions: [
         { label: 'Calcular solo', kind: 'ghost', onClick: () => onPick(null) },
         { label: 'Guardar', kind: 'primary', onClick: (root) => {
@@ -353,7 +376,7 @@ const VSessions = (() => {
     return `<button type="button" class="load-chip${lm ? ' on' : ''}" data-set-load data-ei="${ei}" data-si="${si}"${dis}>${label}</button>`;
   }
   // texto de una serie para detalle / contexto IA (incluye dropsets y esfuerzo)
-  function setDisplay(type, set) {
+  function setDisplay(type, set, entry) {
     let v;
     if (type === 'check') {
       v = set.done ? 'Hecho' : set.skip ? 'No hecho' : '—';
@@ -377,6 +400,7 @@ const VSessions = (() => {
       if (set.weight) parts.push(`${set.weight} kg`);
       const ls = loadSuffix(set).trim(); if (ls) parts.push(ls); // lastre/asistencia (suspensiones/colgadas)
       const ex = cardioExtra(set); if (ex) parts.push(ex);
+      if (entry && paceOn(entry)) { const p = setPaceSec(entry, set); if (p) parts.push(`${fmtPace(p)} /km`); }
       v = parts.join(' · ') || '0s';
       if (set.label) v = `${set.label} · ${v}`;
     } else if (type === 'reps') {
@@ -400,7 +424,7 @@ const VSessions = (() => {
     let l = `Ejercicio: ${entry.name}`;
     if (entry.target) l += ` — objetivo ${entry.target}`;
     lines.push(l);
-    const setsTxt = (entry.sets || []).filter(setHasData).map(s => setDisplay(entry.type || 'weight', s));
+    const setsTxt = (entry.sets || []).filter(setHasData).map(s => setDisplay(entry.type || 'weight', s, entry));
     if (setsTxt.length) lines.push(`Series realizadas: ${setsTxt.join(', ')}.`);
     lines.push('');
     lines.push('Mi duda: ');
@@ -491,7 +515,7 @@ const VSessions = (() => {
         const k = keyForEntry(e);
         if (!k || map[k]) return; // ya tenemos una más reciente para este ejercicio
         const done = (e.sets || []).filter(setHasData);
-        if (done.length) map[k] = { date: sess.date, type: e.type || 'weight', sets: done, note: e.note, metrics: e.metrics, totals: e.totals };
+        if (done.length) map[k] = { date: sess.date, type: e.type || 'weight', sets: done, note: e.note, metrics: e.metrics, totals: e.totals, target: e.target, name: e.name };
       }));
     return map;
   }
@@ -527,7 +551,7 @@ const VSessions = (() => {
     if (dist) parts.push(`${Math.round(dist * 100) / 100} km`);
     if (kc) parts.push(`${Math.round(kc)} kcal`);
     if (t.hr) parts.push(`${t.hr} ppm`);
-    if (active.has('pace')) { const p = entryPaceSec({ totals: t, sets: prev.sets }); if (p) parts.push(`${fmtPace(p)} /km`); }
+    if (active.has('pace')) { const p = avgPaceSec(prev); if (p) parts.push(`ritmo medio ${fmtPace(p)} /km`); }
     return parts.join(' · ');
   }
   // La serie equivalente de la última vez (la misma posición o, si hubo menos, la
@@ -549,7 +573,7 @@ const VSessions = (() => {
       const summary = summarizeCardioSets(prev.sets);
       const tot = cardioTotalsText(prev, { includeTime: multi }); // sin tiempo total si es una sola
       body = tot ? `${summary}${multi ? ' — ' : ' · '}${tot}` : summary;
-    } else body = prev.sets.map(st => setDisplay(prev.type, st)).join(' · ');
+    } else body = prev.sets.map(st => setDisplay(prev.type, st, prev)).join(' · ');
     const note = prev.note ? `<div class="last-note"><span>${UI.icon('edit', 12)} ${UI.esc(prev.note)}</span></div>` : '';
     return `<div class="last-time">${UI.icon('clock', 12)} Última vez · ${UI.esc(UI.fmtDateShort(prev.date))}: <span>${UI.esc(body)}</span></div>${note}`;
   }
@@ -1060,6 +1084,7 @@ const VSessions = (() => {
           </div>
           ${(() => { const ms = timeSetMetrics(entry); return ms.length ? `<div class="set-extra">${ms.map(k => {
             if (k === 'load') return loadChipHTML(s, ei, si, dis); // lastre/asistencia = chip tocable (± kg)
+            if (k === 'pace') return paceChipHTML(entry, s, ei, si, dis); // ritmo de la serie (se calcula solo)
             const f = TIME_FIELD[k]; return `<input class="inp set-f" data-f="${k}" data-ei="${ei}" data-si="${si}" type="number" min="0" step="${f.step}" value="${UI.esc(s[k] || '')}" placeholder="${f.ph}"${dis}>`;
           }).join('')}</div>` : ''; })()}
           ${footBtns}
@@ -1108,7 +1133,7 @@ const VSessions = (() => {
     const fields = timeTotalMetrics(entry);
     const showTime = fields.includes('time'); // el tiempo total es opcional (se elige en "datos")
     // Inputs de los demás totales (distancia/kcal/ppm). 'time' va como chip, no input.
-    const inputs = fields.filter(k => k !== 'time' && k !== 'pace').map(k => {
+    const inputs = fields.filter(k => k !== 'time').map(k => {
       const f = TIME_FIELD[k];
       return `<input class="inp ex-total-f" data-tf="${k}" data-ei="${ei}" type="number" min="0" step="${f.step}" value="${UI.esc(totals[k] || '')}" placeholder="${(f.unit || f.label)} tot.">`;
     }).join('');
@@ -1120,14 +1145,8 @@ const VSessions = (() => {
       // Tiempo total: tocable para editar; vacío = suma de las series.
       timeChip = `<button type="button" class="ex-total-time${overridden ? ' on' : ''}" data-set-totaltime data-ei="${ei}"${overridden ? ' data-fixed="1"' : ''} title="Editar tiempo total">${UI.icon('clock', 13)} <span class="ett-val">${fmtClock(totalSec)}</span></button>`;
     }
-    let paceChip = '';
-    if (fields.includes('pace')) {
-      const fixed = totals.pace != null && totals.pace !== '';
-      const p = entryPaceSec(entry);
-      paceChip = `<button type="button" class="ex-total-time ex-pace${fixed ? ' on' : ''}" data-set-pace data-ei="${ei}"${fixed ? ' data-fixed="1"' : ''} title="Ritmo medio">${UI.icon('activity', 13)} <span class="pace-val">${p ? fmtPace(p) : '—'}</span> /km</button>`;
-    }
-    if (!timeChip && !inputs && !paceChip) return '';
-    return `<div class="ex-totals">${timeChip}${paceChip}${inputs}</div>`;
+    if (!timeChip && !inputs) return '';
+    return `<div class="ex-totals">${timeChip}${inputs}</div>`;
   }
   // Recalcula los chips de tiempo total (solo lectura del DOM) al teclear min/seg.
   function updateTotalTimes(root) {
@@ -1142,19 +1161,20 @@ const VSessions = (() => {
       });
       ett.textContent = fmtClock(sec);
     });
-    root.querySelectorAll('.ex-card').forEach(card => {
-      const pb = card.querySelector('.ex-pace'), pv = card.querySelector('.pace-val');
-      if (!pb || !pv || pb.dataset.fixed) return;
-      const tb = card.querySelector('.ex-total-time:not(.ex-pace)');
-      let sec = 0;
-      if (tb && tb.dataset.fixed) { const parts = (card.querySelector('.ett-val').textContent || '').split(':').map(n => parseInt(n) || 0); sec = parts.reduce((a, n) => a * 60 + n, 0); }
-      else card.querySelectorAll('.set-row').forEach(r => {
-        const mm = r.querySelector('[data-f="timemin"]'), ss = r.querySelector('[data-f="timesec"]');
-        if (mm || ss) sec += (parseInt(mm && mm.value) || 0) * 60 + (parseInt(ss && ss.value) || 0);
-      });
-      const di = card.querySelector('.ex-total-f[data-tf="distance"]');
-      const dist = di ? parseFloat(String(di.value).replace(',', '.')) : 0;
-      pv.textContent = dist > 0 && sec > 0 ? fmtPace(Math.round(sec / dist)) : '—';
+    root.querySelectorAll('.set-pace').forEach(pb => {
+      if (pb.dataset.fixed) return;
+      const wrap = pb.closest('.set-wrap'); const pv = pb.querySelector('.pace-val');
+      if (!wrap || !pv) return;
+      const mm = wrap.querySelector('[data-f="timemin"]'), ss = wrap.querySelector('[data-f="timesec"]');
+      const sec = (parseInt(mm && mm.value) || 0) * 60 + (parseInt(ss && ss.value) || 0);
+      let km = parseFloat(pb.dataset.km) || 0;
+      if (!km) { // sin distancia en el objetivo: la total repartida entre las series con tiempo
+        const card = pb.closest('.ex-card'); const di = card && card.querySelector('.ex-total-f[data-tf="distance"]');
+        const dist = di ? parseFloat(String(di.value).replace(',', '.')) : 0;
+        const n = card ? [...card.querySelectorAll('.set-wrap')].filter(w => { const a = w.querySelector('[data-f="timemin"]'), b = w.querySelector('[data-f="timesec"]'); return ((parseInt(a && a.value) || 0) * 60 + (parseInt(b && b.value) || 0)) > 0; }).length : 0;
+        km = dist > 0 && n ? dist / n : 0;
+      }
+      pv.textContent = km > 0 && sec > 0 ? fmtPace(Math.round(sec / km)) : '—';
     });
   }
 
@@ -1414,8 +1434,8 @@ const VSessions = (() => {
         pickTotalTime(entry, (sec) => { entry.totals = entry.totals || {}; if (sec == null) delete entry.totals.time; else entry.totals.time = sec; app.persistLive(); redraw(); });
       }));
       root.querySelectorAll('[data-set-pace]').forEach(b => b.addEventListener('click', () => {
-        sync(); const entry = s.entries[+b.dataset.ei];
-        pickPace(entry, (sec) => { entry.totals = entry.totals || {}; if (sec == null) delete entry.totals.pace; else entry.totals.pace = sec; app.persistLive(); redraw(); });
+        sync(); const entry = s.entries[+b.dataset.ei], set = entry.sets[+b.dataset.si];
+        pickPace(entry, set, (sec) => { if (sec == null) delete set.pace; else set.pace = sec; app.persistLive(); redraw(); });
       }));
       root.querySelectorAll('[data-rm-set]').forEach(b => b.addEventListener('click', () => {
         sync(); s.entries[+b.dataset.ei].sets.splice(+b.dataset.si, 1); redraw();
@@ -1876,7 +1896,7 @@ const VSessions = (() => {
     if (dist) parts.push(`${Math.round(dist * 100) / 100} km`);
     if (kc) parts.push(`${Math.round(kc)} kcal`);
     if (t.hr) parts.push(`${t.hr} ppm`);
-    if (active.has('pace')) { const p = entryPaceSec(e); if (p) parts.push(`${fmtPace(p)} /km`); }
+    if (active.has('pace')) { const p = avgPaceSec(e); if (p) parts.push(`ritmo medio ${fmtPace(p)} /km`); }
     return parts.join(' · ');
   }
 
@@ -1893,10 +1913,10 @@ const VSessions = (() => {
       const prev = prevMap[keyForEntry(e)];
       const sets = (e.sets || []).map((set, i) => ({
         n: i + 1,
-        txt: setHasData(set) ? setDisplay(type, set) : 'Sin apuntar',
+        txt: setHasData(set) ? setDisplay(type, set, e) : 'Sin apuntar',
         empty: !setHasData(set),
         skip: !!(set.check && set.skip && !set.done),
-        prev: prev && prev.sets[i] ? setDisplay(prev.type, prev.sets[i]) : '',
+        prev: prev && prev.sets[i] ? setDisplay(prev.type, prev.sets[i], prev) : '',
       }));
       return { name: e.name, type, block: e.block || '', target: e.target || '', detail: e.detail || '', note: e.note || '',
         totals: entryTotalsText(e), sets, prevDate: prev ? prev.date : '', check: type === 'check' && sets.length <= 1 };
@@ -1917,7 +1937,7 @@ const VSessions = (() => {
     const withAI = !!(opts && opts.ai);
     return (s.entries || []).map((e, ei) => {
       const rows = (e.sets || []).map((set, i) =>
-        `<li><span class="set-n-sm">${i + 1}</span><span>${UI.esc(setDisplay(e.type || 'weight', set))}</span></li>`).join('');
+        `<li><span class="set-n-sm">${i + 1}</span><span>${UI.esc(setDisplay(e.type || 'weight', set, e))}</span></li>`).join('');
       const note = e.note ? `<div class="ex-note"><span class="ex-note-txt">${UI.icon('edit', 13)} ${UI.esc(e.note)}</span></div>` : '';
       const tt = entryTotalsText(e);
       const totalsLine = tt ? `<div class="detail-totals">${UI.icon('clock', 13)} ${tt}</div>` : '';
@@ -2062,7 +2082,7 @@ const VSessions = (() => {
       root.querySelectorAll('[data-dup-set]').forEach(b => b.addEventListener('click', () => { syncMeta(root); const e = draft.entries[+b.dataset.ei], si = +b.dataset.si; e.sets.splice(si + 1, 0, cloneSet(e.sets[si])); render(root); }));
       root.querySelectorAll('[data-repeat-block]').forEach(b => b.addEventListener('click', () => { syncMeta(root); const e = draft.entries[+b.dataset.ei]; pickRepeat(e.sets.length, (n) => { const snap = e.sets.slice(); for (let k = 1; k < n; k++) snap.forEach(st => e.sets.push(cloneSet(st))); render(root); }); }));
       root.querySelectorAll('[data-set-totaltime]').forEach(b => b.addEventListener('click', () => { syncMeta(root); const entry = draft.entries[+b.dataset.ei]; pickTotalTime(entry, (sec) => { entry.totals = entry.totals || {}; if (sec == null) delete entry.totals.time; else entry.totals.time = sec; render(root); }); }));
-      root.querySelectorAll('[data-set-pace]').forEach(b => b.addEventListener('click', () => { syncMeta(root); const entry = draft.entries[+b.dataset.ei]; pickPace(entry, (sec) => { entry.totals = entry.totals || {}; if (sec == null) delete entry.totals.pace; else entry.totals.pace = sec; render(root); }); }));
+      root.querySelectorAll('[data-set-pace]').forEach(b => b.addEventListener('click', () => { syncMeta(root); const entry = draft.entries[+b.dataset.ei], set = entry.sets[+b.dataset.si]; pickPace(entry, set, (sec) => { if (sec == null) delete set.pace; else set.pace = sec; render(root); }); }));
       root.querySelectorAll('[data-howto]').forEach(b => b.addEventListener('click', () => showHowto(draft.entries[+b.dataset.ei])));
       root.querySelectorAll('[data-done]').forEach(b => b.addEventListener('click', () => {
         syncMeta(root); const st = draft.entries[+b.dataset.ei].sets[+b.dataset.si]; st.done = !st.done; render(root);

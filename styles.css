@@ -595,6 +595,9 @@ body[data-view="live"] .install-prompt { display: none !important; }
 .set-acts { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
 .set-reps { flex: 0 1 96px; }
 .load-chip { flex: 0 0 auto; height: 34px; padding: 0 12px; border: 1px solid var(--line); border-radius: 10px; background: none; color: var(--ink-soft); font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; display: inline-flex; align-items: center; }
+.set-pace { display: inline-flex; align-items: center; gap: 5px; height: 36px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg-2); color: var(--ink-dim); font: 600 13px 'IBM Plex Mono', monospace; cursor: pointer; white-space: nowrap; }
+.set-pace .pace-val { color: var(--strong); font-size: 14px; }
+.set-pace.on { border-color: var(--strong); }
 .load-chip.on { background: var(--strong-bg); border-color: var(--strong); color: var(--strong); }
 .load-chip:disabled { opacity: .55; }
 .set-row.done { opacity: .55; }
