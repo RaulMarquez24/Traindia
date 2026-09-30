@@ -287,8 +287,6 @@ body.has-active-bar .pl-new-wrap { bottom: calc(var(--nav-h) + var(--safe-bottom
 .set-det > summary strong.bad { color: var(--priority); }
 .set-det[open] { padding-bottom: 14px; }
 .set-det .notif-status { margin-top: 0; }
-.set-ver { cursor: default; }
-.set-ver strong { font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: var(--ink-dim); }
 .set-val { font-family: 'IBM Plex Mono', monospace; font-size: 14px; font-weight: 600; color: var(--strong); }
 .set-switch .sw { margin-top: 6px; }
 .plan-notes-add { margin-top: 14px; width: 100%; text-align: left; font: inherit; cursor: pointer; }

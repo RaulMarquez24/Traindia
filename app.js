@@ -789,7 +789,7 @@ const app = {
                 tipo: d.tipo,
                 mensaje: d.mensaje.trim(),
                 contacto: (d.contacto || '').trim() || '(no indicado)',
-                version: 'v2.48.4',
+                version: 'v2.48.5',
                 perfil: (this.mainUser && this.mainUser.name) || '',
                 navegador: navigator.userAgent,
               }),
@@ -849,7 +849,7 @@ const app = {
         <div class="more-group">${g.rows.map(r => `<button class="more-row" ${r.feedback ? 'data-feedback' : `data-link="${r.v}"`}>
           <span class="more-ic" style="background:${g.color}">${UI.icon(r.icon, 20)}</span>
           <span class="more-txt"><strong>${r.label}</strong><span${r.warn ? ' class="warn"' : ''}>${UI.esc(r.sub)}</span></span><span class="chev">›</span></button>`).join('')}</div>`).join('')}
-      <p class="version-foot">© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
+      <p class="version-foot">Traindía · v2.48.5<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
     </div>`;
   },
   bindMore(root) {
@@ -1297,7 +1297,6 @@ const app = {
       <div class="more-group">
         ${row('id="seeLanding"', 'info', 'var(--rest)', 'Ver la presentación', 'Qué es Traindía y cómo funciona')}
         ${row('id="seeRepo"', 'code', 'var(--rest)', 'Código en GitHub', 'Novedades de cada versión', `<span class="chev">↗</span>`)}
-        <div class="more-row set-ver"><span class="more-txt"><span>Versión</span></span><strong>v2.48.4</strong></div>
       </div>
 
       <div class="more-sec danger">Zona peligrosa</div>
