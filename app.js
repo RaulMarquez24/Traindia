@@ -715,25 +715,28 @@ const app = {
   setTheme(t) { try { localStorage.setItem(this.THEME_KEY, t); } catch (e) {} this.applyTheme(t); },
 
   // ---- Menú de usuario (desde el chip) ----
+  // Menú del avatar: tú (nombre y color), compartir tu progreso y tus amigos para compararos.
   openUserMenu() {
-    const others = Object.values(this.usersById).filter(u => !u.isMain);
-    UI.modal({
-      title: 'Perfil activo',
+    const me = this.mainUser;
+    const friends = Object.values(this.usersById).filter(u => !u.isMain);
+    const ov = UI.modal({
+      title: 'Tu perfil',
       bodyHTML: `
-        <div class="user-menu-active">${UI.avatar(this.activeUser, 44)}<div><strong>${UI.esc(this.activeUser.name)}</strong><span class="dim">Usuario principal</span></div></div>
-        <p class="modal-text dim">En el uso diario la app trabaja siempre con tu perfil principal. Los perfiles invitados sirven para importar datos a su nombre y comparar progreso.</p>
+        <button class="set-head um-me" data-act="edit">${UI.avatar(me, 48)}<span class="pf-me-txt"><strong>${UI.esc(me.name)}</strong><span>Perfil principal</span></span><span class="set-head-edit">${UI.icon('edit', 15)} Editar</span></button>
         <div class="menu-list">
-          <button class="menu-row" data-act="profiles"><span>${UI.icon('users', 18)} Gestionar perfiles</span><span class="chev">›</span></button>
-          <button class="menu-row" data-act="settings"><span>${UI.icon('settings', 18)} Editar perfil principal</span><span class="chev">›</span></button>
-          <button class="menu-row" data-act="landing"><span>${UI.icon('info', 18)} Ver la presentación</span><span class="chev">›</span></button>
+          <button class="menu-row" data-act="share"><span>${UI.icon('upload', 18)} Compartir mi progreso</span><span class="chev">›</span></button>
+          <button class="menu-row" data-act="profiles"><span>${UI.icon('users', 18)} Tus amigos${friends.length ? ` <span class="dim">(${friends.length})</span>` : ''}</span><span class="chev">›</span></button>
         </div>
-        ${others.length ? `<div class="field-label" style="margin-top:14px">Perfiles invitados</div>${others.map(u => `<div class="user-menu-active small">${UI.avatar(u, 30)}<div><strong>${UI.esc(u.name)}</strong><span class="dim">Invitado</span></div></div>`).join('')}` : ''}
+        ${friends.length ? `<div class="field-label" style="margin-top:16px">Compárate con</div>
+          <div class="menu-list">${friends.map(u => `<button class="menu-row um-friend" data-compare="${u.id}"><span>${UI.avatar(u, 28)} ${UI.esc(u.name)}</span><span class="chev">›</span></button>`).join('')}</div>` : ''}
       `,
       actions: [{ label: 'Cerrar', kind: 'ghost' }],
       onMount: (root) => {
-        root.querySelector('[data-act="profiles"]').addEventListener('click', () => { UI.closeModal(); this.go('profiles'); });
-        root.querySelector('[data-act="settings"]').addEventListener('click', () => { UI.closeModal(); this.go('settings'); });
-        root.querySelector('[data-act="landing"]').addEventListener('click', () => { UI.closeModal(); this.previewLanding(); });
+        const on = (sel, fn) => { const b = root.querySelector(sel); if (b) b.addEventListener('click', () => { UI.closeModal(ov); fn(); }); };
+        on('[data-act="edit"]', () => this.editUserModal(me.id));
+        on('[data-act="share"]', () => VShare.start(this));
+        on('[data-act="profiles"]', () => this.go('profiles'));
+        root.querySelectorAll('[data-compare]').forEach(b => b.addEventListener('click', () => { UI.closeModal(ov); this.go('progress', { tab: 'compare', guestId: b.dataset.compare }); }));
       },
     });
   },
@@ -789,7 +792,7 @@ const app = {
                 tipo: d.tipo,
                 mensaje: d.mensaje.trim(),
                 contacto: (d.contacto || '').trim() || '(no indicado)',
-                version: 'v2.48.5',
+                version: 'v2.48.6',
                 perfil: (this.mainUser && this.mainUser.name) || '',
                 navegador: navigator.userAgent,
               }),
@@ -849,7 +852,7 @@ const app = {
         <div class="more-group">${g.rows.map(r => `<button class="more-row" ${r.feedback ? 'data-feedback' : `data-link="${r.v}"`}>
           <span class="more-ic" style="background:${g.color}">${UI.icon(r.icon, 20)}</span>
           <span class="more-txt"><strong>${r.label}</strong><span${r.warn ? ' class="warn"' : ''}>${UI.esc(r.sub)}</span></span><span class="chev">›</span></button>`).join('')}</div>`).join('')}
-      <p class="version-foot">Traindía · v2.48.5<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
+      <p class="version-foot">Traindía · v2.48.6<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
     </div>`;
   },
   bindMore(root) {
