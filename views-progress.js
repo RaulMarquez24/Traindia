@@ -548,7 +548,7 @@ const VProgress = (() => {
       app.bindLinks(host);
       return;
     }
-    const guestId = host._guestId || guests[0].id;
+    const guestId = host._guestId || (params && guests.some(g => g.id === params.guestId) ? params.guestId : guests[0].id);
     const guest = users.find(u => u.id === guestId);
 
     // métricas: peso corporal + cada ejercicio del principal

@@ -146,7 +146,9 @@ const VShare = (() => {
               guest = await DB.createUser({ name, color, isGuest: true });
             } else guest = users.find(u => u.id === dest);
           }
-          if (from.linkId && guest.linkId !== from.linkId) { guest.linkId = from.linkId; await DB.put('users', guest); }
+          if (from.linkId) guest.linkId = from.linkId;
+          guest.sharedAt = Date.now(); // «Actualizado por enlace hace…» en Perfiles
+          await DB.put('users', guest);
           await VData.importShared(app, payload, guest.id);
           await app.loadUsers();
           UI.toast(same ? `${guest.name} actualizado` : `${guest.name} añadido`);

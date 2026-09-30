@@ -743,16 +743,31 @@ const app = {
     const ACCESS_KEY = '1ba5f2b9-bc2f-4d16-b0d7-6fcdf7f4639e';
     const preTipo = (pre && pre.tipo) || '';
     const preMsg = (pre && pre.mensaje) || '';
-    UI.modal({
+    const TIPOS = [
+      { v: 'Sugerencia', l: 'Idea', ic: '💡', ph: '¿Qué te gustaría que hiciera Traindía, o qué mejorarías?' },
+      { v: 'Error', l: 'Fallo', ic: '🐞', ph: '¿Qué hacías, qué esperabas que pasara y qué pasó? Si puedes, di en qué pantalla.' },
+      { v: 'Otro', l: 'Otra cosa', ic: '💬', ph: 'Cuéntame lo que quieras.' },
+    ];
+    let tipo = TIPOS.some(t => t.v === preTipo) ? preTipo : (preTipo ? 'Otro' : 'Sugerencia');
+    const ov = UI.modal({
       title: 'Sugerencias y reportes',
       bodyHTML: `<div id="fbForm">
-        <p class="modal-text dim">¿Una idea para mejorar o algo que no va bien? Cuéntamelo y me llega directo. Deja un contacto solo si quieres respuesta.</p>
-        ${UI.field('Tipo', UI.select('tipo', [{ value: 'Sugerencia', label: '💡 Sugerencia' }, { value: 'Error', label: '🐞 Error / fallo' }, { value: 'Otro', label: 'Otro' }].concat(preTipo ? [{ value: preTipo, label: preTipo }] : []), preTipo || 'Sugerencia'))}
-        ${UI.field('Mensaje', UI.textarea('mensaje', preMsg, 'Describe tu idea o el problema con detalle…', 6))}
+        <p class="modal-text dim" style="margin-top:0">Me llega directo. Deja un contacto solo si quieres que te conteste.</p>
+        <div class="fb-types" role="radiogroup">${TIPOS.map(t => `<button type="button" class="fb-type${t.v === tipo ? ' on' : ''}" data-tipo="${t.v}" role="radio" aria-checked="${t.v === tipo}"><span class="fb-ic">${t.ic}</span>${t.l}</button>`).join('')}</div>
+        <input type="hidden" name="tipo" value="${UI.esc(tipo)}">
+        ${UI.field('Mensaje', UI.textarea('mensaje', preMsg, (TIPOS.find(t => t.v === tipo) || TIPOS[0]).ph, 6))}
         ${UI.field('Tu contacto (opcional)', UI.input('contacto', '', { placeholder: 'Email o nombre, por si quiero responderte' }))}
         <input type="text" name="botcheck" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px">
-        <p class="field-hint">Se envía por un servicio externo (Web3Forms) y me llega por correo. Con tu mensaje van el nombre de tu perfil, la versión de la app y el tipo de navegador (para poder reproducir los fallos). Nada de tus entrenos.</p>
+        <details class="det fb-privacy"><summary>Qué se envía</summary><p class="field-hint">Se envía por un servicio externo (Web3Forms) y me llega por correo. Con tu mensaje van el nombre de tu perfil, la versión de la app y el tipo de navegador (para poder reproducir los fallos). Nada de tus entrenos.</p></details>
       </div>`,
+      onMount: (m) => {
+        const hidden = m.querySelector('input[name="tipo"]'), ta = m.querySelector('textarea[name="mensaje"]');
+        m.querySelectorAll('[data-tipo]').forEach(b => b.addEventListener('click', () => {
+          tipo = b.dataset.tipo; hidden.value = tipo;
+          m.querySelectorAll('[data-tipo]').forEach(x => { x.classList.toggle('on', x === b); x.setAttribute('aria-checked', x === b ? 'true' : 'false'); });
+          ta.placeholder = (TIPOS.find(t => t.v === tipo) || TIPOS[0]).ph;
+        }));
+      },
       actions: [
         { label: 'Cancelar', kind: 'ghost' },
         { label: 'Enviar', kind: 'primary', onClick: async (overlay) => {
@@ -774,13 +789,18 @@ const app = {
                 tipo: d.tipo,
                 mensaje: d.mensaje.trim(),
                 contacto: (d.contacto || '').trim() || '(no indicado)',
-                version: 'v2.48.3',
+                version: 'v2.48.4',
                 perfil: (this.mainUser && this.mainUser.name) || '',
                 navegador: navigator.userAgent,
               }),
             });
             const out = await res.json().catch(() => ({}));
-            if (res.ok && out.success) { UI.toast('¡Enviado! Gracias por tu mensaje 🙌'); return; }
+            if (res.ok && out.success) {
+              overlay.querySelector('.modal-body').innerHTML = `<div class="fb-thanks"><span>🙌</span><strong>¡Gracias!</strong><p>Tu mensaje me ha llegado${(d.contacto || '').trim() ? ' y te contestaré si hace falta' : ''}.</p></div>`;
+              overlay.querySelector('.modal-actions').innerHTML = '<button class="btn primary block" data-fb-close>Cerrar</button>';
+              overlay.querySelector('[data-fb-close]').addEventListener('click', () => UI.closeModal(overlay));
+              return false;
+            }
             UI.toast('No se pudo enviar: ' + (out.message || 'inténtalo de nuevo'), 'err');
           } catch (e) {
             UI.toast('Fallo de red: inténtalo de nuevo', 'err');
@@ -865,20 +885,14 @@ const app = {
     window.open(url, '_blank', 'noopener');
     setTimeout(() => URL.revokeObjectURL(url), 120000);
   },
+  docKind(d) {
+    const t = (d.type || '').toLowerCase(), n = (d.name || '').toLowerCase();
+    if (t.startsWith('image/')) return 'Foto';
+    if (t === 'application/pdf' || n.endsWith('.pdf')) return 'PDF';
+    return 'Documento';
+  },
   async renderDocs() {
     await this.loadDocs();
-    const fmtKB = (n) => n > 1024 * 1024 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`;
-    const rows = (this._docs || []).map(d => `
-      <div class="bk-card">
-        <div class="bk-head">
-          <span class="big-row-icon tile" style="background:var(--sub-accent)">${UI.icon(this.docIcon(d.type), 18)}</span>
-          <div class="bk-meta"><strong>${UI.esc(d.name)}</strong><span class="dim">${fmtKB(d.size || 0)}</span></div>
-        </div>
-        <div class="bk-actions">
-          <button class="btn ghost small" data-open="${UI.esc(d.id)}">${UI.icon('book', 14)} Abrir</button>
-          <button class="btn ghost small danger" data-rm="${UI.esc(d.id)}">${UI.icon('trash', 14)} Quitar</button>
-        </div>
-      </div>`).join('');
     const listo = await DB.hasStore('files');
     if (!listo) {
       return `<div class="section">
@@ -888,12 +902,32 @@ const app = {
         <p class="section-intro dim">Mientras tanto el resto de la app funciona con normalidad; tus datos están intactos.</p>
       </div>`;
     }
+    const fmtKB = (n) => n > 1024 * 1024 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`;
+    const fecha = (ts) => { try { return new Date(ts).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }); } catch (e) { return ''; } };
+    // Miniaturas de las fotos (se liberan al volver a pintar)
+    (this._docThumbs || []).forEach(u => URL.revokeObjectURL(u)); this._docThumbs = [];
+    const thumb = (d) => {
+      if (!(d.type || '').startsWith('image/')) return '';
+      try { const u = URL.createObjectURL(new Blob([d.data], { type: d.type })); this._docThumbs.push(u); return u; } catch (e) { return ''; }
+    };
+    const docs = this._docs || [];
+    const rows = docs.map(d => {
+      const k = this.docKind(d), t = thumb(d);
+      return `<div class="more-row doc-row" data-open="${UI.esc(d.id)}" role="button" tabindex="0">
+        ${t ? `<img class="doc-thumb" src="${t}" alt="">` : `<span class="more-ic doc-ic ${k === 'PDF' ? 'pdf' : ''}">${k === 'PDF' ? '<b>PDF</b>' : UI.icon('notebook', 18)}</span>`}
+        <span class="more-txt"><strong class="doc-name">${UI.esc(d.name)}</strong><span>${k} · ${fmtKB(d.size || 0)}${d.addedAt ? ` · ${fecha(d.addedAt)}` : ''}</span></span>
+        <button class="icon-btn" data-doc-menu="${UI.esc(d.id)}" aria-label="Opciones de ${UI.esc(d.name)}">${UI.icon('more', 20)}</button>
+      </div>`;
+    }).join('');
     return `<div class="section">
-      <p class="section-intro">Guarda aquí el <strong>PDF del fisio</strong>, fotos de una máquina o cualquier apunte. Se consultan <strong>durante el entreno</strong> con el botón de documentos, sin salir de la app y sin conexión.</p>
-      <p class="section-intro">Desde el móvil también puedes mandarlos con <strong>Compartir → Traindía</strong>.</p>
-      <button class="btn primary block" id="docAdd">${UI.icon('plus', 15)} Añadir documento</button>
-      ${(this._docs || []).length ? rows : '<div class="empty-state"><p class="dim">Todavía no has añadido ninguno.</p></div>'}
-      <p class="field-hint">Van incluidos en la <strong>copia completa</strong> (Más → Copias y datos): si cambias de móvil, vuelven con ella.</p>
+      <p class="section-intro">El <strong>PDF de tu fisio o entrenador</strong>, fotos de una máquina o cualquier apunte, a mano <strong>durante el entreno</strong> (botón de documentos) y sin conexión.</p>
+      ${docs.length ? `<div class="more-group">${rows}</div>` : `<div class="guides-empty">
+        <span class="guides-empty-ic">${UI.icon('notebook', 26)}</span>
+        <strong>Aún no tienes documentos</strong>
+        <p>Añade un PDF o una foto desde aquí, o mándalo desde WhatsApp u otra app con <strong>Compartir → Traindía</strong>.</p>
+      </div>`}
+      <p class="field-hint">${UI.icon('check', 13)} Van incluidos en la <strong>copia completa</strong>: si cambias de móvil, vuelven con ella. Máximo ${this.MAX_DOC_MB} MB por documento.</p>
+      <div class="pl-new-wrap"><button class="btn primary block pl-new" id="docAdd">${UI.icon('plus', 17)} Añadir documento</button></div>
     </div>`;
   },
   bindDocs(root) {
@@ -923,17 +957,47 @@ const app = {
       });
       inp.click();
     });
-    root.querySelectorAll('[data-open]').forEach(b => b.addEventListener('click', () => {
-      const d = (this._docs || []).find(x => x.id === b.dataset.open); if (d) this.openDoc(d);
-    }));
-    root.querySelectorAll('[data-rm]').forEach(b => b.addEventListener('click', async () => {
-      const d = (this._docs || []).find(x => x.id === b.dataset.rm); if (!d) return;
-      const ok = await UI.confirm({ title: 'Quitar documento', message: `Se borrará "${d.name}" de este dispositivo.`, confirmLabel: 'Quitar', danger: true });
-      if (!ok) return;
-      await DB.del('files', d.id);
-      await this.loadDocs();
-      this.render();
-      UI.toast('Documento quitado');
+    const find = (id) => (this._docs || []).find(x => x.id === id);
+    root.querySelectorAll('[data-open]').forEach(row => {
+      const go = (ev) => { if (ev.target.closest('[data-doc-menu]')) return; const d = find(row.dataset.open); if (d) this.openDoc(d); };
+      row.addEventListener('click', go);
+      row.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') go(ev); });
+    });
+    root.querySelectorAll('[data-doc-menu]').forEach(b => b.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      const d = find(b.dataset.docMenu); if (!d) return;
+      const file = (() => { try { return new File([d.data], d.name, { type: d.type || 'application/octet-stream' }); } catch (e) { return null; } })();
+      const canShare = !!(file && navigator.canShare && navigator.share && navigator.canShare({ files: [file] }));
+      const ov = UI.modal({
+        title: d.name,
+        bodyHTML: `<div class="menu-list">
+          <button class="menu-row" data-op="open"><span>${UI.icon('notebook', 16)} Abrir</span><span class="chev">›</span></button>
+          <button class="menu-row" data-op="rename"><span>${UI.icon('edit', 16)} Renombrar</span><span class="chev">›</span></button>
+          ${canShare ? `<button class="menu-row" data-op="share"><span>${UI.icon('upload', 16)} Enviar a otra app</span><span class="chev">›</span></button>` : ''}
+          <button class="menu-row danger" data-op="del"><span>${UI.icon('trash', 16)} Quitar</span><span class="chev">›</span></button>
+        </div>`,
+        actions: [{ label: 'Cerrar', kind: 'ghost' }],
+        onMount: (m) => {
+          const on = (op, fn) => { const x = m.querySelector(`[data-op="${op}"]`); if (x) x.addEventListener('click', fn); };
+          on('open', () => { UI.closeModal(ov); this.openDoc(d); });
+          on('share', () => { try { const p = navigator.share({ files: [file], title: d.name }); if (p && p.catch) p.catch(() => {}); } catch (e) {} });
+          on('rename', async () => {
+            UI.closeModal(ov);
+            const dot = d.name.lastIndexOf('.'), ext = dot > 0 ? d.name.slice(dot) : '';
+            const base = ext ? d.name.slice(0, dot) : d.name;
+            const v = await UI.prompt({ title: 'Renombrar documento', label: 'Nombre', value: base, placeholder: 'Ej: Plan del fisio' });
+            if (v == null || !v.trim()) return;
+            d.name = v.trim() + (ext && !v.trim().toLowerCase().endsWith(ext.toLowerCase()) ? ext : '');
+            await DB.put('files', d); await this.loadDocs(); this.render(); UI.toast('Documento renombrado');
+          });
+          on('del', async () => {
+            UI.closeModal(ov);
+            const ok = await UI.confirm({ title: 'Quitar documento', message: `Se borrará «${d.name}» de este móvil.`, confirmLabel: 'Quitar', danger: true });
+            if (!ok) return;
+            await DB.del('files', d.id); await this.loadDocs(); this.render(); UI.toast('Documento quitado');
+          });
+        },
+      });
     }));
   },
   // Lista rápida de documentos (se usa desde el entreno en vivo).
@@ -1041,35 +1105,42 @@ const app = {
   },
 
   // ---- Vista PERFILES ----
+  // Perfiles: tú arriba y, debajo, tus amigos (invitados) para compararos.
   async renderProfiles() {
     const users = await DB.getUsers();
-    const counts = {}, lastOf = {};
+    const st = {};
     for (const u of users) {
-      const s = (await DB.sessionsOf(u.id)).filter(x => !x.draft);
-      counts[u.id] = s.length;
-      lastOf[u.id] = s.reduce((m, x) => ((x.date || '') > m ? x.date : m), '');
+      const ses = (await DB.sessionsOf(u.id)).filter(x => !x.draft);
+      st[u.id] = { n: ses.length, last: ses.reduce((m, x) => ((x.date || '') > m ? x.date : m), '') };
     }
-    const cards = users.map(u => `
-      <div class="profile-card">
-        ${UI.avatar(u, 40)}
-        <div class="profile-meta">
-          <strong>${UI.esc(u.name)} ${u.isMain ? '<span class="badge">Principal</span>' : '<span class="badge guest">Invitado</span>'}</strong>
-          <span class="dim">${counts[u.id] === 0 ? 'Sin entrenos apuntados' : `${counts[u.id]} entreno${counts[u.id] === 1 ? '' : 's'}`}${lastOf[u.id] ? ` · el último, ${UI.fmtDateShort(lastOf[u.id])}` : ''}</span>
-        </div>
-        <div class="profile-actions">
-          <button class="icon-btn" data-edit="${u.id}" title="Editar">${UI.icon('edit', 17)}</button>
-          ${u.isMain ? '' : `<button class="icon-btn danger" data-del="${u.id}" title="Eliminar">${UI.icon('trash', 17)}</button>`}
-        </div>
+    const txt = (u) => { const x = st[u.id]; return x.n === 0 ? 'Sin entrenos apuntados' : `${x.n} entreno${x.n === 1 ? '' : 's'} · el último, ${UI.fmtDateShort(x.last)}`; };
+    const ago = (ts) => { const d = Math.floor((Date.now() - ts) / 86400000); return d <= 0 ? 'hoy' : d === 1 ? 'ayer' : `hace ${d} días`; };
+    const me = users.find(u => u.isMain) || this.mainUser;
+    const friends = users.filter(u => !u.isMain);
+    const rows = friends.map(u => `<div class="more-row pf-row">
+        ${UI.avatar(u, 42)}
+        <span class="more-txt"><strong>${UI.esc(u.name)}</strong><span>${txt(u)}</span>${u.sharedAt ? `<span class="pf-sync">${UI.icon('refresh', 11)} Actualizado ${ago(u.sharedAt)}</span>` : ''}</span>
+        ${st[u.id].n ? `<button class="btn ghost small" data-compare="${u.id}">Comparar</button>` : ''}
+        <button class="icon-btn" data-pf-menu="${u.id}" aria-label="Opciones de ${UI.esc(u.name)}">${UI.icon('more', 20)}</button>
       </div>`).join('');
     return `<div class="section">
-      <div class="share-card-cta">
-        <span class="share-cta-ic">${UI.icon('users', 22)}</span>
-        <div class="share-cta-txt"><strong>Compárate con tus amigos</strong><span>Mándale a un amigo un enlace con tu progreso; él te añade como invitado en su Traindía y os comparáis en Progreso → Comparativa. Si te manda el suyo, ábrelo y aparece aquí.</span></div>
+      <button class="set-head pf-me" data-edit="${me.id}">
+        ${UI.avatar(me, 54)}
+        <span class="pf-me-txt"><span class="bk-eyebrow">Tú</span><strong>${UI.esc(me.name)}</strong><span>${txt(me)}</span></span>
+        <span class="set-head-edit">${UI.icon('edit', 15)} Editar</span>
+      </button>
+
+      <div class="more-sec">Tus amigos</div>
+      ${friends.length ? `<div class="more-group">${rows}</div>` : `<div class="guides-empty">
+        <span class="guides-empty-ic">${UI.icon('users', 26)}</span>
+        <strong>Compárate con tus amigos</strong>
+        <p>Cuando un amigo te mande el enlace con su progreso, ábrelo y aparecerá aquí. Luego lo ves junto al tuyo en Progreso → Comparativa.</p>
+      </div>`}
+      <div class="pf-actions">
         <button class="btn primary block" id="shareMine">${UI.icon('upload', 16)} Compartir mi progreso</button>
+        <button class="link-btn" id="addGuest">o añadir un amigo a mano</button>
       </div>
-      <p class="section-intro">Tú eres el <strong>perfil principal</strong>. Tus amigos aparecen aquí como <strong>invitados</strong>: sus datos solo sirven para compararos y nunca se mezclan con los tuyos.</p>
-      ${cards}
-      <button class="btn primary block" id="addGuest">+ Crear perfil invitado</button>
+      <p class="field-hint">Los datos de tus amigos solo sirven para compararos: nunca se mezclan con los tuyos.</p>
     </div>`;
   },
 
@@ -1077,14 +1148,32 @@ const app = {
     const sm = root.querySelector('#shareMine'); if (sm) sm.addEventListener('click', () => VShare.start(this));
     root.querySelector('#addGuest').addEventListener('click', () => this.editUserModal(null));
     root.querySelectorAll('[data-edit]').forEach(b => b.addEventListener('click', () => this.editUserModal(b.dataset.edit)));
-    root.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', () => this.deleteGuest(b.dataset.del)));
+    root.querySelectorAll('[data-compare]').forEach(b => b.addEventListener('click', () => this.go('progress', { tab: 'compare', guestId: b.dataset.compare })));
+    root.querySelectorAll('[data-pf-menu]').forEach(b => b.addEventListener('click', () => {
+      const u = this.usersById[b.dataset.pfMenu]; if (!u) return;
+      const ov = UI.modal({
+        title: u.name,
+        bodyHTML: `<div class="menu-list">
+          <button class="menu-row" data-op="compare"><span>${UI.icon('activity', 16)} Comparar con ${UI.esc(u.name)}</span><span class="chev">›</span></button>
+          <button class="menu-row" data-op="edit"><span>${UI.icon('edit', 16)} Nombre y color</span><span class="chev">›</span></button>
+          <button class="menu-row danger" data-op="del"><span>${UI.icon('trash', 16)} Quitar</span><span class="chev">›</span></button>
+        </div>
+        <p class="field-hint">Para actualizar sus datos, que te mande otro enlace: se actualizan solos.</p>`,
+        actions: [{ label: 'Cerrar', kind: 'ghost' }],
+        onMount: (m) => {
+          m.querySelector('[data-op="compare"]').addEventListener('click', () => { UI.closeModal(ov); this.go('progress', { tab: 'compare', guestId: u.id }); });
+          m.querySelector('[data-op="edit"]').addEventListener('click', () => { UI.closeModal(ov); this.editUserModal(u.id); });
+          m.querySelector('[data-op="del"]').addEventListener('click', () => { UI.closeModal(ov); this.deleteGuest(u.id); });
+        },
+      });
+    }));
   },
 
   editUserModal(userId) {
     const u = userId ? this.usersById[userId] : null;
     const isNew = !u;
     UI.modal({
-      title: isNew ? 'Nuevo perfil invitado' : (u.isMain ? 'Editar perfil principal' : 'Editar invitado'),
+      title: isNew ? 'Añadir un amigo' : (u.isMain ? 'Tu perfil' : `Editar a ${u.name}`),
       bodyHTML: `<div id="userForm">
         ${UI.field('Nombre', UI.input('name', u ? u.name : '', { placeholder: 'Nombre' }))}
         ${UI.field('Color', UI.colorPicker('color', u ? u.color : UI.ESSENTIALS[1]))}
@@ -1112,9 +1201,9 @@ const app = {
     const u = this.usersById[userId];
     if (!u || u.isMain) return;
     const ok = await UI.confirm({
-      title: `Eliminar a ${u.name}`,
-      message: 'Se borrarán también todas sus sesiones y progreso importados. Esta acción no se puede deshacer.',
-      confirmLabel: 'Eliminar', danger: true,
+      title: `¿Quitar a ${u.name}?`,
+      message: 'Se borran de este móvil sus entrenos y su progreso (los tuyos no se tocan). Si te vuelve a mandar su enlace, aparecerá otra vez.',
+      confirmLabel: 'Quitar', danger: true,
     });
     if (!ok) return;
     for (const store of ['exercises', 'routines', 'sessions', 'progress']) {
@@ -1208,7 +1297,7 @@ const app = {
       <div class="more-group">
         ${row('id="seeLanding"', 'info', 'var(--rest)', 'Ver la presentación', 'Qué es Traindía y cómo funciona')}
         ${row('id="seeRepo"', 'code', 'var(--rest)', 'Código en GitHub', 'Novedades de cada versión', `<span class="chev">↗</span>`)}
-        <div class="more-row set-ver"><span class="more-txt"><span>Versión</span></span><strong>v2.48.3</strong></div>
+        <div class="more-row set-ver"><span class="more-txt"><span>Versión</span></span><strong>v2.48.4</strong></div>
       </div>
 
       <div class="more-sec danger">Zona peligrosa</div>
