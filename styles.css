@@ -154,6 +154,37 @@ textarea.inp { resize: vertical; line-height: 1.4; }
 .tab.on { background: var(--bg-card); color: var(--strong); box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
 
 /* ---- Filas grandes (Más) ---- */
+/* Documentos */
+.doc-row { cursor: pointer; }
+.doc-thumb { width: 44px; height: 44px; border-radius: 10px; object-fit: cover; flex: none; background: var(--line-soft); }
+.doc-ic { width: 44px; height: 44px; background: var(--sub-accent); }
+.doc-ic.pdf { background: #dc2626; }
+.doc-ic b { font: 700 11px 'IBM Plex Mono', monospace; letter-spacing: .04em; }
+.doc-name { white-space: normal; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; font-size: 15px; line-height: 1.3; }
+/* Perfiles */
+.set-head { display: flex; align-items: center; gap: 14px; width: 100%; text-align: left; background: var(--bg-card); border: 1px solid var(--line); border-radius: 16px; padding: 16px; color: var(--ink); cursor: pointer; font-family: 'Inter Tight', sans-serif; }
+.set-head:active { background: var(--line-soft); }
+.set-head .avatar { flex: none; }
+.set-head-edit { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; font-weight: 600; color: var(--strong); padding: 7px 11px; border-radius: 999px; background: var(--strong-bg); flex: none; }
+.pf-me { margin-bottom: 4px; }
+.pf-me-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.pf-me-txt strong { font-size: 20px; }
+.pf-me-txt > span:last-child { font-size: 13px; color: var(--ink-dim); }
+.pf-row { cursor: default; gap: 12px; }
+.pf-row .more-txt span { white-space: normal; }
+.pf-row .avatar { flex: none; }
+.more-txt .pf-sync { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; color: var(--light); }
+.pf-actions { display: flex; flex-direction: column; align-items: center; gap: 10px; margin-top: 16px; }
+/* Sugerencias */
+.fb-types { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 12px 0 16px; }
+.fb-type { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 12px 6px; border-radius: 12px; border: 1px solid var(--line); background: var(--bg-card); color: var(--ink); font: 600 14px 'Inter Tight', sans-serif; cursor: pointer; }
+.fb-type .fb-ic { font-size: 22px; line-height: 1; }
+.fb-type.on { border-color: var(--strong); background: var(--strong-bg); color: var(--strong); }
+.fb-privacy { margin-top: 4px; }
+.fb-thanks { text-align: center; padding: 24px 8px 8px; }
+.fb-thanks span { font-size: 44px; display: block; }
+.fb-thanks strong { display: block; font-size: 20px; margin: 8px 0 6px; }
+.fb-thanks p { margin: 0; color: var(--ink-dim); }
 /* Planes */
 .pl-hero { background: var(--bg-card); border: 1px solid color-mix(in srgb, var(--strong) 45%, var(--line)); border-radius: 16px; padding: 18px; }
 .pl-hero-top { display: flex; align-items: flex-start; gap: 10px; }
