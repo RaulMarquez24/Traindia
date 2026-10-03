@@ -180,16 +180,25 @@ const VPlan = (() => {
   }
 
   // ---------- SEMANA ----------
-  function week(app) {
+  function week(app, params) {
     const r = app.routine;
     if (!r) return emptyRoutine();
+    const reorder = !!(params && params.reorder); // modo ordenar (se entra dejando pulsado un día)
     const days = r.days.slice().sort((a, b) => (a.order || 0) - (b.order || 0)).map(d => {
       const placeClass = d.placeAccent ? 'parque' : '';
       const metaRight = d.isRest
         ? `<span class="day-place">${UI.esc(d.place || '')}</span>`
         : `<span class="day-place ${placeClass}">${UI.esc(d.place || '')}${d.duration ? `${d.place ? ' · ' : ''}<strong>${UI.esc(d.duration)}</strong>` : ''}</span>`;
+      if (reorder) return `
+        <div class="day-card ${d.type || 'untyped'} jiggle" data-sort-id="${d.id}">
+          <div class="day-row-1">
+            <span class="day-name">${UI.esc(d.name)}</span>
+            <span class="day-grip">${UI.icon('grip', 18)}</span>
+          </div>
+          <div class="day-focus">${UI.esc(d.focus || (d.isRest ? 'Descanso' : ''))}</div>
+        </div>`;
       return `
-        <a class="day-card ${d.type || 'untyped'}" data-link="day" data-params='${JSON.stringify({ dayId: d.id })}'>
+        <a class="day-card ${d.type || 'untyped'}" data-link="day" data-day-id="${d.id}" data-params='${JSON.stringify({ dayId: d.id })}'>
           <div class="day-row-1">
             <span class="day-name">${UI.esc(d.name)}</span>
             ${d.type ? `<span class="day-tag tag-${d.type}">${UI.esc(d.typeLabel || TYPE_LABELS[d.type] || '')}</span>` : ''}
@@ -225,10 +234,43 @@ const VPlan = (() => {
         </div>
       </div>` : '';
 
+    if (reorder) return `<div class="week-reorder-bar"><span>${UI.icon('grip', 16)} Arrastra los días para ordenarlos</span><button class="btn primary small" id="weekDone">Listo</button></div><div class="week-days reordering">${days}</div>`;
     return `${welcome}${empty}<div class="week-days">${days}</div>`;
   }
 
-  function weekBind(app, root) {
+  function weekBind(app, root, params) {
+    const list = root && root.querySelector('.week-days');
+    if (params && params.reorder) {
+      UI.makeSortable(list, {
+        itemSelector: '.day-card', handleSelector: '.day-card',
+        onReorder: async (ids) => {
+          ids.forEach((id, i) => { const d = app.routine.days.find(x => x.id === id); if (d) d.order = i; });
+          await saveRoutine(app);
+        },
+      });
+      root.querySelector('#weekDone').addEventListener('click', () => app.go('week', {}, true));
+      return;
+    }
+    // Dejar pulsado un día (medio segundo, sin moverse) → modo ordenar.
+    if (list) list.querySelectorAll('.day-card[data-day-id]').forEach(card => {
+      let t = null, x0 = 0, y0 = 0;
+      const cancel = () => { if (t) { clearTimeout(t); t = null; } };
+      card.addEventListener('pointerdown', (e) => {
+        if (e.button > 0) return;
+        x0 = e.clientX; y0 = e.clientY; cancel();
+        t = setTimeout(() => {
+          t = null;
+          try { navigator.vibrate && navigator.vibrate(25); } catch (er) {}
+          // el «clic» que llega al soltar no debe abrir el día
+          const swallow = (ev) => { ev.stopPropagation(); ev.preventDefault(); };
+          card.addEventListener('click', swallow, { capture: true, once: true });
+          app.go('week', { reorder: true }, true);
+        }, 480);
+      });
+      card.addEventListener('pointermove', (e) => { if (t && Math.hypot(e.clientX - x0, e.clientY - y0) > 10) cancel(); });
+      ['pointerup', 'pointercancel', 'pointerleave'].forEach(ev => card.addEventListener(ev, cancel));
+      card.addEventListener('contextmenu', (e) => e.preventDefault()); // sin el menú del navegador al mantener pulsado
+    });
     const we = root && root.querySelector('#weekEmpty');
     if (we) {
       we.querySelector('[data-we-tpl]').addEventListener('click', () => createPlanModal(app));
@@ -416,7 +458,7 @@ const VPlan = (() => {
     const others = (app.routine?.days || []).filter(x => x.id !== d.id).sort((a, b) => (a.order || 0) - (b.order || 0));
     UI.modal({
       title: `Intercambiar ${d.name}`,
-      bodyHTML: `<p class="modal-text dim">Elige con qué día intercambiar el contenido de <strong>${UI.esc(d.name)}</strong>. Los nombres de los días no cambian, solo su entrenamiento.</p>
+      bodyHTML: `<p class="modal-text dim">Elige con qué día intercambiar el entrenamiento de <strong>${UI.esc(d.name)}</strong>.</p>
         <div class="menu-list">
           ${others.map(o => `<button class="menu-row" data-other="${o.id}"><span><strong>${UI.esc(o.name)}</strong> — ${UI.esc(o.focus || (o.isRest ? 'Descanso' : ''))}</span><span class="chev">›</span></button>`).join('')}
         </div>`,
@@ -424,19 +466,24 @@ const VPlan = (() => {
       onMount: (root) => root.querySelectorAll('[data-other]').forEach(b => b.addEventListener('click', async () => {
         const other = app.routine.days.find(x => x.id === b.dataset.other);
         UI.closeModal();
-        const ok = await UI.confirm({
+        const choice = await new Promise(res => UI.modal({
           title: `Intercambiar ${d.name} ↔ ${other.name}`,
-          message: `Vas a intercambiar el entrenamiento de "${d.name}" y "${other.name}". Tras esto, "${d.name}" tendrá lo que ahora hay en "${other.name}" y viceversa. Tus sesiones registradas no se tocan.`,
-          confirmLabel: 'Sí, intercambiar', danger: true,
-        });
-        if (!ok) return;
+          bodyHTML: `<p class="modal-text">«${UI.esc(d.name)}» tendrá el entrenamiento que ahora hay en «${UI.esc(other.name)}» y al revés. Tus sesiones registradas no se tocan.</p>
+            <label class="check-row swap-names"><input type="checkbox" id="swapNames"><span><strong>Intercambiar también los nombres</strong><span class="dim">Útil si tus días se llaman por lo que entrenas («Full body A», «Pierna»…) y no por el día de la semana.</span></span></label>`,
+          actions: [
+            { label: 'Cancelar', kind: 'ghost', onClick: () => res(null) },
+            { label: 'Intercambiar', kind: 'primary', onClick: (m) => res({ names: m.querySelector('#swapNames').checked }) },
+          ],
+        }));
+        if (!choice) return;
         swapDayContent(d, other);
+        if (choice.names) { const n = d.name; d.name = other.name; other.name = n; }
         d.typeLabel = TYPE_LABELS[d.type] || d.typeLabel;
         other.typeLabel = TYPE_LABELS[other.type] || other.typeLabel;
         await saveRoutine(app);
         await app.refreshRoutine();
         app.go('day', { dayId: d.id }, true);
-        UI.toast(`${d.name} y ${other.name} intercambiados`);
+        UI.toast(`${choice.names ? 'Días' : 'Entrenamientos'} intercambiados`);
       })),
     });
   }

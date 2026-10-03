@@ -416,6 +416,19 @@ body.has-active-bar .pl-new-wrap { bottom: calc(var(--nav-h) + var(--safe-bottom
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 
+.week-days .day-card { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+/* Modo ordenar la semana (dejar pulsado un día) */
+.week-reorder-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; padding: 8px 8px 8px 14px; border-radius: 12px; background: var(--strong-bg); color: var(--strong); font-size: 14px; font-weight: 600; }
+.week-reorder-bar span { display: inline-flex; align-items: center; gap: 6px; }
+.week-days.reordering { height: calc(100dvh - var(--header-h) - var(--nav-h) - var(--safe-top) - var(--safe-bottom) - 100px); }
+.week-days.reordering .day-card { touch-action: none; cursor: grab; border-style: dashed; }
+.day-grip { margin-left: auto; color: var(--ink-dim); display: inline-flex; }
+@keyframes day-jiggle { 0% { transform: rotate(-0.7deg); } 50% { transform: rotate(0.7deg); } 100% { transform: rotate(-0.7deg); } }
+.day-card.jiggle:not(.dragging) { animation: day-jiggle .32s ease-in-out infinite; }
+.day-card.jiggle:nth-child(2n):not(.dragging) { animation-delay: -.16s; }
+@media (prefers-reduced-motion: reduce) { .day-card.jiggle { animation: none !important; } }
+.swap-names { margin-top: 10px; align-items: flex-start; }
+.swap-names span span { display: block; font-size: 12.5px; margin-top: 2px; }
 /* ---- Sesiones ---- */
 .date-filters { display: flex; gap: 8px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
 .date-filter { width: auto; flex: 1; min-width: 0; font-size: 13px; padding: 8px 10px; padding-right: 26px; }
