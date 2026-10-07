@@ -232,14 +232,6 @@ body.has-active-bar .pl-new-wrap { bottom: calc(var(--nav-h) + var(--safe-bottom
 .guides-actions { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
 .guide-own { color: var(--strong); }
 .plan-guides-link { margin-top: 14px; }
-/* Instalar la app (Más) */
-.inst-card { position: relative; display: grid; grid-template-columns: auto 1fr; gap: 12px 14px; align-items: center; background: var(--strong-bg); border: 1px solid color-mix(in srgb, var(--strong) 40%, transparent); border-radius: 16px; padding: 16px; margin-bottom: 6px; }
-.inst-ic { width: 46px; height: 46px; border-radius: 12px; background: var(--strong); color: #fff; display: flex; align-items: center; justify-content: center; }
-.inst-txt { display: flex; flex-direction: column; gap: 3px; padding-right: 28px; }
-.inst-txt strong { font-size: 16px; color: var(--ink); }
-.inst-txt span { font-size: 13px; color: var(--ink-dim); line-height: 1.4; }
-.inst-x { position: absolute; top: 8px; right: 8px; }
-.inst-btn { grid-column: 1 / -1; }
 .inst-steps { margin: 6px 0 0; padding-left: 20px; line-height: 1.6; font-size: 15px; }
 .set-static { cursor: default; }
 /* Menú Más: grupos con filas compactas (un color por grupo) */
