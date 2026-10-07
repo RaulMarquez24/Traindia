@@ -1024,6 +1024,26 @@
       document.body.classList.remove('install-shown');
     }
   });
+  // Para Más y Ajustes: ¿se está usando instalada? ¿hay botón de instalar del navegador?
+  window.traindiaInstalled = () => {
+    try { return (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true || document.referrer.startsWith('android-app://'); } catch (e) { return false; }
+  };
+  window.traindiaCanPrompt = () => !!deferredPrompt;
+  // Lanza el diálogo del navegador. Devuelve true si se ha instalado.
+  window.traindiaPromptInstall = async () => {
+    if (!deferredPrompt) return false;
+    try { await deferredPrompt.prompt(); } catch (e) { return null; } // el navegador no lo deja ahora: pasos a mano
+    const { outcome } = await deferredPrompt.userChoice;
+    deferredPrompt = null;
+    document.getElementById('installPrompt').classList.remove('show');
+    document.body.classList.remove('install-shown');
+    return outcome === 'accepted';
+  };
+  window.addEventListener('appinstalled', () => {
+    deferredPrompt = null;
+    try { localStorage.setItem('traindia-installed', '1'); } catch (e) {}
+    if (typeof app !== 'undefined' && app.currentView === 'more') app.render();
+  });
   document.getElementById('installClose')?.addEventListener('click', () => {
     document.getElementById('installPrompt').classList.remove('show');
     document.body.classList.remove('install-shown');
