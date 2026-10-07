@@ -720,6 +720,31 @@ const app = {
   setTheme(t) { try { localStorage.setItem(this.THEME_KEY, t); } catch (e) {} this.applyTheme(t); },
 
   // ---- Menú de usuario (desde el chip) ----
+  // Instalar la app: el diálogo del navegador si lo ofrece; si no (iPhone, o Chrome no
+  // lo propone), los pasos a mano según el móvil.
+  async installApp() {
+    if (window.traindiaInstalled && window.traindiaInstalled()) { UI.toast('Ya la estás usando instalada'); return; }
+    if (window.traindiaCanPrompt && window.traindiaCanPrompt()) {
+      const ok = await window.traindiaPromptInstall();
+      if (ok) UI.toast('¡Instalada! Ábrela desde tu pantalla de inicio');
+      if (ok !== null) return;
+    }
+    const ua = navigator.userAgent || '';
+    const ios = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    const android = /Android/i.test(ua);
+    const pasos = ios
+      ? `<ol class="inst-steps"><li>Ábrela en <strong>Safari</strong> (en otros navegadores de iPhone no se puede).</li><li>Toca <strong>Compartir</strong> (el cuadrado con la flecha hacia arriba).</li><li>Elige <strong>Añadir a pantalla de inicio</strong> y pulsa <strong>Añadir</strong>.</li></ol>`
+      : android
+        ? `<ol class="inst-steps"><li>En Chrome, toca el menú <strong>⋮</strong> (arriba a la derecha).</li><li>Elige <strong>Instalar aplicación</strong> (o <strong>Añadir a pantalla de inicio</strong>).</li><li>Confirma con <strong>Instalar</strong>.</li></ol>
+           <p class="field-hint">Si ya la tienes instalada, ábrela desde el icono de tu pantalla de inicio en vez de desde el navegador.</p>`
+        : `<ol class="inst-steps"><li>En Chrome o Edge, busca el icono de <strong>instalar</strong> en la barra de direcciones (una pantalla con una flecha).</li><li>O en el menú <strong>⋮</strong> → <strong>Instalar Traindía</strong>.</li></ol>`;
+    UI.modal({
+      title: 'Instalar Traindía',
+      bodyHTML: `<p class="modal-text">Así se abre como una app: a pantalla completa, desde tu pantalla de inicio, con avisos de descanso y sin conexión.</p>${pasos}`,
+      actions: [{ label: 'Entendido', kind: 'primary' }],
+    });
+  },
+
   // Menú del avatar: tú (nombre y color), compartir tu progreso y tus amigos para compararos.
   openUserMenu() {
     const me = this.mainUser;
@@ -797,7 +822,7 @@ const app = {
                 tipo: d.tipo,
                 mensaje: d.mensaje.trim(),
                 contacto: (d.contacto || '').trim() || '(no indicado)',
-                version: 'v2.49.1',
+                version: 'v2.49.2',
                 perfil: (this.mainUser && this.mainUser.name) || '',
                 navegador: navigator.userAgent,
               }),
@@ -852,15 +877,26 @@ const app = {
         { feedback: true, icon: 'chat', label: 'Sugerencias y reportes', sub: 'Envíame ideas o fallos' },
       ] },
     ];
+    // Instalar: mientras no se use instalada. Si se cierra, vuelve en la próxima apertura de la app.
+    let hidInstall = false; try { hidInstall = sessionStorage.getItem('traindia-install-hide') === '1'; } catch (e) {}
+    const installCard = (!window.traindiaInstalled || window.traindiaInstalled() || hidInstall) ? '' : `<div class="inst-card">
+        <span class="inst-ic">${UI.icon('download', 22)}</span>
+        <div class="inst-txt"><strong>Instala Traindía en tu móvil</strong><span>Se abre como una app, a pantalla completa, con avisos de descanso y sin conexión.</span></div>
+        <button class="icon-btn inst-x" data-inst-hide aria-label="Ahora no">${UI.icon('x', 16)}</button>
+        <button class="btn primary block inst-btn" data-install>Instalar</button>
+      </div>`;
     return `<div class="section">
+      ${installCard}
       ${groups.map(g => `<div class="more-sec">${g.title}</div>
         <div class="more-group">${g.rows.map(r => `<button class="more-row" ${r.feedback ? 'data-feedback' : `data-link="${r.v}"`}>
           <span class="more-ic" style="background:${g.color}">${UI.icon(r.icon, 20)}</span>
           <span class="more-txt"><strong>${r.label}</strong><span${r.warn ? ' class="warn"' : ''}>${UI.esc(r.sub)}</span></span><span class="chev">›</span></button>`).join('')}</div>`).join('')}
-      <p class="version-foot">Traindía · v2.49.1<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
+      <p class="version-foot">Traindía · v2.49.2<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
     </div>`;
   },
   bindMore(root) {
+    const ib = root && root.querySelector('[data-install]'); if (ib) ib.addEventListener('click', () => this.installApp());
+    const ih = root && root.querySelector('[data-inst-hide]'); if (ih) ih.addEventListener('click', () => { try { sessionStorage.setItem('traindia-install-hide', '1'); } catch (e) {} ih.closest('.inst-card').remove(); });
     const fb = root && root.querySelector('[data-feedback]');
     if (fb) fb.addEventListener('click', () => this.openFeedback());
   },
@@ -1303,6 +1339,9 @@ const app = {
 
       <div class="more-sec">Acerca de Traindía</div>
       <div class="more-group">
+        ${(window.traindiaInstalled && window.traindiaInstalled())
+          ? `<div class="more-row set-static"><span class="more-ic" style="background:var(--light)">${UI.icon('check', 18)}</span><span class="more-txt"><strong>Instalada en este móvil</strong><span>La estás usando como app</span></span></div>`
+          : row('id="installRow"', 'download', 'var(--light)', 'Instalar en el móvil', 'Como una app, a pantalla completa y sin conexión')}
         ${row('id="seeLanding"', 'info', 'var(--rest)', 'Ver la presentación', 'Qué es Traindía y cómo funciona')}
         ${row('id="seeRepo"', 'code', 'var(--rest)', 'Código en GitHub', 'Novedades de cada versión', `<span class="chev">↗</span>`)}
       </div>
@@ -1319,6 +1358,7 @@ const app = {
     this.bindNotifSettings(root);
     const on = (sel, fn) => { const b = root.querySelector(sel); if (b) b.addEventListener('click', fn); };
     on('#seeLanding', () => this.previewLanding());
+    on('#installRow', () => this.installApp());
     on('#seeRepo', () => window.open(this.REPO_URL + '/releases', '_blank', 'noopener'));
     const snd = root.querySelector('#setRestSound'); if (snd) snd.addEventListener('change', () => VSessions.setRestSound(snd.checked));
     const vib = root.querySelector('#setRestVibrate'); if (vib) vib.addEventListener('change', () => { VSessions.setRestVibrate(vib.checked); if (vib.checked) { try { navigator.vibrate && navigator.vibrate(120); } catch (e) {} } });
