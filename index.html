@@ -1004,25 +1004,23 @@
     // el aviso saldrá al crear el perfil (la app llama a showInstallPrompt).
     if (document.documentElement.classList.contains('has-profile')) window.showInstallPrompt();
   });
-  // Se propone instalar DESPUÉS del primer entreno (antes no aporta nada) y, si se
-  // cierra, no vuelve en 14 días.
+  // Aviso flotante: en cada apertura de la app mientras no se use instalada (con
+  // perfil ya creado). Si se cierra, no vuelve hasta la siguiente apertura.
+  // Sin botón del navegador (iPhone…), «Instalar» explica los pasos a mano.
   window.showInstallPrompt = () => {
-    if (!deferredPrompt) return;
     let ok = false;
     try {
-      const dismissed = +localStorage.getItem('traindia-install-dismissed') || 0;
-      ok = localStorage.getItem('traindia-first-workout') === '1' && Date.now() - dismissed > 14 * 86400000;
+      ok = document.documentElement.classList.contains('has-profile')
+        && !(window.traindiaInstalled && window.traindiaInstalled())
+        && sessionStorage.getItem('traindia-install-hide') !== '1';
     } catch (e) {}
     if (ok) { document.getElementById('installPrompt').classList.add('show'); document.body.classList.add('install-shown'); }
   };
   document.getElementById('installBtn')?.addEventListener('click', async () => {
-    if (deferredPrompt) {
-      deferredPrompt.prompt();
-      const { outcome } = await deferredPrompt.userChoice;
-      deferredPrompt = null;
-      document.getElementById('installPrompt').classList.remove('show');
-      document.body.classList.remove('install-shown');
-    }
+    document.getElementById('installPrompt').classList.remove('show');
+    document.body.classList.remove('install-shown');
+    if (typeof app !== 'undefined' && app.installApp) app.installApp();
+    else if (deferredPrompt) { try { await deferredPrompt.prompt(); } catch (e) {} deferredPrompt = null; }
   });
   // Para Más y Ajustes: ¿se está usando instalada? ¿hay botón de instalar del navegador?
   window.traindiaInstalled = () => {
@@ -1042,12 +1040,13 @@
   window.addEventListener('appinstalled', () => {
     deferredPrompt = null;
     try { localStorage.setItem('traindia-installed', '1'); } catch (e) {}
-    if (typeof app !== 'undefined' && app.currentView === 'more') app.render();
+    document.getElementById('installPrompt').classList.remove('show');
+    document.body.classList.remove('install-shown');
   });
   document.getElementById('installClose')?.addEventListener('click', () => {
     document.getElementById('installPrompt').classList.remove('show');
     document.body.classList.remove('install-shown');
-    try { localStorage.setItem('traindia-install-dismissed', String(Date.now())); } catch (e) {}
+    try { sessionStorage.setItem('traindia-install-hide', '1'); } catch (e) {} // hasta la próxima apertura
   });
 </script>
 

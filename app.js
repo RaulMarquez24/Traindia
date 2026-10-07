@@ -62,7 +62,7 @@ const app = {
     await DB.migrate();
     await this.loadUsers();
     DB.sessionsOf(this.mainUser.id).then(ss => {
-      if (ss.some(x => !x.draft)) { try { localStorage.setItem('traindia-first-workout', '1'); } catch (e) {} if (window.showInstallPrompt) window.showInstallPrompt(); }
+      if (ss.some(x => !x.draft)) { try { localStorage.setItem('traindia-first-workout', '1'); } catch (e) {} }
     }).catch(() => {});
     await this.refreshRoutine();
     await DB.ensurePlaces(this.routine);
@@ -822,7 +822,7 @@ const app = {
                 tipo: d.tipo,
                 mensaje: d.mensaje.trim(),
                 contacto: (d.contacto || '').trim() || '(no indicado)',
-                version: 'v2.49.2',
+                version: 'v2.49.3',
                 perfil: (this.mainUser && this.mainUser.name) || '',
                 navegador: navigator.userAgent,
               }),
@@ -877,26 +877,15 @@ const app = {
         { feedback: true, icon: 'chat', label: 'Sugerencias y reportes', sub: 'Envíame ideas o fallos' },
       ] },
     ];
-    // Instalar: mientras no se use instalada. Si se cierra, vuelve en la próxima apertura de la app.
-    let hidInstall = false; try { hidInstall = sessionStorage.getItem('traindia-install-hide') === '1'; } catch (e) {}
-    const installCard = (!window.traindiaInstalled || window.traindiaInstalled() || hidInstall) ? '' : `<div class="inst-card">
-        <span class="inst-ic">${UI.icon('download', 22)}</span>
-        <div class="inst-txt"><strong>Instala Traindía en tu móvil</strong><span>Se abre como una app, a pantalla completa, con avisos de descanso y sin conexión.</span></div>
-        <button class="icon-btn inst-x" data-inst-hide aria-label="Ahora no">${UI.icon('x', 16)}</button>
-        <button class="btn primary block inst-btn" data-install>Instalar</button>
-      </div>`;
     return `<div class="section">
-      ${installCard}
       ${groups.map(g => `<div class="more-sec">${g.title}</div>
         <div class="more-group">${g.rows.map(r => `<button class="more-row" ${r.feedback ? 'data-feedback' : `data-link="${r.v}"`}>
           <span class="more-ic" style="background:${g.color}">${UI.icon(r.icon, 20)}</span>
           <span class="more-txt"><strong>${r.label}</strong><span${r.warn ? ' class="warn"' : ''}>${UI.esc(r.sub)}</span></span><span class="chev">›</span></button>`).join('')}</div>`).join('')}
-      <p class="version-foot">Traindía · v2.49.2<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
+      <p class="version-foot">Traindía · v2.49.3<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
     </div>`;
   },
   bindMore(root) {
-    const ib = root && root.querySelector('[data-install]'); if (ib) ib.addEventListener('click', () => this.installApp());
-    const ih = root && root.querySelector('[data-inst-hide]'); if (ih) ih.addEventListener('click', () => { try { sessionStorage.setItem('traindia-install-hide', '1'); } catch (e) {} ih.closest('.inst-card').remove(); });
     const fb = root && root.querySelector('[data-feedback]');
     if (fb) fb.addEventListener('click', () => this.openFeedback());
   },
