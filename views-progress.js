@@ -18,6 +18,13 @@ const VProgress = (() => {
     { key: 'volume', label: 'Peso levantado (kg)' },
     { key: 'maxReps', label: 'Reps máx' },
   ];
+  // Con tu propio peso (dominadas, fondos…): el peso es el corporal ± lastre/asistencia.
+  const REPS_METRICS = [
+    { key: 'maxLoad', label: 'Peso máx (corporal ± lastre)' },
+    { key: 'maxReps', label: 'Reps máx' },
+    { key: 'e1rm', label: '1RM est.' },
+    { key: 'volume', label: 'Peso levantado (kg)' },
+  ];
   // Cardio (distancia/kcal totales): la métrica de tiempo es el TOTAL de la sesión.
   const TIME_METRICS_CARDIO = [
     { key: 'distance', label: 'Distancia (km)' },
@@ -36,6 +43,7 @@ const VProgress = (() => {
     return ex && ex.type === 'time' && Array.isArray(ex.metrics) && (ex.metrics.includes('distance') || ex.metrics.includes('kcal'));
   }
   const timeMetricsFor = (ex) => (isCardioEx(ex) ? TIME_METRICS_CARDIO : TIME_METRICS_HOLD);
+  const metricsFor = (ex) => (!ex ? EX_METRICS : ex.type === 'time' ? timeMetricsFor(ex) : ex.type === 'reps' ? REPS_METRICS : EX_METRICS);
   const METRIC_UNIT = { maxWeight: ' kg', e1rm: ' kg', volume: ' kg', maxReps: ' reps', distance: ' km', kcal: ' kcal', maxLoad: ' kg' };
   // Métricas en las que MENOS es mejor (el ritmo): el récord es el valor más bajo.
   const LOWER_BETTER = new Set(['pace', 'bestSet']);
@@ -59,6 +67,8 @@ const VProgress = (() => {
   function bwAtDate(bws, date) {
     let val = null;
     for (const b of (bws || [])) { if (b.date <= date) val = b.kg; else break; }
+    // sesiones anteriores a tu primer pesaje: el más cercano (mejor que contar solo el lastre)
+    if (val == null && bws && bws.length) val = bws[0].kg;
     return val;
   }
 
@@ -141,7 +151,7 @@ const VProgress = (() => {
     const labelFilter = opts.label || ''; // filtra cardio por etiqueta/variante
     // Peso corporal por fecha: para "peso levantado"/"peso máx levantado" a peso corporal.
     let bodyWeights = opts.bodyWeights;
-    if (bodyWeights === undefined && (metric === 'volume' || metric === 'maxLoad')) bodyWeights = await loadBodyWeights(userId);
+    if (bodyWeights === undefined && (metric === 'volume' || metric === 'maxLoad' || metric === 'e1rm')) bodyWeights = await loadBodyWeights(userId);
     let sessions = (await DB.sessionsOf(userId)).filter(s => !s.draft);
     sessions.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
     const points = [];
@@ -152,9 +162,11 @@ const VProgress = (() => {
       let best1rm = 0, best1rmSet = null; // mejor 1RM estimado (Epley) y la serie que lo produce
       let maxLoad = 0, bestLoad = null;   // mayor (corporal±carga) levantado en una serie
       let bestSetPace = 0, bestSetInfo = null; // la serie más rápida (ritmo, s/km) y su distancia/tiempo
+      let e_isReps = false; // ejercicio con tu propio peso (para describir lastre/asistencia)
       const bw = bwAtDate(bodyWeights, s.date); // peso corporal aplicable a esta sesión (o null)
       (s.entries || []).forEach(e => {
         if ((e.name || '').toLowerCase() !== lname) return;
+        if (e.type === 'reps') e_isReps = true;
         if (labelFilter && !(e.sets || []).some(st => (st.label || '').trim() === labelFilter)) return; // solo la variante elegida
         found = true;
         // cardio nuevo: distancia/kcal como TOTAL del ejercicio (entry.totals).
@@ -174,11 +186,11 @@ const VProgress = (() => {
           }
           // ¿cuenta para "peso máx levantado"? repes con reps, o series de tiempo con lastre/asist.
           const loadCounts = (e.type === 'reps' && r > 0) || (e.type === 'time' && (set.load || set.loadMode));
-          if (loadCounts && ew > maxLoad) { maxLoad = ew; bestLoad = { ew, r, mode: set.loadMode }; }
+          if (loadCounts && (e.type === 'weight' || bw != null) && ew > maxLoad) { maxLoad = ew; bestLoad = { ew, r, mode: set.loadMode, load: parseFloat(set.load) || 0 }; }
           if (w > maxWeight) maxWeight = w;
           if (r > maxReps) maxReps = r;
           if (t > maxTime) maxTime = t;
-          volume += r * ew;
+          if (e.type !== 'reps' || bw != null) volume += r * ew; // con tu peso, sin peso corporal no se sabe
           if (!hasTotalTime) totalTime += t;
           if (!hasTotals) { // sin total: la de cada serie (la apuntada o, si no, la del objetivo «5×400m»)
             const own = (parseFloat(set.distance) || 0) || ((parseFloat(set.sdist) || 0) / 1000);
@@ -195,12 +207,14 @@ const VProgress = (() => {
             }
           }
           if (w > 0 && (!bestW || w > bestW.w || (w === bestW.w && r > bestW.r))) bestW = { w, r };
-          if (r > 0 && (!bestR || r > bestR.r || (r === bestR.r && w > bestR.w))) bestR = { w, r };
-          if (w > 0 && r > 0) { // 1RM con reps en reserva según el esfuerzo
+          const wR = e.type === 'reps' ? ew : w; // a iguales reps, gana la de más peso (con tu peso: corporal ± lastre)
+          if (r > 0 && (!bestR || r > bestR.r || (r === bestR.r && wR > bestR.w))) bestR = { w: wR, r, mode: set.loadMode, load: parseFloat(set.load) || 0 };
+          const w1 = e.type === 'reps' ? (bw != null ? ew : 0) : w; // con tu peso: corporal ± lastre
+          if (w1 > 0 && r > 0) { // 1RM con reps en reserva según el esfuerzo
             const rir = repsInReserve(set.effort);
             if (!effortOnly || rir != null) {
-              const e1 = estimate1rm(w, r + (rir || 0), formula);
-              if (e1 > best1rm) { best1rm = e1; best1rmSet = { w, r, eff: set.effort || null }; }
+              const e1 = estimate1rm(w1, r + (rir || 0), formula);
+              if (e1 > best1rm) { best1rm = e1; best1rmSet = { w: Math.round(w1 * 10) / 10, r, eff: set.effort || null }; }
             }
           }
         });
@@ -218,17 +232,21 @@ const VProgress = (() => {
       let detail = '', tie = 0;
       if (metric === 'maxWeight' && bestW) { detail = bestW.r ? `× ${bestW.r}` : ''; tie = bestW.r; }            // + reps a igual peso
       else if (metric === 'e1rm' && best1rmSet) { detail = `de ${best1rmSet.w} kg × ${best1rmSet.r}${best1rmSet.eff ? ` · ${best1rmSet.eff}` : ''}`; tie = best1rmSet.w; } // serie origen del 1RM
-      else if (metric === 'maxReps' && bestR) { detail = bestR.w ? `@ ${bestR.w} kg` : ''; tie = bestR.w; }       // + peso a iguales reps
+      else if (metric === 'maxReps' && bestR) { // con tu peso: si llevabas lastre o asistencia; con barra: el peso
+        detail = e_isReps ? (bestR.mode && bestR.load ? (bestR.mode === 'asist' ? `con asistencia (−${bestR.load} kg)` : `con +${bestR.load} kg`) : '') : (bestR.w ? `@ ${bestR.w} kg` : '');
+        tie = bestR.w; }
       else if (metric === 'distance' && distance > 0) { detail = totalTime ? `en ${fmtSecs(totalTime)}` : ''; tie = -totalTime; } // − tiempo a igual distancia
       else if (metric === 'kcal' && kcal > 0) { detail = totalTime ? `en ${fmtSecs(totalTime)}` : ''; }
       else if (metric === 'maxTime' && distR > 0) { detail = `· ${distR} km`; tie = distR; }                      // + distancia a igual tiempo
       else if (metric === 'totalTime' && distR > 0) { detail = `· ${distR} km`; tie = distR; }                    // tiempo total (cardio) + distancia
       else if (metric === 'pace') { detail = `· ${distR} km en ${fmtSecs(totalTime)}`; tie = distR; }            // a igual ritmo, gana la más larga
       else if (metric === 'bestSet' && bestSetInfo) { detail = `· ${bestSetInfo.m} m en ${fmtSecs(bestSetInfo.t)}`; tie = bestSetInfo.m; }
-      else if (metric === 'maxLoad' && bestLoad) { // peso máx levantado: reps de la serie + si fue asistido
-        detail = bestLoad.r ? `× ${bestLoad.r}` : (bestLoad.mode === 'asist' ? 'asist' : '');
+      else if (metric === 'maxLoad' && bestLoad) { // peso máx levantado: reps de la serie + lastre/asistencia
+        const extra = bestLoad.mode && bestLoad.load ? ` (${bestLoad.mode === 'asist' ? '−' : '+'}${bestLoad.load} kg)` : '';
+        detail = `${bestLoad.r ? `× ${bestLoad.r}` : ''}${extra}`.trim();
         tie = bestLoad.r;
       }
+      if (!(y > 0)) return; // un 0 no es una marca (p. ej. peso de la serie en ejercicios con tu peso)
       points.push({ x: s.date, y, detail, tie });
     });
     return points;
@@ -240,7 +258,7 @@ const VProgress = (() => {
   function recordMetrics(ex) {
     if (ex.type === 'check') return [];  // hecho / no hecho: no hay métrica que seguir
     if (ex.type === 'time') return isCardioEx(ex) ? ['distance', 'pace', 'bestSet', 'totalTime', 'kcal'] : ['maxTime', 'maxLoad'];
-    if (ex.type === 'reps') return ['maxReps', 'maxLoad', 'volume'];
+    if (ex.type === 'reps') return ['maxReps', 'maxLoad', 'e1rm', 'volume'];
     return ['maxWeight', 'e1rm', 'maxReps', 'volume'];
   }
 
@@ -248,7 +266,7 @@ const VProgress = (() => {
   async function computeRecords(app, userId) {
     const sessions = (await DB.sessionsOf(userId)).filter(s => !s.draft);
     const bodyWeights = await loadBodyWeights(userId); // para "peso levantado" a peso corporal
-    const cacheKey = userId + ':' + sessions.length + ':' + bodyWeights.length;
+    const cacheKey = userId + ':' + sessions.length + ':' + bodyWeights.length + ':' + JSON.stringify(sessions).length + ':' + JSON.stringify(bodyWeights).length;
     app._recCache = app._recCache || {};
     if (app._recCache[cacheKey]) return app._recCache[cacheKey];
     // sólo ejercicios realmente entrenados (evita recorrer todo el catálogo)
@@ -507,13 +525,14 @@ const VProgress = (() => {
     const catalog = await exercisesWithData(app.activeUser.id, todos);
     const exId = host._exId || params.exId || catalog[0].id;
     const ex = catalog.find(e => e.id === exId) || catalog[0];
-    const metrics = ex.type === 'time' ? timeMetricsFor(ex) : EX_METRICS;
+    const metrics = metricsFor(ex);
     const metric = (host._metric && metrics.some(m => m.key === host._metric)) ? host._metric : metrics[0].key;
 
     // Filtro por etiqueta/variante (solo cardio con etiquetas registradas)
     const cardioLabels = isCardioEx(ex) ? await exerciseLabels(app.activeUser.id, ex.name) : [];
     const labelF = (host._exLabel && cardioLabels.includes(host._exLabel)) ? host._exLabel : '';
 
+    const sinPeso = ex.type === 'reps' && ['maxLoad', 'e1rm', 'volume'].includes(metric) && !(await loadBodyWeights(app.activeUser.id)).length;
     const isE1 = metric === 'e1rm';
     const effortOnly = isE1 ? (host._effortOnly !== false) : false; // por defecto activado
     const formula = app._e1Formula || 'epley';
@@ -523,7 +542,7 @@ const VProgress = (() => {
     const prPoint = bestPoint(points, metric);
     const fmtPoint = (p) => fmtMetricPoint(metric, p);
     const metricLabel = (metrics.find(m => m.key === metric) || {}).label || '';
-    const isPR = (p) => prPoint && p.y === prPoint.y && (p.tie || 0) === (prPoint.tie || 0);
+    const isPR = (p) => p === prPoint; // solo la marca: la primera vez que la lograste
     const recent = points.slice(-8).reverse().map(p => `<li><span>${UI.fmtDateShort(p.x)}</span><strong>${fmtPoint(p)}${isPR(p) ? ' 🏆' : ''}</strong></li>`).join('');
 
     const helpOpen = host._e1Help === true;        // explicación plegada por defecto
@@ -553,6 +572,7 @@ const VProgress = (() => {
         ${cardioLabels.length ? `<div class="chips-row small ex-label-row"><button class="chip${labelF === '' ? ' on' : ''}" data-exlabel="">Todas</button>${cardioLabels.map(l => `<button class="chip${labelF === l ? ' on' : ''}" data-exlabel="${UI.esc(l)}">${UI.esc(l)}</button>`).join('')}</div>` : ''}
         <div class="chips-row small">${metrics.map(m => `<button class="chip${m.key === metric ? ' on' : ''}" data-metric="${m.key}">${m.label}</button>`).join('')}</div>
         ${e1Panel}
+        ${sinPeso ? `<div class="e1-alert">${UI.icon('star', 15)}<span>Para el peso de los ejercicios con tu propio peso hace falta tu <strong>peso corporal</strong>: apúntalo en <strong>Progreso → Corporal</strong> y se calcula solo (corporal ± lastre o asistencia).</span></div>` : ''}
         ${prPoint ? `<div class="pr-stat">${UI.icon('star', 16)}<div class="pr-stat-text"><span class="pr-stat-label">Récord · ${UI.esc(metricLabel)}</span><span class="pr-stat-date">${UI.fmtDateShort(prPoint.x)}</span></div><span class="pr-stat-val">${fmtMetricValue(metric, prPoint.y)}${prPoint.detail ? `<span class="pr-stat-cond">${UI.esc(prPoint.detail)}</span>` : ''}</span></div>` : ''}
         ${UI.lineChart([{ label: ex.name, color: app.activeUser.color, points }], { width: 320, height: 150, ...chartOpts(metric), fmtPoint })}
         ${LOWER_BETTER.has(metric) ? `<p class="field-hint" style="margin:6px 0 0">${metric === 'pace' ? 'Ritmo medio de cada salida de <strong>1 km o más</strong>.' : 'Ritmo de tu serie más rápida en cada entreno.'} Cuanto más bajo, mejor (en la gráfica, más arriba).</p>` : ''}
@@ -603,7 +623,7 @@ const VProgress = (() => {
     } else {
       const exName = subjectKey.slice(3);
       const subjEx = catalog.find(c => c.name === exName);
-      exMetrics = (subjEx && subjEx.type === 'time') ? timeMetricsFor(subjEx) : EX_METRICS; // métricas según el tipo
+      exMetrics = metricsFor(subjEx); // métricas según el tipo (barra, tu peso, cardio…)
       exMetric = (host._exMetric && exMetrics.some(m => m.key === host._exMetric)) ? host._exMetric : exMetrics[0].key;
       // el 1RM se compara solo con series de esfuerzo marcado (cae a todas si no hay)
       const e1f = app._e1Formula || 'epley';
