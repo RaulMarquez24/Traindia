@@ -386,7 +386,9 @@ const UI = (() => {
     minY -= yPad; maxY += yPad;
 
     const sx = (x) => padL + ((+new Date(x) - minX) / (maxX - minX)) * (W - padL - padR);
-    const sy = (y) => H - padB - ((y - minY) / (maxY - minY)) * (H - padT - padB);
+    const sy = opts.invertY // p. ej. el ritmo: menos es mejor, así que lo bajo va arriba
+      ? (y) => padT + ((y - minY) / (maxY - minY)) * (H - padT - padB)
+      : (y) => H - padB - ((y - minY) / (maxY - minY)) * (H - padT - padB);
 
     const fmtY = opts.fmtY || ((v) => Math.round(v));
     // grid horizontal (3 líneas)
