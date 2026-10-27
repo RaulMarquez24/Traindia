@@ -603,8 +603,7 @@ const VSessions = (() => {
   function entryBest(entry) {
     const type = entry.type || 'weight';
     if (type === 'time' && entryHasTotals(entry)) {
-      const dist = (entry.totals && entry.totals.distance) ? parseFloat(entry.totals.distance)
-        : (entry.sets || []).reduce((a, s) => a + (parseFloat(s.distance) || 0), 0);
+      const dist = (entry.totals && entry.totals.distance) ? parseFloat(entry.totals.distance) : sumKm(entry);
       return { metric: 'distance', value: Math.round((dist || 0) * 100) / 100 };
     }
     let best = 0; (entry.sets || []).forEach(st => { const m = metricOf(type, st); if (m > best) best = m; });
