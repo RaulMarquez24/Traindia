@@ -53,6 +53,11 @@ const VPlanAI = (() => {
       title: 'Plan con una IA',
       size: 'wide',
       bodyHTML: `
+        <div class="pl-ai-banner pai-ya">
+          <span>${UI.icon('chat', 18)}</span>
+          <div><strong>¿Ya te lo ha hecho la IA?</strong><span>Pega su respuesta o elige el archivo y Traindía monta el plan.</span></div>
+          <button type="button" class="btn ${pidioPrompt() ? 'primary' : 'ghost'} small" id="paiYa">Importar</button>
+        </div>
         <div class="seg" role="radiogroup" id="paiMode">
           <button type="button" class="seg-opt on" data-mode="doc">Plan de mi entrenador</button>
           <button type="button" class="seg-opt" data-mode="ia">Que lo proponga la IA</button>
@@ -84,6 +89,8 @@ const VPlanAI = (() => {
         };
         root.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click', () => { mode = b.dataset.mode; sync(); }));
         root.querySelectorAll('[data-rel]').forEach(b => b.addEventListener('click', () => { rel = b.dataset.rel; sync(); }));
+        // Vuelves con la respuesta ya hecha: directo a pegarla, sin pasar por «Importar»
+        root.querySelector('#paiYa').addEventListener('click', () => { UI.closeModal(root); paste(app); });
         sync();
       },
       actions: [
