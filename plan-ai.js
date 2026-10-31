@@ -379,26 +379,31 @@ const VPlanAI = (() => {
         ${lista('Avisos', r.avisos, 'warn')}
         ${lista('Dudas de la IA', r.dudas, 'warn')}
         ${lista('Notas del entrenador', r.notas, '')}
-        <p class="field-hint">Se crea como un plan nuevo y pasa a ser el activo. Tu plan actual no se toca: lo recuperas cuando quieras desde «El plan».</p>`,
+        <p class="field-hint">Ahora revisas con cuál de tus ejercicios va cada uno. Se crea como un plan nuevo y pasa a ser el activo; tu plan actual no se toca: lo recuperas cuando quieras desde «El plan».</p>`,
       actions: [
         { label: 'Cancelar', kind: 'ghost' },
         { label: 'Contar qué tal', kind: 'ghost', onClick: () => { reportar(app, r); return false; } },
-        { label: 'Crear y activar', kind: 'primary', onClick: async (root) => {
+        { label: 'Revisar ejercicios', kind: 'primary', onClick: (root) => {
           const name = (root.querySelector('input[name="planName"]').value || '').trim() || r.routine.name;
-          const prev = app.routine;
-          const rt = await VData.createImportedPlan(app.activeUser.id, r.routine, new Set(r.routine.days.map(d => d.id)), name, r.exercises);
-          await DB.setActivePlan(app.activeUser.id, rt.id);
-          // El plan en blanco que se crea al darse de alta (sin un solo ejercicio) ya no pinta nada.
-          const vacio = prev && prev.planType === 'custom' && !(prev.days || []).some(d => (d.blocks || []).some(b => (b.exercises || []).length));
-          if (vacio) { try { await DB.deletePlan(prev.id); } catch (e) {} }
-          marcarPrompt(false);
-          await app.refreshRoutine();
-          app.history = [];
-          app.go('week', {}, true);
-          UI.toast('Plan creado y activado');
+          setTimeout(() => VReview.importar(app, { routine: r.routine, exercises: r.exercises, onBack: () => preview(app, payload),
+            onConfirm: (links) => crear(app, r, name, links) }), 50);
         } },
       ],
     });
+  }
+  // Crea el plan con los ejercicios ya enlazados (links: id del archivo → tu ejercicio)
+  async function crear(app, r, name, links) {
+    const prev = app.routine;
+    const rt = await VData.createImportedPlan(app.activeUser.id, r.routine, new Set(r.routine.days.map(d => d.id)), name, r.exercises, { links });
+    await DB.setActivePlan(app.activeUser.id, rt.id);
+    // El plan en blanco que se crea al darse de alta (sin un solo ejercicio) ya no pinta nada.
+    const vacio = prev && prev.planType === 'custom' && !(prev.days || []).some(d => (d.blocks || []).some(b => (b.exercises || []).length));
+    if (vacio) { try { await DB.deletePlan(prev.id); } catch (e) {} }
+    marcarPrompt(false);
+    await app.refreshRoutine();
+    app.history = [];
+    app.go('week', {}, true);
+    UI.toast('Plan creado y activado');
   }
 
   function reportar(app, r) {
