@@ -323,8 +323,13 @@ const VData = (() => {
           if (!txt) { UI.toast('Pega el JSON o elige un archivo', 'err'); return false; }
           if (typeof VShare !== 'undefined' && VShare.parseLink(txt)) { VShare.open(app, txt); return; } // enlace de «Compartir mi progreso»
           let parsed;
-          try { parsed = JSON.parse(txt); } catch (e) { UI.toast('El texto no es un JSON válido', 'err'); return false; }
-          if (!parsed || !isExportFormat(parsed.format) || !parsed.data) { UI.toast('No es un export de Traindía', 'err'); return false; }
+          try { parsed = JSON.parse(txt); } catch (e) { parsed = null; }
+          if (!parsed || !isExportFormat(parsed.format) || !parsed.data) {
+            // ¿La respuesta de la IA con un plan? (otro formato, con texto alrededor o cortada)
+            const ia = typeof VPlanAI !== 'undefined' ? VPlanAI.leer(txt) : null;
+            if (ia) { VPlanAI.preview(app, ia.payload, ia); return; }
+            UI.toast(parsed ? 'No es un export de Traindía' : 'El texto no es un JSON válido', 'err'); return false;
+          }
           routeImport(app, parsed);
         }},
       ],
@@ -349,6 +354,7 @@ const VData = (() => {
   }
 
   function routeImport(app, payload) {
+    if (payload && !isExportFormat(payload.format) && typeof VPlanAI !== 'undefined' && VPlanAI.esPlan(payload)) { VPlanAI.preview(app, payload); return; } // plan de la IA en su formato
     if (!payload || !isExportFormat(payload.format) || !payload.data) { UI.toast('No es un export de Traindía', 'err'); return; }
     if (payload.kind === 'plan-ia' && typeof VPlanAI !== 'undefined') VPlanAI.preview(app, payload); // plan de entreno hecho por una IA
     else if (payload.kind === 'nutrition' && payload.data.plan) importNutrition(app, payload);

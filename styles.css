@@ -245,6 +245,11 @@ body.has-active-bar .pl-new-wrap { bottom: calc(var(--nav-h) + var(--safe-bottom
 .rv-opt .dim { font-size: 12px; }
 .rv-opt.on { border-color: var(--strong); background: var(--strong-bg); }
 .rv-opt.on strong { color: var(--strong); }
+.pai-cut { display: flex; gap: 10px; align-items: flex-start; padding: 11px 12px; margin-bottom: 12px; border-radius: 12px; background: color-mix(in srgb, var(--warn, #f59e0b) 14%, transparent); border: 1px solid color-mix(in srgb, var(--warn, #f59e0b) 45%, transparent); }
+.pai-cut > svg { flex: none; margin-top: 2px; color: var(--warn, #f59e0b); }
+.pai-cut div { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
+.pai-cut span { font-size: 13px; color: var(--ink-soft); }
+.pai-cut .btn { margin-top: 4px; }
 .pai-cat { display: flex; gap: 6px; align-items: flex-start; }
 .pai-cat svg { flex: none; margin-top: 2px; color: var(--strong); }
 .pl-ai-banner { display: grid; grid-template-columns: auto 1fr auto auto; align-items: center; gap: 10px; background: var(--strong-bg); border: 1px solid color-mix(in srgb, var(--strong) 40%, transparent); border-radius: 14px; padding: 12px 12px 12px 14px; margin-bottom: 14px; color: var(--strong); }

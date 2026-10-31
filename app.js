@@ -112,6 +112,9 @@ const app = {
     const text = this.decodeShared(buf);
     const parsed = this.parseExport(text);
     if (parsed) { VData.routeImport(this, parsed); return true; }
+    // La respuesta de la IA con un plan, aunque no venga en el formato exacto (o venga cortada)
+    const ia = typeof VPlanAI !== 'undefined' ? VPlanAI.leer(text) : null;
+    if (ia) { VPlanAI.preview(this, ia.payload, ia); return true; }
     // El mensaje de un amigo con su enlace de «Compartir mi progreso» (reenviado a Traindía): se abre.
     if (typeof VShare !== 'undefined' && VShare.parseLink(text)) { await VShare.open(this, text); return true; }
     // Parece texto (JSON, .txt, o solo llegó el texto del mensaje) pero no es un
@@ -822,7 +825,7 @@ const app = {
                 tipo: d.tipo,
                 mensaje: d.mensaje.trim(),
                 contacto: (d.contacto || '').trim() || '(no indicado)',
-                version: 'v2.53.0',
+                version: 'v2.54.0',
                 perfil: (this.mainUser && this.mainUser.name) || '',
                 navegador: navigator.userAgent,
               }),
@@ -882,7 +885,7 @@ const app = {
         <div class="more-group">${g.rows.map(r => `<button class="more-row" ${r.feedback ? 'data-feedback' : `data-link="${r.v}"`}>
           <span class="more-ic" style="background:${g.color}">${UI.icon(r.icon, 20)}</span>
           <span class="more-txt"><strong>${r.label}</strong><span${r.warn ? ' class="warn"' : ''}>${UI.esc(r.sub)}</span></span><span class="chev">›</span></button>`).join('')}</div>`).join('')}
-      <p class="version-foot">Traindía · v2.53.0<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
+      <p class="version-foot">Traindía · v2.54.0<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
     </div>`;
   },
   bindMore(root) {
