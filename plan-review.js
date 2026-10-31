@@ -70,11 +70,12 @@ const VReview = (() => {
   const nDias = (it) => new Set(it.uses.map(u => u.d.id)).size;
 
   // ---------- Revisar los ejercicios de un plan que se va a importar ----------
-  // routine/exercises: el plan y su catálogo (ids del archivo). Al confirmar renombra
-  // o recuerda lo que hayas decidido, ajusta nombres y etiquetas del plan y llama a
+  // (de la IA, o el plan o el día que te pasa un amigo)
+  // routine/exercises: los días y su catálogo (ids del archivo). Al confirmar renombra
+  // o recuerda lo que hayas decidido, ajusta nombres y etiquetas de los días y llama a
   // onConfirm(links) con { idDelArchivo: idDeTuEjercicio } para que lo cree.
-  async function importar(app, { routine, exercises, onBack, onConfirm }) {
-    const uid = app.activeUser.id;
+  async function importar(app, { routine, exercises, onBack, onConfirm, userId, finalLabel, from }) {
+    const uid = userId || app.activeUser.id;
     const ctx = await datos(uid);
     const { local, veces } = ctx;
     const enPlan = new Set(routine.days.flatMap(d => (d.blocks || []).flatMap(b => (b.exercises || []).map(x => x.exerciseId))));
@@ -100,8 +101,8 @@ const VReview = (() => {
 
     pantalla(ctx, items, {
       title: 'Revisa los ejercicios',
-      intro: 'Comprueba con cuál de tus ejercicios va cada uno. Lo que enlaces con uno tuyo <strong>conserva su historial</strong>.',
-      onBack, finalLabel: 'Crear y activar',
+      intro: `Comprueba con cuál de tus ejercicios va cada uno${from ? ` de los de ${UI.esc(from)}` : ''}. Lo que enlaces con uno tuyo <strong>conserva su historial</strong>.`,
+      onBack, finalLabel: finalLabel || 'Crear y activar',
       onFinish: async () => {
         const pend = items.filter(pendiente);
         if (pend.length) {
@@ -351,5 +352,12 @@ const VReview = (() => {
     } });
   }
 
-  return { importar, plan, fusionar, fusionarCon, score, labelFrom, aliasKey };
+  // Solo los ejercicios de esos días y sus suplentes (lo demás del archivo no se importa)
+  function deLosDias(days, exercises) {
+    const ids = new Set(days.flatMap(d => (d.blocks || []).flatMap(b => (b.exercises || []).map(x => x.exerciseId))));
+    (exercises || []).forEach(e => { if (ids.has(e.id)) (e.substitutes || []).forEach(s => ids.add(s)); });
+    return (exercises || []).filter(e => ids.has(e.id));
+  }
+
+  return { importar, plan, fusionar, fusionarCon, deLosDias, score, labelFrom, aliasKey };
 })();

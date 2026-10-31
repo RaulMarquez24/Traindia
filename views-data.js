@@ -450,15 +450,22 @@ const VData = (() => {
         <div class="check-list">${dayChecksHTML(routine.days)}</div>`,
       actions: [
         { label: 'Cancelar', kind: 'ghost' },
-        { label: 'Añadir plan', kind: 'primary', onClick: async (root) => {
+        { label: 'Revisar ejercicios', kind: 'primary', onClick: (root) => {
           const chosen = new Set([...root.querySelectorAll('[data-day]:checked')].map(c => c.dataset.day));
           if (!chosen.size) { UI.toast('Marca al menos un día', 'err'); return false; }
           const name = root.querySelector('input[name="planName"]').value.trim() || `Plan de ${sender}`;
-          await createImportedPlan(app.mainUser.id, routine, chosen, name, payload.data.exercises);
-          await importPlaces(payload.data.places, (routine.days || []).filter(d => chosen.has(d.id)));
-          await app.refreshRoutine();
-          app.render();
-          UI.toast('Plan añadido · actívalo en "El plan"');
+          const days = (routine.days || []).filter(d => chosen.has(d.id));
+          const exercises = VReview.deLosDias(days, payload.data.exercises);
+          // con cuál de tus ejercicios va cada uno de los suyos (y así no se duplican)
+          setTimeout(() => VReview.importar(app, { userId: app.mainUser.id, routine: { days }, exercises, from: sender, finalLabel: 'Añadir plan',
+            onBack: () => importPlan(app, payload),
+            onConfirm: async (links) => {
+              await createImportedPlan(app.mainUser.id, routine, chosen, name, exercises, { links });
+              await importPlaces(payload.data.places, days);
+              await app.refreshRoutine();
+              app.render();
+              UI.toast('Plan añadido · actívalo en "El plan"');
+            } }), 50);
         } },
       ],
     });
@@ -939,13 +946,22 @@ const VData = (() => {
     return idMap;
   }
 
-  // ---------- IMPORTAR UN DÍA (reemplazar / añadir diferente) ----------
-  async function importDay(app, payload) {
-    const day = payload.data.day;
+  // ---------- IMPORTAR UN DÍA (revisar ejercicios → reemplazar / añadir diferente) ----------
+  function importDay(app, payload) {
+    const day = JSON.parse(JSON.stringify(payload.data.day));
+    const exercises = VReview.deLosDias([day], payload.data.exercises);
+    VReview.importar(app, { userId: app.mainUser.id, routine: { days: [day] }, exercises, from: payload.user?.name, finalLabel: 'Seguir',
+      onConfirm: (links) => importDayWith(app, payload, day, exercises, links) });
+  }
+  async function importDayWith(app, payload, day, exercises, links) {
     const sender = payload.user?.name || 'desconocido';
-    const idMap = await mapExercisesToCatalog(app.mainUser.id, payload.data.exercises);
+    const idMap = await mapExercisesToCatalog(app.mainUser.id, exercises, { links });
+    const mine = new Map((await DB.exercisesOf(app.mainUser.id)).map(e => [e.id, e]));
     const src = JSON.parse(JSON.stringify(day));
-    (src.blocks || []).forEach(b => (b.exercises || []).forEach(e => { if (e.exerciseId && idMap[e.exerciseId]) e.exerciseId = idMap[e.exerciseId]; }));
+    (src.blocks || []).forEach(b => (b.exercises || []).forEach(e => {
+      if (e.exerciseId && idMap[e.exerciseId]) e.exerciseId = idMap[e.exerciseId];
+      const ex = mine.get(e.exerciseId); if (ex) { e.name = ex.name; e.type = ex.type; } // con el nombre y tipo de tu ejercicio
+    }));
 
     const rt = app.routine;
     const target = rt.days.find(d => d.id === day.id) || rt.days.find(d => (d.name || '').toLowerCase() === (day.name || '').toLowerCase());
