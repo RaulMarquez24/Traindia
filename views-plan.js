@@ -1003,7 +1003,7 @@ const VPlan = (() => {
     return tpls.map((t, i) => card(`tpl:${t.id}`, UI.esc(t.name), UI.esc(t.tagline),
         `<span>${UI.esc(t.frequency)} · ${UI.esc(t.sessionTime)} · ${UI.esc(t.level)}</span><span class="plan-choice-more" data-preview="${t.id}">Ver qué incluye ›</span>`, i === 0 ? 'Recomendada' : ''))
       .join('')
-      + card('ai', 'Plan de tu entrenador', 'Con el PDF o las fotos que te dio y la ayuda de una IA: Traindía lo convierte en tu plan.', '', 'Beta')
+      + card('ai', 'Con una IA', 'El PDF o las fotos de tu entrenador, o que te lo proponga la IA. Usa tus ejercicios, sin repetirlos.', '', 'Beta')
       + card('custom', 'Plan en blanco', '7 días vacíos que montas a tu medida: tus ejercicios, tus días.', '', '')
       + '<p class="field-hint plan-choice-soon">Más plantillas en camino.</p>';
   }
@@ -1062,7 +1062,7 @@ const VPlan = (() => {
 
     const aiBanner = VPlanAI.pidioPrompt() ? `<div class="pl-ai-banner">
         <span>${UI.icon('chat', 18)}</span>
-        <div><strong>¿Ya tienes la respuesta de la IA?</strong><span>Pégala y Traindía monta el plan de tu entrenador.</span></div>
+        <div><strong>¿Ya tienes la respuesta de la IA?</strong><span>Pégala y Traindía monta el plan.</span></div>
         <button class="btn primary small" id="aiPaste">Pegar</button>
         <button class="icon-btn" id="aiDismiss" aria-label="Ahora no">${UI.icon('x', 16)}</button>
       </div>` : '';

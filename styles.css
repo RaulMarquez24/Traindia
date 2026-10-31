@@ -211,6 +211,18 @@ textarea.inp { resize: vertical; line-height: 1.4; }
 .pl-new-wrap { position: sticky; bottom: calc(var(--nav-h) + var(--safe-bottom) + 12px); z-index: 20; padding-top: 18px; }
 body.has-active-bar .pl-new-wrap { bottom: calc(var(--nav-h) + var(--safe-bottom) + 68px); }
 .pl-new { box-shadow: 0 8px 24px rgba(0,0,0,0.28); }
+/* Plan con una IA: qué relación tiene con tus planes */
+.pai-rels { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 6px 0 12px; }
+.pai-rel { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 3px; padding: 11px 6px; border-radius: 12px; border: 1px solid var(--line); background: var(--bg-card); color: var(--ink); font-family: inherit; cursor: pointer; min-width: 0; }
+.pai-rel .pai-ic { font-size: 20px; line-height: 1; }
+.pai-rel strong { font-size: 13.5px; }
+.pai-rel .dim { font-size: 11.5px; line-height: 1.25; }
+.pai-rel.on { border-color: var(--strong); background: var(--strong-bg); }
+.pai-rel.on strong { color: var(--strong); }
+.pai-rel:disabled { opacity: .45; cursor: default; }
+[data-show][hidden] { display: none !important; } /* lo de un modo no se ve en el otro */
+.pai-cat { display: flex; gap: 6px; align-items: flex-start; }
+.pai-cat svg { flex: none; margin-top: 2px; color: var(--strong); }
 .pl-ai-banner { display: grid; grid-template-columns: auto 1fr auto auto; align-items: center; gap: 10px; background: var(--strong-bg); border: 1px solid color-mix(in srgb, var(--strong) 40%, transparent); border-radius: 14px; padding: 12px 12px 12px 14px; margin-bottom: 14px; color: var(--strong); }
 .pl-ai-banner div { display: flex; flex-direction: column; gap: 2px; min-width: 0; color: var(--ink); }
 .pl-ai-banner strong { font-size: 14px; }
