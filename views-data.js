@@ -381,12 +381,17 @@ const VData = (() => {
   // Crea un plan NUEVO (no activo) en el perfil destino, con los días elegidos y
   // sus ejercicios remapeados al catálogo del destino. Reutilizado por importPlan
   // y por la importación de perfil completo.
-  async function createImportedPlan(targetUserId, routine, dayIds, name, exercises) {
-    const idMap = await mapExercisesToCatalog(targetUserId, exercises || []);
+  // opts.links: { idDelArchivo: idDeTuEjercicio } decididos al revisar los ejercicios.
+  async function createImportedPlan(targetUserId, routine, dayIds, name, exercises, opts = {}) {
+    const idMap = await mapExercisesToCatalog(targetUserId, exercises || [], { links: opts.links });
+    const mine = new Map((await DB.exercisesOf(targetUserId)).map(e => [e.id, e]));
     const newDays = JSON.parse(JSON.stringify((routine.days || []).filter(d => dayIds.has(d.id))));
     newDays.forEach(d => {
       d.id = DB.uid('day'); // id propio para el nuevo plan
-      (d.blocks || []).forEach(b => (b.exercises || []).forEach(e => { if (e.exerciseId && idMap[e.exerciseId]) e.exerciseId = idMap[e.exerciseId]; }));
+      (d.blocks || []).forEach(b => (b.exercises || []).forEach(e => {
+        if (e.exerciseId && idMap[e.exerciseId]) e.exerciseId = idMap[e.exerciseId];
+        const ex = mine.get(e.exerciseId); if (ex) { e.name = ex.name; e.type = ex.type; } // con el nombre y tipo de tu ejercicio
+      }));
     });
     const { id: _i, userId: _u, isPrimary: _p, days: _d, ...rest } = routine; // resto de datos del plan, tal cual
     const rec = { ...rest, id: DB.uid('rt'), userId: targetUserId, planType: routine.planType === 'template' ? 'template' : 'custom', name, days: newDays, order: Date.now(), createdAt: Date.now(), isPrimary: false };
@@ -876,8 +881,10 @@ const VData = (() => {
   // (grupo, tipo, métricas y suplentes) — para la política "Reemplazar".
   async function mapExercisesToCatalog(userId, importedExercises, opts = {}) {
     const overwrite = !!opts.overwrite;
+    const links = opts.links || {}; // enlaces elegidos a mano (revisión de ejercicios): mandan sobre el nombre
     const local = await DB.exercisesOf(userId);
     const byName = new Map(local.map(e => [e.name.trim().toLowerCase(), e]));
+    const byId = new Map(local.map(e => [e.id, e]));
     const idMap = {};
     const created = [], updated = [], enriched = [];
     // Campos que son de ESTE catálogo y no se copian del archivo; todo lo demás
@@ -887,7 +894,7 @@ const VData = (() => {
     for (const ie of (importedExercises || [])) {
       const key = (ie.name || '').trim().toLowerCase();
       if (!key) continue;
-      let ex = byName.get(key);
+      let ex = (links[ie.id] && byId.get(links[ie.id])) || byName.get(key);
       const vids = DB.exVideos(ie); // vídeos "cómo se hace" (formato nuevo y el antiguo videoUrl)
       if (!ex) {
         ex = { ...payloadOf(ie), id: DB.uid('ex'), userId, name: (ie.name || '').trim(), muscleGroup: ie.muscleGroup || 'General', type: ie.type || 'weight', substitutes: [], createdAt: Date.now() };
