@@ -1129,7 +1129,7 @@ const VPlan = (() => {
     if (aiPaste) aiPaste.addEventListener('click', () => VPlanAI.paste(app));
   }
 
-  // Menú «⋯» de un plan: activar, renombrar, duplicar, exportar y borrar.
+  // Menú «⋯» de un plan: activar, renombrar, revisar sus ejercicios, duplicar, exportar y borrar.
   async function planMenu(app, planId) {
     const uid = app.activeUser.id;
     const plans = await DB.routinesOf(uid);
@@ -1141,6 +1141,7 @@ const VPlan = (() => {
       bodyHTML: `<div class="menu-list">
         ${isActive ? '' : `<button class="menu-row" data-op="activate"><span>${UI.icon('check', 16)} Activar este plan</span><span class="chev">›</span></button>`}
         <button class="menu-row" data-op="rename"><span>${UI.icon('edit', 16)} Renombrar</span><span class="chev">›</span></button>
+        <button class="menu-row" data-op="review"><span>${UI.icon('dumbbell', 16)} Revisar ejercicios</span><span class="chev">›</span></button>
         <button class="menu-row" data-op="dup"><span>${UI.icon('repeat', 16)} Duplicar</span><span class="chev">›</span></button>
         <button class="menu-row" data-op="export"><span>${UI.icon('upload', 16)} Exportar</span><span class="chev">›</span></button>
         <button class="menu-row danger" data-op="del"><span>${UI.icon('trash', 16)} Borrar</span><span class="chev">›</span></button>
@@ -1169,6 +1170,7 @@ const VPlan = (() => {
           (copy.days || []).forEach(d => { d.id = DB.uid('day'); }); // días propios: las sesiones del original no se mezclan
           await DB.put('routines', copy); await done('Plan duplicado: está debajo, sin activar');
         });
+        on('review', () => VReview.plan(app, rt.id, () => done()));
         on('export', () => VData.exportRoutine(app, rt));
         on('del', async () => {
           if (plans.length === 1) { UI.toast('Es tu único plan: crea otro antes de borrarlo', 'err'); return; }
@@ -1717,6 +1719,8 @@ const VPlan = (() => {
         <div class="subs-box" id="subsBox"></div>
         <button type="button" class="btn ghost small" id="addSub">+ Añadir suplente</button>
         <p class="field-hint">Los suplentes también son ejercicios del catálogo. Puedes elegir uno existente o crear uno nuevo.</p>
+        ${ex ? `<button type="button" class="btn ghost block small" id="exMerge" style="margin-top:16px">${UI.icon('swap', 15)} Es el mismo que otro: fusionar…</button>
+        <p class="field-hint">Sus registros y sus días en tus planes pasan al otro, y este se borra.</p>` : ''}
       </div>`,
       actions: [
         { label: 'Cancelar', kind: 'ghost' },
@@ -1754,6 +1758,8 @@ const VPlan = (() => {
         renderChips(root);
         renderVids(root);
         root.querySelector('#addVid').addEventListener('click', () => { vids.push({ url: '', label: '' }); renderVids(root); });
+        const mergeBtn = root.querySelector('#exMerge');
+        if (mergeBtn) mergeBtn.addEventListener('click', () => { UI.closeModal(root); VReview.fusionarCon(app, ex, opts.onSaved); });
         const typeSel = root.querySelector('#exForm select[name="type"]');
         const exMetrics = root.querySelector('#exMetrics');
         const exMetricsChk = root.querySelector('#exMetricsChk');

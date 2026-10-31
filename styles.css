@@ -236,6 +236,9 @@ body.has-active-bar .pl-new-wrap { bottom: calc(var(--nav-h) + var(--safe-bottom
 .rv-tag.ok { background: var(--strong-bg); color: var(--strong); }
 .rv-yes { flex: none; white-space: nowrap; }
 .rv-subs { margin-top: 14px; }
+.rv-merge { display: flex; gap: 6px; align-items: flex-start; margin: 0 0 12px; padding: 9px 11px; border-radius: 10px; background: var(--strong-bg); color: var(--ink); }
+.rv-merge.warn { background: color-mix(in srgb, var(--warn, #f59e0b) 14%, transparent); }
+.rv-merge svg { flex: none; margin-top: 2px; }
 .rv-subs summary { cursor: pointer; font-weight: 600; font-size: 13.5px; padding: 6px 0 10px; color: var(--ink-soft); }
 .rv-opts { display: flex; flex-direction: column; gap: 6px; margin: 6px 0 14px; }
 .rv-opt { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; text-align: left; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg-card); color: var(--ink); font-family: inherit; font-size: 14px; cursor: pointer; }
