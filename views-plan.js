@@ -348,9 +348,8 @@ const VPlan = (() => {
       .sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt || 0) - (a.createdAt || 0))[0];
     let ultimaDia = '';
     if (lastDay) {
-      const min = lastDay.durationSec ? Math.round(lastDay.durationSec / 60) : 0;
       const recs = (lastDay.prs || []).filter(p => !p.first).length;
-      ultimaDia = `<div class="dv-lastday">${UI.icon('clock', 13)} Última vez ${haceCuanto(lastDay.date)}${min ? ` · ${min} min` : ''}${recs ? ` · <span class="dv-up">${UI.icon('trophy', 12)} ${recs} ${recs === 1 ? 'récord' : 'récords'}</span>` : ''}</div>`;
+      ultimaDia = `<div class="dv-lastday">${UI.icon('clock', 13)} Última vez ${haceCuanto(lastDay.date)}${lastDay.durationSec ? ` · ${VSessions.fmtDur(lastDay.durationSec)}` : ''}${recs ? ` · <span class="dv-up">${UI.icon('trophy', 12)} ${recs} ${recs === 1 ? 'récord' : 'récords'}</span>` : ''}</div>`;
     }
 
     const row = (ex, bi, xi) => {

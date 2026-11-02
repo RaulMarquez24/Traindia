@@ -2358,7 +2358,7 @@ const VSessions = (() => {
     });
   }
 
-  return { live, liveBind, list, listBind, detail, detailBind, checkDayAfter, sessionVolume, reportModel, checkResume, liveHasData, restEnsure, TIME_FIELDS, CHECK_FIELDS,
+  return { live, liveBind, list, listBind, fmtDur, detail, detailBind, checkDayAfter, sessionVolume, reportModel, checkResume, liveHasData, restEnsure, TIME_FIELDS, CHECK_FIELDS,
     notifStatus, setRestNotify, restNotifyOn, testPush, REST_NOTIFY_TEXT,
     getRestDuration, setRestDefault, restSoundOn, restVibrateOn, setRestSound, setRestVibrate, fmtClock,
     setPaceSec, repDistKm, fmtPace, exerciseHistory, keyForEntry };
