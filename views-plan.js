@@ -337,17 +337,50 @@ const VPlan = (() => {
         </div>`;
     }
 
+    // Lo que hiciste la última vez con cada ejercicio y con este día
+    const sessions = await DB.sessionsOf(app.activeUser.id);
+    const hist = VSessions.exerciseHistory(sessions);
+    // (el mismo día de este plan o uno que se llama igual: «Pierna» de otro plan cuenta;
+    // «Lunes» de otro plan no, que puede ser cualquier cosa)
+    const porNombre = !/^(lunes|martes|miercoles|jueves|viernes|sabado|domingo)$/.test(UI.norm(d.name || ''));
+    const sameDay = (s) => s.dayId === d.id || (porNombre && UI.norm(s.name || '') === UI.norm(d.name || ''));
+    const lastDay = sessions.filter(s => !s.draft && sameDay(s))
+      .sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt || 0) - (a.createdAt || 0))[0];
+    let ultimaDia = '';
+    if (lastDay) {
+      const min = lastDay.durationSec ? Math.round(lastDay.durationSec / 60) : 0;
+      const recs = (lastDay.prs || []).filter(p => !p.first).length;
+      ultimaDia = `<div class="dv-lastday">${UI.icon('clock', 13)} Última vez ${haceCuanto(lastDay.date)}${min ? ` · ${min} min` : ''}${recs ? ` · <span class="dv-up">${UI.icon('trophy', 12)} ${recs} ${recs === 1 ? 'récord' : 'récords'}</span>` : ''}</div>`;
+    }
+
+    // Una nota que se repite en varios ejercicios del bloque se dice una vez, en el bloque
+    const notasComunes = (b) => {
+      const c = {};
+      b.exercises.forEach(x => { const n = (x.notes || '').trim(); if (n) c[n] = (c[n] || 0) + 1; });
+      return Object.keys(c).filter(n => c[n] >= 2);
+    };
+    const row = (ex, bi, xi, comunes) => {
+      // los de «hecho / no hecho» no tienen marca que enseñar
+      const h = (byId[ex.exerciseId] || ex).type === 'check' ? [] : (hist[VSessions.keyForEntry(ex)] || []);
+      const det = comunes.includes((ex.notes || '').trim()) ? '' : (ex.notes || '');
+      const sl = subsLine(ex);
+      let last = '';
+      if (h.length) {
+        const sube = !h[0].pr && h[1] && h[0].best > h[1].best;
+        const marca = h[0].pr ? ` <span class="dv-up">${UI.icon('trophy', 12)} récord</span>` : sube ? ` <span class="dv-up" title="Mejor que la vez anterior">${UI.icon('trendUp', 13)}</span>` : '';
+        last = `<span class="dv-last"><span class="dim">Última:</span> ${UI.esc(h[0].text)}${marca} <span class="dim">· ${haceCuanto(h[0].date)}</span></span>`;
+      } else if (ex.sets && (byId[ex.exerciseId] || ex).type !== 'check') last = '<span class="dv-last none">Aún sin registros</span>';
+      const compact = !ex.sets && !det && !last && !sl;
+      return `<li class="dv-ex${compact ? ' compact' : ''}${ex.optional ? ' optional' : ''}" data-ex="${bi}:${xi}" role="button" tabindex="0">
+          <span class="dv-ex-top"><span class="dv-ex-name">${ex.priority ? `<span class="dv-key" title="Clave">${UI.icon('star', 13)}</span>` : ''}${UI.esc(ex.name)}${ex.label ? ` <span class="ex-variant">${UI.esc(ex.label)}</span>` : ''}</span>${ex.sets ? `<span class="dv-sets">${UI.esc(ex.sets)}</span>` : ''}</span>
+          ${last}${det ? `<span class="dv-det">${UI.esc(det)}</span>` : ''}${sl}
+        </li>`;
+    };
     const blocks = d.blocks.map((b, bi) => {
-      const items = b.exercises.map(ex => {
-        const nameCls = ex.priority ? 'ex-name priority' : 'ex-name';
-        const optCls = ex.optional ? 'optional' : '';
-        const sl = subsLine(ex);
-        const det = ex.notes ? `<span class="ex-detail">${UI.esc(ex.notes)}</span>` : '';
-        return `<li class="${optCls}"><span class="ex-line-main"><span class="${nameCls}">${UI.esc(ex.name)}${ex.label ? ` <span class="ex-variant">${UI.esc(ex.label)}</span>` : ''}</span>${det}${sl}</span><span class="ex-sets">${UI.esc(ex.sets || '')}</span></li>`;
-      }).join('');
-      const labelCls = b.optional ? 'block-label optional' : 'block-label';
-      const labelText = b.optional ? `${UI.esc(b.label)} · si hay tiempo` : UI.esc(b.label);
-      return `<div class="block"><div class="${labelCls}">${labelText}</div><ul class="ex-list">${items || '<li class="dim" style="padding:10px 14px">Sin ejercicios</li>'}</ul></div>`;
+      const comunes = notasComunes(b);
+      const items = b.exercises.map((ex, xi) => row(ex, bi, xi, comunes)).join('');
+      const label = b.optional ? `${UI.esc(b.label)} · si hay tiempo` : UI.esc(b.label);
+      return `<div class="block"><div class="dv-block${b.optional ? ' optional' : ''}">${label}</div>${comunes.length ? `<div class="dv-block-note">${comunes.map(UI.esc).join(' · ')}</div>` : ''}<ul class="ex-list dv-list">${items || '<li class="dim" style="padding:10px 14px">Sin ejercicios</li>'}</ul></div>`;
     }).join('');
 
     let substitutes = '';
@@ -364,30 +397,73 @@ const VPlan = (() => {
         .filter(Boolean); // ignora guías que ya no existen (p.ej. la eliminada)
       if (found.length) {
         const links = found.map(g => `<a class="guide-link" data-link="guide" data-params='${JSON.stringify({ guideId: g.id })}'><span>${UI.esc(g.title)}</span><span class="guide-link-arrow">›</span></a>`).join('');
-        related = `<div class="related-guides"><div class="block-label">Guías relacionadas</div>${links}</div>`;
+        related = `<div class="related-guides"><div class="dv-block">Guías relacionadas</div>${links}</div>`;
       }
     }
 
+    // El nombre del día ya está en la cabecera: el enfoque solo si dice algo más
+    const sing = (s) => UI.norm(s).replace(/s$/, '');
+    const showFocus = d.focus && sing(d.focus) !== sing(d.name);
+    const typeLab = d.type ? (d.typeLabel || TYPE_LABELS[d.type] || '').replace(/^d[ií]a\s+/i, '') : '';
     const placeClass = d.placeAccent ? 'parque' : '';
     return `
-      <div class="detail-hero">
-        ${d.type ? `<span class="day-tag tag-${d.type}">${UI.esc(d.typeLabel || TYPE_LABELS[d.type] || '')}</span>` : ''}
-        <h2>${UI.esc(d.name)}</h2>
-        <div class="focus">${UI.esc(d.focus || '')}</div>
-        <div class="meta">
-          ${d.place ? `<span class="${placeClass}">${UI.icon('pin', 13)} ${UI.esc(d.place)}</span>` : ''}
-          ${d.duration ? `<span>${UI.icon('clock', 13)} ${UI.esc(d.duration)}</span>` : ''}
+      <div class="dv-hero">
+        <div class="dv-head">
+          <div class="dv-meta">
+            ${typeLab ? `<span class="dv-type t-${d.type}">${UI.esc(typeLab.charAt(0).toUpperCase() + typeLab.slice(1))}</span>` : ''}
+            ${d.place ? `<span class="${placeClass}">${UI.icon('pin', 13)} ${UI.esc(d.place)}</span>` : ''}
+            ${d.duration ? `<span>${UI.icon('clock', 13)} ${UI.esc(d.duration)}</span>` : ''}
+            <span>${UI.icon('list', 13)} ${exCount} ${exCount === 1 ? 'ejercicio' : 'ejercicios'}</span>
+          </div>
+          <button class="icon-btn" data-act="day-menu" aria-label="Más opciones del día">${UI.icon('more', 20)}</button>
         </div>
+        ${showFocus ? `<div class="dv-focus">${UI.esc(d.focus)}</div>` : ''}
+        ${ultimaDia}
       </div>
-      <button class="btn primary block" data-act="start">${app._live ? (app._live.dayId === d.id ? UI.icon('play', 15) + ' Continuar entrenamiento' : UI.icon('clock', 15) + ' Entreno en curso (otro día)') : UI.icon('play', 15) + ' Empezar entreno'}</button>
       ${blocks}
       ${substitutes}
       ${related}
-      <div class="detail-toolbar">
-        <button class="btn ghost" data-act="edit-day">${UI.icon('edit', 16)} Editar día</button>
-        <button class="btn ghost" data-act="share-day">${UI.icon('upload', 16)} Compartir</button>
-        <button class="btn ghost" data-act="swap-day">${UI.icon('swap', 16)} Intercambiar</button>
-      </div>`;
+      <div class="dv-start"><button class="btn primary block" data-act="start">${app._live ? (app._live.dayId === d.id ? UI.icon('play', 15) + ' Continuar entrenamiento' : UI.icon('clock', 15) + ' Entreno en curso (otro día)') : UI.icon('play', 15) + ' Empezar entreno'}</button></div>`;
+  }
+
+  // «hoy», «ayer», «hace 4 días», «hace 3 semanas», «hace 2 meses»
+  function haceCuanto(iso) {
+    const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+    const n = Math.round((hoy - new Date(`${iso}T00:00:00`)) / 864e5);
+    if (n <= 0) return 'hoy';
+    if (n === 1) return 'ayer';
+    if (n < 14) return `hace ${n} días`;
+    if (n < 60) return `hace ${Math.round(n / 7)} semanas`;
+    const m = Math.round(n / 30);
+    return m < 12 ? `hace ${m} meses` : 'hace más de un año';
+  }
+
+  // Ficha de un ejercicio desde el día: lo que pide el plan, tus últimas veces, la
+  // técnica, los vídeos y los suplentes, con acceso a su progreso y a editarlo.
+  async function exerciseSheet(app, ex) {
+    const uid = app.activeUser.id;
+    const [exs, sessions] = await Promise.all([DB.exercisesOf(uid), DB.sessionsOf(uid)]);
+    const cat = exs.find(e => e.id === ex.exerciseId);
+    const h = VSessions.exerciseHistory(sessions)[VSessions.keyForEntry(ex)] || [];
+    const videos = cat ? DB.exVideos(cat) : [];
+    const subs = ((cat && cat.substitutes) || []).map(id => exs.find(e => e.id === id)).filter(Boolean);
+    UI.modal({
+      title: ex.name,
+      bodyHTML: `
+        ${ex.sets || ex.label || ex.notes ? `<span class="field-label">En este plan</span>
+          <div class="dv-sh-plan">${ex.sets ? `<span class="dv-sets">${UI.esc(ex.sets)}</span>` : ''}${ex.label ? `<span class="ex-variant">${UI.esc(ex.label)}</span>` : ''}</div>
+          ${ex.notes ? `<p class="dv-det dv-sh-notes">${UI.esc(ex.notes)}</p>` : ''}` : ''}
+        <span class="field-label">Últimas veces</span>
+        ${h.length ? `<ul class="dv-sh-hist">${h.map(x => `<li><span class="dim">${UI.esc(UI.fmtDateShort(x.date))}</span><span>${UI.esc(x.text)}${x.pr ? ` <span class="dv-up">${UI.icon('trophy', 12)}</span>` : ''}</span></li>`).join('')}</ul>` : '<p class="field-hint">Aún no lo has registrado.</p>'}
+        ${cat && cat.howto ? `<span class="field-label">Cómo se hace</span><p class="modal-text prewrap">${UI.esc(cat.howto)}</p>` : ''}
+        ${videos.length ? `<span class="field-label">Vídeos</span><div class="howto-videos">${videos.map((v, i) => `<a class="howto-video" href="${UI.esc(v.url)}" target="_blank" rel="noopener">${UI.icon('play', 15)}<span>${UI.esc(v.label || ('Vídeo ' + (i + 1)))}</span></a>`).join('')}</div>` : ''}
+        ${subs.length ? `<span class="field-label">Si no puedes, cámbialo por</span><p class="ex-subs dv-sh-subs">${UI.icon('repeat', 12)} ${subs.map(s => UI.esc(s.name)).join(' · ')}</p>` : ''}`,
+      actions: [
+        ...(cat ? [{ label: 'Editar', kind: 'ghost', onClick: () => { editExercise(app, cat, { onSaved: () => app.render() }); } }] : []),
+        ...(cat && h.length ? [{ label: 'Progreso', kind: 'ghost', onClick: () => { app.go('progress', { tab: 'exercise', exId: cat.id }); } }] : []),
+        { label: 'Cerrar', kind: 'primary' },
+      ],
+    });
   }
 
   function dayBind(app, root, params) {
@@ -418,6 +494,33 @@ const VPlan = (() => {
     if (share) share.addEventListener('click', () => VData.exportDay(app, d.id));
     const swap = root.querySelector('[data-act="swap-day"]');
     if (swap) swap.addEventListener('click', () => swapDayFlow(app, d));
+    // ⋯ del día: lo que antes eran los tres botones del final
+    const menu = root.querySelector('[data-act="day-menu"]');
+    if (menu) menu.addEventListener('click', () => UI.modal({
+      title: d.name,
+      bodyHTML: `<div class="menu-list">
+        <button class="menu-row" data-op="edit"><span>${UI.icon('edit', 16)} Editar día</span><span class="chev">›</span></button>
+        <button class="menu-row" data-op="share"><span>${UI.icon('upload', 16)} Compartir</span><span class="chev">›</span></button>
+        <button class="menu-row" data-op="swap"><span>${UI.icon('swap', 16)} Intercambiar con otro día</span><span class="chev">›</span></button>
+      </div>`,
+      actions: [{ label: 'Cerrar', kind: 'ghost' }],
+      onMount: (ov) => ov.querySelectorAll('[data-op]').forEach(b => b.addEventListener('click', () => {
+        UI.closeModal(ov);
+        if (b.dataset.op === 'edit') editDay(app, d);
+        else if (b.dataset.op === 'share') VData.exportDay(app, d.id);
+        else swapDayFlow(app, d);
+      })),
+    }));
+    // Tocar un ejercicio abre su ficha
+    root.querySelectorAll('.dv-ex[data-ex]').forEach(li => {
+      const open = () => {
+        const [bi, xi] = li.dataset.ex.split(':').map(Number);
+        const ex = d.blocks[bi] && d.blocks[bi].exercises[xi];
+        if (ex) exerciseSheet(app, ex);
+      };
+      li.addEventListener('click', (e) => { if (!e.target.closest('a')) open(); });
+      li.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } });
+    });
   }
 
   // Intercambia el CONTENIDO de dos días (mantiene id, nombre y posición/semana).
