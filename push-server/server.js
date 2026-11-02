@@ -19,10 +19,11 @@
 //
 // Compartir progreso con un amigo (enlace): la app sube un paquete YA CIFRADO en
 // el móvil (AES-GCM; la llave va en el enlace, en la parte «#» que nunca llega
-// aquí), así que el servidor guarda algo que no puede leer. Solo en memoria, se
-// borra al abrirlo o a las SHARE_TTL_H horas (48 por defecto).
+// aquí), así que el servidor guarda algo que no puede leer. Solo en memoria; se
+// puede abrir las veces que haga falta (un grupo de amigos, o volver a abrirlo si
+// algo falla) y se borra a las SHARE_TTL_H horas (48 h por defecto) o al retirarlo.
 //   POST   /share           { data }                   → { id, del, exp }
-//   GET    /share/:id                                  → { data }  (y se borra)
+//   GET    /share/:id                                  → { data }
 //   DELETE /share/:id?del=…                            → { ok }   lo retira quien lo subió
 
 'use strict';
@@ -183,8 +184,8 @@ const server = http.createServer(async (req, res) => {
     const sm = path.match(/^\/share\/([A-Za-z0-9_-]{16})$/);
     if (sm && req.method === 'GET') {
       const x = shares.get(sm[1]);
-      if (!x || x.exp <= Date.now()) { dropShare(sm[1]); return send(res, 404, { error: 'caducado o ya abierto' }, allowed); }
-      dropShare(sm[1]); abiertos++; // de un solo uso: al abrirlo desaparece
+      if (!x || x.exp <= Date.now()) { dropShare(sm[1]); return send(res, 404, { error: 'caducado o retirado' }, allowed); }
+      abiertos++; // se queda hasta que caduca o lo retiran: se puede abrir varias veces
       return send(res, 200, { data: x.data }, allowed);
     }
     if (sm && req.method === 'DELETE') {

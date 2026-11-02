@@ -1533,3 +1533,6 @@ body.has-active-bar .dv-start { bottom: calc(var(--nav-h) + var(--safe-bottom) +
 .ss-row[hidden], .ss-week[hidden] { display: none; }
 .ss-searching .streak-card, .ss-searching .sessions-cta, .ss-searching .ss-week-head span { display: none; }
 .ss-count { margin: 0 2px 12px; font-size: 13px; color: var(--ink-soft); }
+.share-paste { margin-top: 12px; }
+.share-steps { margin: 4px 0 12px; padding-left: 22px; display: flex; flex-direction: column; gap: 8px; font-size: 14px; color: var(--ink); line-height: 1.4; }
+.share-steps .ic { vertical-align: -2px; }
