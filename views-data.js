@@ -261,16 +261,18 @@ const VData = (() => {
     UI.modal({
       title: 'Compartir',
       bodyHTML: `<div class="share-grid">
-          <button class="share-card share-card-wide" data-act="friend"><span class="share-card-ic" style="background:var(--light)">${UI.icon('users', 26)}</span><span class="share-card-txt"><strong>Con un amigo</strong><span class="dim">Mándale un enlace con tu progreso y os comparáis en Traindía</span></span></button>
+          <button class="share-card share-card-wide" data-act="friend"><span class="share-card-ic" style="background:var(--light)">${UI.icon('users', 26)}</span><span class="share-card-txt"><strong>Con amigos</strong><span class="dim">Un enlace con tu progreso, tu plan o tu nutrición, para uno o para un grupo</span></span></button>
           <button class="share-card" data-act="export"><span class="share-card-ic" style="background:var(--strong)">${UI.icon('upload', 26)}</span><strong>Exportar</strong><span class="dim">Tu copia completa o partes sueltas</span></button>
           <button class="share-card" data-act="import"><span class="share-card-ic" style="background:var(--light)">${UI.icon('swap', 26)}</span><strong>Importar</strong><span class="dim">Un archivo, un JSON o el enlace de un amigo</span></button>
         </div>
-        <p class="field-hint">Con un amigo va por enlace (cifrado, de un solo uso). Exportar e importar usan archivos: tu copia completa o partes sueltas.</p>`,
+        <button class="btn ghost block share-paste" data-act="paste">${UI.icon('link', 16)} Pegar el enlace de un amigo</button>
+        <p class="field-hint">Con amigos va por enlace (cifrado, dura 48 horas). Exportar e importar usan archivos: tu copia completa o partes sueltas.</p>`,
       actions: [{ label: 'Cerrar', kind: 'ghost' }],
       onMount: (root) => {
         root.querySelector('[data-act="export"]').addEventListener('click', () => { UI.closeModal(); openExport(app); });
         root.querySelector('[data-act="import"]').addEventListener('click', () => { UI.closeModal(); startImport(app); });
         root.querySelector('[data-act="friend"]').addEventListener('click', () => { UI.closeModal(); VShare.start(app); });
+        root.querySelector('[data-act="paste"]').addEventListener('click', async () => { if (await VShare.pasteAndOpen(app)) UI.closeModal(root); });
       },
     });
   }
@@ -470,6 +472,7 @@ const VData = (() => {
               await importPlaces(payload.data.places, days);
               await app.refreshRoutine();
               app.render();
+              if (payload.onDone) payload.onDone();
               UI.toast('Plan añadido · actívalo en "El plan"');
             } }), 50);
         } },

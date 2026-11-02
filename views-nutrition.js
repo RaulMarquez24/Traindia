@@ -1404,6 +1404,7 @@ const VNutrition = (() => {
           await DB.saveNutrition(rec);
           _plan = rec; _planId = rec.id; _abierta = {}; _varianteId = null;
           app.go('nutrition', { planId: rec.id }, true);
+          if (payload.onDone) payload.onDone();
           UI.toast('Plan guardado');
         } },
       ],

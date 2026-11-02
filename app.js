@@ -56,6 +56,7 @@ const app = {
     this.settings = await DB.getSettings();
     if (!this.settings || !this.settings.seeded || !this.settings.mainUserId) {
       this.showLanding(); // visitante nuevo: presentación con botón para empezar
+      VShare.handoffAtStart(this); // iPhone: llegó por un enlace a Safari, no a la app instalada
       return;
     }
     this.markHasProfile();
@@ -757,7 +758,7 @@ const app = {
       bodyHTML: `
         <button class="set-head um-me" data-act="edit">${UI.avatar(me, 48)}<span class="pf-me-txt"><strong>${UI.esc(me.name)}</strong><span>Perfil principal</span></span><span class="set-head-edit">${UI.icon('edit', 15)} Editar</span></button>
         <div class="menu-list">
-          <button class="menu-row" data-act="share"><span>${UI.icon('upload', 18)} Compartir mi progreso</span><span class="chev">›</span></button>
+          <button class="menu-row" data-act="share"><span>${UI.icon('upload', 18)} Compartir con amigos</span><span class="chev">›</span></button>
           <button class="menu-row" data-act="profiles"><span>${UI.icon('users', 18)} Tus amigos${friends.length ? ` <span class="dim">(${friends.length})</span>` : ''}</span><span class="chev">›</span></button>
         </div>
         ${friends.length ? `<div class="field-label" style="margin-top:16px">Compárate con</div>
@@ -825,7 +826,7 @@ const app = {
                 tipo: d.tipo,
                 mensaje: d.mensaje.trim(),
                 contacto: (d.contacto || '').trim() || '(no indicado)',
-                version: 'v2.57.2',
+                version: 'v2.58.0',
                 perfil: (this.mainUser && this.mainUser.name) || '',
                 navegador: navigator.userAgent,
               }),
@@ -885,7 +886,7 @@ const app = {
         <div class="more-group">${g.rows.map(r => `<button class="more-row" ${r.feedback ? 'data-feedback' : `data-link="${r.v}"`}>
           <span class="more-ic" style="background:${g.color}">${UI.icon(r.icon, 20)}</span>
           <span class="more-txt"><strong>${r.label}</strong><span${r.warn ? ' class="warn"' : ''}>${UI.esc(r.sub)}</span></span><span class="chev">›</span></button>`).join('')}</div>`).join('')}
-      <p class="version-foot">Traindía · v2.57.2<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
+      <p class="version-foot">Traindía · v2.58.0<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
     </div>`;
   },
   bindMore(root) {
@@ -1173,7 +1174,7 @@ const app = {
         <p>Cuando un amigo te mande el enlace con su progreso, ábrelo y aparecerá aquí. Luego lo ves junto al tuyo en Progreso → Comparativa.</p>
       </div>`}
       <div class="pf-actions">
-        <button class="btn primary block" id="shareMine">${UI.icon('upload', 16)} Compartir mi progreso</button>
+        <button class="btn primary block" id="shareMine">${UI.icon('upload', 16)} Compartir con amigos</button>
         <button class="link-btn" id="addGuest">o añadir un amigo a mano</button>
       </div>
       <p class="field-hint">Los datos de tus amigos solo sirven para compararos: nunca se mezclan con los tuyos.</p>

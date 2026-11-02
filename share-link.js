@@ -1,14 +1,17 @@
 // ============================================================
-// COMPARTIR PROGRESO CON UN ENLACE (invitados)
+// COMPARTIR CON AMIGOS POR ENLACE
 // ------------------------------------------------------------
-// En vez de pasarse un archivo: tu amigo toca «Compartir mi progreso», le sale
-// un enlace, te lo manda por WhatsApp y al abrirlo Traindía te ofrece añadirlo
-// como invitado (o actualizarlo si ya lo tenías) para compararos.
+// En vez de pasarse un archivo: tu amigo toca «Compartir con amigos», le sale un
+// enlace y lo manda por WhatsApp (a ti o a un grupo). Al abrirlo, Traindía ofrece
+// guardarlo como invitado para compararos (o actualizarlo si ya lo tenías) o
+// quedarte con su plan o su nutrición en tu perfil.
 //
 // Privacidad: el paquete se comprime y se CIFRA en el móvil (AES-GCM 256). Al
 // servidor del homelab (el mismo de los avisos) solo sube eso, ilegible; la llave
 // va en el enlace detrás de «#», parte que el navegador nunca envía a ningún
-// servidor. El servidor lo guarda en memoria y lo borra al abrirlo o a las 48 h.
+// servidor. El servidor lo guarda en memoria; se puede abrir varias veces y se
+// borra a las 48 horas o cuando quien lo creó lo retira. Si ya lo usaste en este
+// móvil (añadiste su plan, lo guardaste como invitado…), al reabrirlo te lo avisa.
 // ============================================================
 
 const VShare = (() => {
@@ -16,6 +19,8 @@ const VShare = (() => {
   const server = () => { try { return localStorage.getItem('traindia.pushUrl') || SERVER_DEF; } catch (e) { return SERVER_DEF; } };
   const PENDING_KEY = 'traindia.pendingShare';
   const LAST_KEY = 'traindia.lastShare';
+  const HERE_KEY = 'traindia.shareHere'; // en Safari de iPhone: «úsalo aquí» (solo esta visita)
+  const USED_KEY = 'traindia.sharesUsed'; // enlaces ya usados aquí: { id: { at, did: [...] } }
   const TTL_TXT = '48 horas';
 
   // ---- base64url y cifrado ----
@@ -71,28 +76,101 @@ const VShare = (() => {
     let txt = null;
     try { txt = localStorage.getItem(PENDING_KEY); localStorage.removeItem(PENDING_KEY); } catch (e) {}
     if (!txt || !parseLink(txt)) return false;
-    // En iPhone, Safari y la app instalada guardan cada una sus datos: si esto es
-    // Safari, el enlace (de un solo uso) no se gasta aquí sin avisar.
-    if (isIOS() && !standalone()) {
-      UI.modal({
-        title: 'Ábrelo en tu Traindía',
-        bodyHTML: `<p class="modal-text">En iPhone, Safari y la app de la pantalla de inicio guardan los datos por separado. Si usas Traindía instalada, <strong>copia el enlace</strong> y pégalo allí en <strong>Más → Copias y datos → Importar</strong>.</p>
-          <p class="field-hint">El enlace solo se puede abrir una vez.</p>`,
-        actions: [
-          { label: 'Importar aquí', kind: 'ghost', onClick: () => { open(app, txt); } },
-          { label: 'Copiar enlace', kind: 'primary', onClick: async () => { try { await navigator.clipboard.writeText(location.origin + '/' + txt); UI.toast('Enlace copiado'); } catch (e) { UI.toast('No se pudo copiar', 'err'); } } },
-        ],
-      });
-      return true;
-    }
+    if (needsHandoff()) { handoff(app, txt, true); return true; }
     await open(app, txt);
     return true;
   }
 
+  // En iPhone los enlaces se abren en Safari, no en la app de la pantalla de inicio,
+  // y cada una guarda sus datos por separado: se explica cómo pasarlo a la app
+  // (copiar y pegar) antes de nada, también si en Safari aún no hay perfil.
+  const needsHandoff = () => { if (!isIOS() || standalone()) return false; try { return !sessionStorage.getItem(HERE_KEY); } catch (e) { return true; } };
+  function pendingLink() { try { const t = localStorage.getItem(PENDING_KEY); return t && parseLink(t) ? t : null; } catch (e) { return null; } }
+  // Al arrancar sin perfil (Safari recién abierto con el enlace)
+  function handoffAtStart(app) {
+    const txt = pendingLink();
+    if (txt && needsHandoff()) handoff(app, txt, false);
+  }
+  function handoff(app, txt, hasProfile) {
+    const full = location.origin + '/' + txt;
+    UI.modal({
+      title: 'Ábrelo en tu Traindía',
+      bodyHTML: `<p class="modal-text">En iPhone los enlaces se abren en <strong>Safari</strong>, no en la Traindía de tu pantalla de inicio, y cada una guarda sus datos por separado.</p>
+        <ol class="share-steps">
+          <li><strong>Copia el enlace</strong> con el botón de abajo.</li>
+          <li>Abre <strong>Traindía desde tu pantalla de inicio</strong>.</li>
+          <li>Toca ${UI.icon('upload', 14)} arriba a la derecha y luego <strong>Pegar el enlace de un amigo</strong>.</li>
+        </ol>
+        <p class="field-hint">¿Aún no la tienes en la pantalla de inicio? Añádela primero (botón Compartir de Safari → <strong>Añadir a pantalla de inicio</strong>), ábrela desde ahí y pega el enlace. Lo que hagas aquí en Safari no pasa a la app.</p>`,
+      actions: [
+        { label: 'Usarlo en Safari', kind: 'ghost', onClick: () => {
+          try { sessionStorage.setItem(HERE_KEY, '1'); } catch (e) {}
+          if (hasProfile) setTimeout(() => checkPending(app), 50); // si no hay perfil, se abre al crearlo
+        } },
+        { label: 'Copiar enlace', kind: 'primary', onClick: async () => {
+          try { await navigator.clipboard.writeText(full); } catch (e) { UI.toast('No se pudo copiar: mantén pulsado el enlace en WhatsApp y cópialo desde allí', 'err'); return false; }
+          try { localStorage.removeItem(PENDING_KEY); } catch (e) {}
+          UI.toast('Enlace copiado: ahora abre Traindía desde tu pantalla de inicio');
+        } },
+      ],
+    });
+  }
+
+  // «Pegar enlace» (botón de compartir de arriba): lo lee del portapapeles y lo abre.
+  async function pasteAndOpen(app) {
+    let txt = '';
+    try { txt = await navigator.clipboard.readText(); } catch (e) {}
+    if (parseLink(txt)) { open(app, txt); return true; }
+    UI.toast(txt ? 'Lo que tienes copiado no es un enlace de Traindía' : 'No hay ningún enlace copiado', 'err');
+    return false;
+  }
+
+  // ---- Enlaces ya usados en este móvil (se olvidan cuando ya han caducado) ----
+  const DID_TXT = { compare: 'lo guardaste como invitado', plan: 'añadiste su plan', nutrition: 'usaste su nutrición' };
+  function usedAll() {
+    let m = {};
+    try { m = JSON.parse(localStorage.getItem(USED_KEY)) || {}; } catch (e) {}
+    const old = Date.now() - 3 * 86400000;
+    for (const id of Object.keys(m)) if (!m[id] || m[id].at < old) delete m[id];
+    return m;
+  }
+  function markUsed(id, what) {
+    if (!id) return;
+    const m = usedAll();
+    const x = m[id] || { did: [] };
+    x.at = Date.now();
+    if (!x.did.includes(what)) x.did.push(what);
+    m[id] = x;
+    try { localStorage.setItem(USED_KEY, JSON.stringify(m)); } catch (e) {}
+  }
+  const usedOf = (id) => usedAll()[id] || null;
+  const cuando = (t) => {
+    const d = new Date(t), hoy = new Date(); const ayer = new Date(hoy); ayer.setDate(hoy.getDate() - 1);
+    const hora = d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+    if (d.toDateString() === hoy.toDateString()) return `hoy a las ${hora}`;
+    if (d.toDateString() === ayer.toDateString()) return `ayer a las ${hora}`;
+    return `el ${d.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric' })} a las ${hora}`;
+  };
+  const humanList = (a) => a.length > 1 ? `${a.slice(0, -1).join(', ')} y ${a[a.length - 1]}` : a[0] || '';
+
   // ---- Recibir: descargar, descifrar y ofrecer añadir como invitado ----
-  async function open(app, txt) {
+  async function open(app, txt, again) {
     const l = parseLink(txt);
     if (!l) { UI.toast('Ese enlace no es de Traindía', 'err'); return false; }
+    const used = !again && usedOf(l.id);
+    if (used) {
+      const did = humanList(used.did.map(k => DID_TXT[k]).filter(Boolean));
+      UI.modal({
+        title: 'Ya canjeaste este enlace',
+        bodyHTML: `<p class="modal-text">Lo usaste ${cuando(used.at)}${did ? `: ${did}` : ''}.</p>
+          <p class="modal-text">¿Quieres volver a usarlo?</p>`,
+        actions: [
+          { label: 'No', kind: 'ghost' },
+          { label: 'Volver a usarlo', kind: 'primary', onClick: () => { setTimeout(() => open(app, txt, true), 50); } },
+        ],
+      });
+      return true;
+    }
     UI.toast('Abriendo lo que te han compartido…');
     let payload;
     try {
@@ -101,16 +179,58 @@ const VShare = (() => {
     } catch (e) {
       UI.modal({
         title: 'No se ha podido abrir',
-        bodyHTML: `<p class="modal-text">${e && e.status === 404 ? `Este enlace ya se ha abierto o ha caducado (duran ${TTL_TXT} y solo se abren una vez). Pídele que te mande uno nuevo.` : navigator.onLine === false ? 'Sin conexión: vuelve a abrirlo cuando tengas internet.' : 'El enlace está incompleto o no se ha podido descifrar. Pídele que te lo reenvíe.'}</p>`,
+        bodyHTML: `<p class="modal-text">${e && e.status === 404 ? `Este enlace ha caducado o lo han retirado (duran ${TTL_TXT}). Pídele que te mande uno nuevo.` : navigator.onLine === false ? 'Sin conexión: vuelve a abrirlo cuando tengas internet.' : 'El enlace está incompleto o no se ha podido descifrar. Pídele que te lo reenvíe.'}</p>`,
         actions: [{ label: 'Cerrar', kind: 'primary' }],
       });
       return false;
     }
     if (!payload || !payload.data || !payload.share) { UI.toast('El enlace no trae datos de Traindía', 'err'); return false; }
-    offerGuest(app, payload);
+    offer(app, payload, l.id);
     return true;
   }
-  async function offerGuest(app, payload) {
+
+  // Qué hacer con lo que te pasan: compararos (invitado) o quedarte con su plan o
+  // su nutrición en tu perfil. Si solo cabe una cosa, va directo.
+  function offer(app, payload, id) {
+    const from = payload.from || {};
+    const d = payload.data;
+    const name = from.name || 'Tu amigo';
+    const sub = { format: payload.format, version: payload.version, exportedAt: payload.exportedAt, user: { name: from.name, color: from.color } };
+    const done = (what) => () => markUsed(id, what); // al terminar de aplicarlo, no al elegirlo
+    const ya = (usedOf(id) || { did: [] }).did;
+    const rt = (d.routines || [])[0];
+    const nut = (d.nutrition || []).find(n => n.isPrimary) || (d.nutrition || [])[0];
+    const nSes = (d.sessions || []).length, nPrg = (d.progress || []).length;
+    const opts = [];
+    if (nSes || nPrg) opts.push({ id: 'compare', icon: 'users', color: 'var(--light)', title: 'Compararnos',
+      sub: `Guarda sus ${[nSes && `${nSes} entreno${nSes === 1 ? '' : 's'}`, nPrg && 'medidas'].filter(Boolean).join(' y ')} como invitado. No toca tus datos.`,
+      go: () => offerGuest(app, payload, done('compare')) });
+    if (rt) {
+      const nDays = (rt.days || []).filter(x => !x.isRest).length;
+      opts.push({ id: 'plan', icon: 'calendar', color: 'var(--moderate)', title: 'Añadir su plan a mis planes',
+        sub: `${rt.name ? `«${UI.esc(rt.name)}» · ` : ''}${nDays} día${nDays === 1 ? '' : 's'} de entreno. Revisas los ejercicios y lo activas cuando quieras.`,
+        go: () => VData.routeImport(app, { ...sub, kind: 'plan', data: { routine: rt, exercises: d.exercises || [], places: d.places || [] }, onDone: done('plan') }) });
+    }
+    if (nut) {
+      const plan = { ...nut }; delete plan.id; delete plan.userId; delete plan.isPrimary; delete plan.createdAt;
+      opts.push({ id: 'nutrition', icon: 'book', color: 'var(--sub-accent)', title: 'Usar su nutrición', sub: 'Su pauta de alimentación, en tu Nutrición.',
+        go: () => VData.routeImport(app, { ...sub, kind: 'nutrition', data: { plan }, onDone: done('nutrition') }) });
+    }
+    if (!opts.length) { UI.toast('El enlace no trae datos', 'err'); return; }
+    if (opts.length === 1) { opts[0].go(); return; }
+    UI.modal({
+      title: `${UI.esc(name)} te comparte su Traindía`,
+      bodyHTML: `<p class="modal-text">¿Qué quieres hacer?</p>
+        <div class="menu-list">${opts.map(o => `<button class="big-row" data-opt="${o.id}"><span class="big-row-icon tile" style="background:${o.color}">${UI.icon(o.icon, 18)}</span><span class="big-row-text"><strong>${o.title}</strong><span class="dim">${ya.includes(o.id) ? '<b>Ya lo hiciste.</b> ' : ''}${o.sub}</span></span><span class="chev">›</span></button>`).join('')}</div>
+        <p class="field-hint">Puedes volver a abrir el enlace para hacer otra cosa mientras no caduque (dura ${TTL_TXT}).</p>`,
+      actions: [{ label: 'Ahora no', kind: 'ghost' }],
+      onMount: (m) => m.querySelectorAll('[data-opt]').forEach(b => b.addEventListener('click', () => {
+        const o = opts.find(x => x.id === b.dataset.opt);
+        UI.closeModal(m); setTimeout(() => o.go(), 50);
+      })),
+    });
+  }
+  async function offerGuest(app, payload, onDone) {
     const from = payload.from || {};
     const d = payload.data;
     const nSes = (d.sessions || []).length, nPrg = (d.progress || []).length;
@@ -151,6 +271,7 @@ const VShare = (() => {
           await DB.put('users', guest);
           await VData.importShared(app, payload, guest.id);
           await app.loadUsers();
+          if (onDone) onDone();
           UI.toast(same ? `${guest.name} actualizado` : `${guest.name} añadido`);
           app.go('progress', { tab: 'compare' });
         } },
@@ -176,8 +297,8 @@ const VShare = (() => {
     const sessions = ses.filter(x => !x.draft);
     const opt = (k, label, n, on) => `<label class="metric-opt"><input type="checkbox" data-part="${k}"${on ? ' checked' : ''}${n === 0 ? ' disabled' : ''}><span>${label}${n != null ? ` <span class="dim">(${n})</span>` : ''}</span></label>`;
     UI.modal({
-      title: 'Compartir mi progreso', size: 'wide',
-      bodyHTML: `<p class="modal-text">Te sale un <strong>enlace</strong> para mandarlo por WhatsApp o donde quieras. Quien lo abra te verá en su Traindía como invitado y podréis compararos.</p>
+      title: 'Compartir con amigos', size: 'wide',
+      bodyHTML: `<p class="modal-text">Te sale un <strong>enlace</strong> para mandarlo por WhatsApp a quien quieras, también a un grupo. Quien lo abra podrá guardarte como invitado para compararos o quedarse con tu plan o tu nutrición.</p>
         <p class="field-hint" style="margin-top:0">¿Qué compartes?</p>
         <div class="metric-opts">
           ${opt('sessions', 'Mis entrenos', sessions.length, true)}
@@ -185,7 +306,7 @@ const VShare = (() => {
           ${opt('plan', 'Mi plan activo', app.routine ? null : 0, false)}
           ${opt('nutrition', 'Mi nutrición', nut.length, false)}
         </div>
-        <p class="field-hint share-privacy">🔒 El paquete se cifra en tu móvil y se guarda un momento en el servidor de Traindía, que no puede leerlo: la llave va dentro del enlace. Se borra al abrirlo o a las ${TTL_TXT}. Quien tenga el enlace puede abrirlo una vez: mándalo solo a quien quieras.</p>`,
+        <p class="field-hint share-privacy">🔒 El paquete se cifra en tu móvil y se guarda en el servidor de Traindía, que no puede leerlo: la llave va dentro del enlace. Se borra a los ${TTL_TXT} o cuando lo retires. Cualquiera que tenga el enlace puede abrirlo: mándalo solo a quien quieras.</p>`,
       actions: [
         { label: 'Cancelar', kind: 'ghost' },
         { label: 'Crear enlace', kind: 'primary', onClick: async (m) => {
@@ -212,17 +333,17 @@ const VShare = (() => {
     });
   }
   function showLink(app, link, r) {
-    const hasta = (() => { try { return new Date(r.exp).toLocaleString('es-ES', { weekday: 'long', hour: '2-digit', minute: '2-digit' }); } catch (e) { return ''; } })();
+    const hasta = (() => { try { const d = new Date(r.exp); return `${d.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric' })} a las ${d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}`; } catch (e) { return ''; } })();
     const canShare = !!(navigator.share);
     UI.modal({
       title: 'Enlace listo',
-      bodyHTML: `<p class="modal-text">Mándaselo a tu amigo. Sirve para <strong>abrirlo una vez</strong>${hasta ? `, hasta el <strong>${UI.esc(hasta)}</strong>` : ''}.</p>
+      bodyHTML: `<p class="modal-text">Mándaselo a quien quieras, también a un grupo. Se puede abrir <strong>las veces que haga falta</strong>${hasta ? ` hasta el <strong>${UI.esc(hasta)}</strong>` : ''}.</p>
         <input class="inp share-link-inp" readonly value="${UI.esc(link)}">
         <button class="btn ghost danger small" id="shRevoke" style="margin-top:10px">Retirar el enlace</button>`,
       actions: [
         { label: 'Copiar', kind: 'ghost', onClick: async () => { try { await navigator.clipboard.writeText(link); UI.toast('Enlace copiado'); } catch (e) { UI.toast('Mantén pulsado el enlace para copiarlo', 'err'); } return false; } },
         ...(canShare ? [{ label: 'Compartir', kind: 'primary', onClick: () => {
-          try { const p = navigator.share({ title: 'Mi progreso en Traindía', text: `${app.mainUser.name} te comparte su progreso en Traindía:`, url: link }); if (p && p.catch) p.catch(() => {}); } catch (e) {}
+          try { const p = navigator.share({ title: 'Mi Traindía', text: `${app.mainUser.name} te comparte su Traindía:`, url: link }); if (p && p.catch) p.catch(() => {}); } catch (e) {}
           return false;
         } }] : []),
       ],
@@ -237,5 +358,5 @@ const VShare = (() => {
     });
   }
 
-  return { start, open, stashFromUrl, checkPending, parseLink, seal, unseal };
+  return { start, open, stashFromUrl, checkPending, handoffAtStart, pasteAndOpen, parseLink, seal, unseal };
 })();
