@@ -1985,23 +1985,27 @@ const VSessions = (() => {
     });
   }
 
-  // Comprueba si hay un entreno a medias (borrador) al arrancar y ofrece continuarlo.
-  async function checkResume(app) {
-    const drafts = (await DB.sessionsOf(app.activeUser.id)).filter(s => s.draft);
-    if (!drafts.length) return;
-    drafts.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-    const draft = drafts[0];
-    for (let i = 1; i < drafts.length; i++) await DB.del('sessions', drafts[i].id); // limpia extras
-    app._live = draft;
-    app.updateActiveBar();
-    UI.modal({
-      title: 'Entrenamiento a medias',
-      bodyHTML: `<p class="modal-text">Dejaste un entrenamiento sin terminar${draft.name ? ` (<strong>${UI.esc(draft.name)}</strong>)` : ''}. ¿Quieres continuarlo?</p>`,
-      actions: [
-        { label: 'Descartar', kind: 'danger', onClick: async () => { await DB.del('sessions', draft.id); app._live = null; app.updateActiveBar(); UI.toast('Entreno descartado'); } },
-        { label: 'Continuar', kind: 'primary', onClick: () => { app.go('live', { dayId: draft.dayId }); } },
-      ],
-    });
+  // Entreno a medias (borrador): se retoma SIEMPRE y sin preguntar, abras la app como
+  // la abras. Para tirarlo hay que entrar en él y tocar «Descartar entreno» (que pide
+  // confirmación). Si hubiera varios, se retoma el más reciente con algo apuntado; los
+  // vacíos se limpian y los que tienen datos se quedan para después: nunca se borran solos.
+  // open=false: solo lo recupera (barra «Entreno en curso») sin abrirlo.
+  async function checkResume(app, open = true) {
+    if (!app._live) {
+      const drafts = (await DB.sessionsOf(app.activeUser.id)).filter(s => s.draft);
+      if (!drafts.length) return false;
+      drafts.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+      const conDatos = (s) => liveHasData(s) || !!(s.notes || '').trim();
+      const draft = drafts.find(conDatos) || drafts[0];
+      for (const d of drafts) if (d !== draft && !conDatos(d)) await DB.del('sessions', d.id);
+      app._live = draft;
+      app.updateActiveBar();
+    }
+    if (open) {
+      app.go('live', { dayId: app._live.dayId });
+      UI.toast('Tu entreno sigue donde lo dejaste');
+    }
+    return true;
   }
 
   // Elegir qué entrenar: cualquier día de tu plan (con su intensidad, enfoque y

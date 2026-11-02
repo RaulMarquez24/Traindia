@@ -75,11 +75,13 @@ const app = {
     // Unificación de cardio (v10): si hay variantes, avisa y deja hacer copia antes.
     if (await DB.cardioUnifyPending()) { this.showCardioMigration(); return; }
     if (((this.settings && this.settings.dataVersion) || 0) < 10) await DB.runCardioUnify(); // nada que cambiar: solo marca hecho
-    // Un archivo compartido es una acción explícita del usuario: va ANTES que el aviso
-    // de entreno a medias (si no, se apilan dos modales). El aviso vuelve al siguiente inicio.
+    // Entreno a medias: se recupera lo primero, pase lo que pase (barra «Entreno en curso»).
+    const enCurso = await VSessions.checkResume(this, false);
+    // Un archivo compartido o el enlace de un amigo son acciones explícitas: se atienden,
+    // y el entreno sigue ahí en la barra. Si no, se abre el entreno y nada más encima.
     if (await this.checkSharedImport()) return;
     if (await VShare.checkPending(this)) return; // abriste la app con un enlace de un amigo
-    await VSessions.checkResume(this);
+    if (enCurso) return VSessions.checkResume(this);
     if (await VSessions.checkDayAfter(this)) return; // semáforo: cómo amaneciste tras el último entreno
     VData.checkBackupReminder(this); // recordatorio semanal de copia (si procede)
     VPlan.checkDuplicates(this);     // avisa si hay ejercicios duplicados sin usar
@@ -218,9 +220,9 @@ const app = {
   // ---- Sesión en curso (autoguardado + indicador) ----
   _live: null,
   persistLive() {
-    if (!this._live) return;
+    if (!this._live) return Promise.resolve();
     this._live.draft = true;
-    DB.put('sessions', this._live).catch(() => {});
+    return DB.put('sessions', this._live).catch(() => {});
   },
   updateActiveBar() {
     const bar = document.getElementById('activeBar');
@@ -235,6 +237,8 @@ const app = {
     }
     // Marca para que el temporizador de descanso global se coloque encima y no se solape.
     document.body.classList.toggle('has-active-bar', !!show);
+    // Entrenando no se interrumpe con nada: el aviso de versión nueva se quita (se aplica sola después).
+    if (this._live) { const p = document.getElementById('updPrompt'); if (p) p.classList.remove('show'); }
   },
 
   // ---- Actualizaciones ----
@@ -280,14 +284,15 @@ const app = {
     // de golpe desconcierta aunque no estés haciendo nada.
     const recien = Date.now() - this._visibleAt < 15000;
     if (this._updForce || (recien && this.isIdle())) return this.applyUpdate();
+    if (this._live) return; // entrenando, ni aviso: se aplica sola al volver a la app ya sin entreno
     const ip = document.getElementById('installPrompt'); if (ip) ip.classList.remove('show');
     const p = document.getElementById('updPrompt'); if (p) p.classList.add('show');
   },
   applyUpdate() {
     if (this._reloading) return;
     this._reloading = true;
-    this.persistLive();
-    location.reload();
+    // Primero queda guardado el entreno (si hay), luego se recarga: vuelve directo a él.
+    this.persistLive().finally(() => location.reload());
   },
   async checkUpdateNow() {
     if (this._updReady) return this.applyUpdate();
@@ -296,7 +301,7 @@ const app = {
     this._updForce = true;
     const r = await this.checkUpdate();
     if (r === true) UI.toast('Hay una versión nueva: se aplica en un momento');
-    else { this._updForce = false; UI.toast(r === false ? 'Ya tienes la última versión (v2.59.0)' : 'No se pudo comprobar. Prueba en un rato', r === false ? undefined : 'err'); }
+    else { this._updForce = false; UI.toast(r === false ? 'Ya tienes la última versión (v2.59.1)' : 'No se pudo comprobar. Prueba en un rato', r === false ? undefined : 'err'); }
   },
 
   registerViews() {
@@ -888,7 +893,7 @@ const app = {
                 tipo: d.tipo,
                 mensaje: d.mensaje.trim(),
                 contacto: (d.contacto || '').trim() || '(no indicado)',
-                version: 'v2.59.0',
+                version: 'v2.59.1',
                 perfil: (this.mainUser && this.mainUser.name) || '',
                 navegador: navigator.userAgent,
               }),
@@ -948,7 +953,7 @@ const app = {
         <div class="more-group">${g.rows.map(r => `<button class="more-row" ${r.feedback ? 'data-feedback' : `data-link="${r.v}"`}>
           <span class="more-ic" style="background:${g.color}">${UI.icon(r.icon, 20)}</span>
           <span class="more-txt"><strong>${r.label}</strong><span${r.warn ? ' class="warn"' : ''}>${UI.esc(r.sub)}</span></span><span class="chev">›</span></button>`).join('')}</div>`).join('')}
-      <p class="version-foot">Traindía · v2.59.0<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
+      <p class="version-foot">Traindía · v2.59.1<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
     </div>`;
   },
   bindMore(root) {
@@ -1397,7 +1402,7 @@ const app = {
         ${(window.traindiaInstalled && window.traindiaInstalled())
           ? `<div class="more-row set-static"><span class="more-ic" style="background:var(--light)">${UI.icon('check', 18)}</span><span class="more-txt"><strong>Instalada en este móvil</strong><span>La estás usando como app</span></span></div>`
           : row('id="installRow"', 'download', 'var(--light)', 'Instalar en el móvil', 'Como una app, a pantalla completa y sin conexión')}
-        ${row('id="checkUpd"', 'repeat', 'var(--light)', 'Buscar actualizaciones', 'Tienes la v2.59.0. Se actualiza sola, esto es por si quieres forzarlo')}
+        ${row('id="checkUpd"', 'repeat', 'var(--light)', 'Buscar actualizaciones', 'Tienes la v2.59.1. Se actualiza sola, esto es por si quieres forzarlo')}
         ${row('id="seeLanding"', 'info', 'var(--rest)', 'Ver la presentación', 'Qué es Traindía y cómo funciona')}
         ${row('id="seeRepo"', 'code', 'var(--rest)', 'Código en GitHub', 'Novedades de cada versión', `<span class="chev">↗</span>`)}
       </div>
