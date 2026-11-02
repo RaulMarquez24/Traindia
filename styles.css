@@ -1530,3 +1530,6 @@ body.has-active-bar .dv-start { bottom: calc(var(--nav-h) + var(--safe-bottom) +
 .ss-int { font-size: 10.5px; font-weight: 600; padding: 1px 7px; border-radius: 99px; border: 1px solid var(--c); color: var(--c); }
 .ss-when { flex: none; font-size: 11.5px; color: var(--ink-dim); }
 .ss-pick-sep { margin-top: 16px; }
+.ss-row[hidden], .ss-week[hidden] { display: none; }
+.ss-searching .streak-card, .ss-searching .sessions-cta, .ss-searching .ss-week-head span { display: none; }
+.ss-count { margin: 0 2px 12px; font-size: 13px; color: var(--ink-soft); }
