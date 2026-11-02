@@ -596,8 +596,15 @@ const VSessions = (() => {
   const coma = (v) => String(v).replace('.', ',');
   const todosIguales = (arr) => arr.every(v => v === arr[0]);
   function compactSets(prev) {
+    return setsEnLinea(prev).replace(/(\d)\.(\d)/g, '$1,$2'); // 0.4 km → 0,4 km
+  }
+  function setsEnLinea(prev) {
     const type = prev.type || 'weight', sets = prev.sets;
-    if (isCardioPrev(prev)) return cardioBody(prev);
+    if (isCardioPrev(prev)) {
+      // una sola etiqueta en todas las series es la variante («Z2 - Suave»): ya sale en el plan
+      const etiquetas = sets.map(s => (s.label || '').trim());
+      return cardioBody(todosIguales(etiquetas) ? { ...prev, sets: sets.map(s => ({ ...s, label: '' })) } : prev);
+    }
     if (sets.some(s => s.drops && s.drops.some(dropHasData)) || type === 'check') return sets.map(st => setDisplay(type, st, prev)).join(' · ');
     const rs = sets.map(s => String(s.reps || 0));
     if (type === 'weight') {

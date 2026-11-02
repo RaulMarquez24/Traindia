@@ -353,22 +353,17 @@ const VPlan = (() => {
       ultimaDia = `<div class="dv-lastday">${UI.icon('clock', 13)} Última vez ${haceCuanto(lastDay.date)}${min ? ` · ${min} min` : ''}${recs ? ` · <span class="dv-up">${UI.icon('trophy', 12)} ${recs} ${recs === 1 ? 'récord' : 'récords'}</span>` : ''}</div>`;
     }
 
-    // Una nota que se repite en varios ejercicios del bloque se dice una vez, en el bloque
-    const notasComunes = (b) => {
-      const c = {};
-      b.exercises.forEach(x => { const n = (x.notes || '').trim(); if (n) c[n] = (c[n] || 0) + 1; });
-      return Object.keys(c).filter(n => c[n] >= 2);
-    };
-    const row = (ex, bi, xi, comunes) => {
+    const row = (ex, bi, xi) => {
       // los de «hecho / no hecho» no tienen marca que enseñar
       const h = (byId[ex.exerciseId] || ex).type === 'check' ? [] : (hist[VSessions.keyForEntry(ex)] || []);
-      const det = comunes.includes((ex.notes || '').trim()) ? '' : (ex.notes || '');
+      const det = ex.notes || '';
       const sl = subsLine(ex);
       let last = '';
       if (h.length) {
         const sube = !h[0].pr && h[1] && h[0].best > h[1].best;
         const marca = h[0].pr ? ` <span class="dv-up">${UI.icon('trophy', 12)} récord</span>` : sube ? ` <span class="dv-up" title="Mejor que la vez anterior">${UI.icon('trendUp', 13)}</span>` : '';
-        last = `<span class="dv-last"><span class="dim">Última:</span> ${UI.esc(h[0].text)}${marca} <span class="dim">· ${haceCuanto(h[0].date)}</span></span>`;
+        // cuándo, delante: así el récord o la flecha van con los datos, no con la fecha
+        last = `<span class="dv-last"><span class="dim">Última, ${haceCuanto(h[0].date)}:</span> ${UI.esc(h[0].text)}${marca}</span>`;
       } else if (ex.sets && (byId[ex.exerciseId] || ex).type !== 'check') last = '<span class="dv-last none">Aún sin registros</span>';
       const compact = !ex.sets && !det && !last && !sl;
       return `<li class="dv-ex${compact ? ' compact' : ''}${ex.optional ? ' optional' : ''}" data-ex="${bi}:${xi}" role="button" tabindex="0">
@@ -377,10 +372,9 @@ const VPlan = (() => {
         </li>`;
     };
     const blocks = d.blocks.map((b, bi) => {
-      const comunes = notasComunes(b);
-      const items = b.exercises.map((ex, xi) => row(ex, bi, xi, comunes)).join('');
+      const items = b.exercises.map((ex, xi) => row(ex, bi, xi)).join('');
       const label = b.optional ? `${UI.esc(b.label)} · si hay tiempo` : UI.esc(b.label);
-      return `<div class="block"><div class="dv-block${b.optional ? ' optional' : ''}">${label}</div>${comunes.length ? `<div class="dv-block-note">${comunes.map(UI.esc).join(' · ')}</div>` : ''}<ul class="ex-list dv-list">${items || '<li class="dim" style="padding:10px 14px">Sin ejercicios</li>'}</ul></div>`;
+      return `<div class="block"><div class="dv-block${b.optional ? ' optional' : ''}">${label}</div><ul class="ex-list dv-list">${items || '<li class="dim" style="padding:10px 14px">Sin ejercicios</li>'}</ul></div>`;
     }).join('');
 
     let substitutes = '';
