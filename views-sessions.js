@@ -575,19 +575,62 @@ const VSessions = (() => {
     return prev.sets[Math.min(si, prev.sets.length - 1)];
   }
 
+  function cardioBody(prev) {
+    const multi = (prev.sets || []).length > 1;          // 1 serie = la serie ya es el total
+    const summary = summarizeCardioSets(prev.sets);
+    const tot = cardioTotalsText(prev, { includeTime: multi }); // sin tiempo total si es una sola
+    return tot ? `${summary}${multi ? ' — ' : ' · '}${tot}` : summary;
+  }
+  const isCardioPrev = (prev) => prev.type === 'time' && entryHasTotals({ type: 'time', metrics: prev.metrics, totals: prev.totals, sets: prev.sets });
   function lastTimeHTML(entry) {
     const prev = _lastTimeMap && _lastTimeMap[keyForEntry(entry)];
     if (!prev) return '';
-    const isCardio = prev.type === 'time' && entryHasTotals({ type: 'time', metrics: prev.metrics, totals: prev.totals, sets: prev.sets });
-    let body;
-    if (isCardio) {
-      const multi = (prev.sets || []).length > 1;          // 1 serie = la serie ya es el total
-      const summary = summarizeCardioSets(prev.sets);
-      const tot = cardioTotalsText(prev, { includeTime: multi }); // sin tiempo total si es una sola
-      body = tot ? `${summary}${multi ? ' — ' : ' · '}${tot}` : summary;
-    } else body = prev.sets.map(st => setDisplay(prev.type, st, prev)).join(' · ');
+    const body = isCardioPrev(prev) ? cardioBody(prev) : prev.sets.map(st => setDisplay(prev.type, st, prev)).join(' · ');
     const note = prev.note ? `<div class="last-note"><span>${UI.icon('edit', 12)} ${UI.esc(prev.note)}</span></div>` : '';
     return `<div class="last-time">${UI.icon('clock', 12)} Última vez · ${UI.esc(UI.fmtDateShort(prev.date))}: <span>${UI.esc(body)}</span></div>${note}`;
+  }
+
+  // ----- Historial corto por ejercicio (ficha del día) -----
+  // Las series en una línea: «65 · 72,5 · 80 kg × 10 · 10 · 8», «100 kg × 12 · 12 · 12»,
+  // «3 × 1:00 min»… Con dropsets se cae al texto completo de cada serie.
+  const coma = (v) => String(v).replace('.', ',');
+  const todosIguales = (arr) => arr.every(v => v === arr[0]);
+  function compactSets(prev) {
+    const type = prev.type || 'weight', sets = prev.sets;
+    if (isCardioPrev(prev)) return cardioBody(prev);
+    if (sets.some(s => s.drops && s.drops.some(dropHasData)) || type === 'check') return sets.map(st => setDisplay(type, st, prev)).join(' · ');
+    const rs = sets.map(s => String(s.reps || 0));
+    if (type === 'weight') {
+      const ws = sets.map(s => coma(s.weight || 0));
+      if (ws.every(w => w === '0')) return `${rs.join(' · ')} reps`;
+      if (todosIguales(ws)) return `${ws[0]} kg × ${rs.join(' · ')}`;
+      if (todosIguales(rs)) return `${ws.join(' · ')} kg × ${rs[0]}`;
+      return `${ws.join(' · ')} kg × ${rs.join(' · ')}`;
+    }
+    if (type === 'reps') {
+      const cargas = sets.map(s => loadSuffix(s));
+      return todosIguales(cargas) ? `${rs.join(' · ')} reps${cargas[0]}` : sets.map(st => setDisplay(type, st, prev)).join(' · ');
+    }
+    const vs = sets.map(st => setDisplay(type, { ...st, label: '' }, prev)); // la etiqueta ya va en el plan
+    return vs.length > 1 && todosIguales(vs) ? `${vs.length} × ${vs[0]}` : vs.join(' · ');
+  }
+  // key -> las últimas veces (la más reciente primero, hasta 5): { date, text, best, pr }
+  // pr: esa sesión batió su récord (no cuenta la primera vez que se hace).
+  function exerciseHistory(sessions) {
+    const map = {};
+    sessions
+      .filter(s => !s.draft)
+      .sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt || 0) - (a.createdAt || 0))
+      .forEach(sess => (sess.entries || []).forEach(e => {
+        const k = keyForEntry(e); if (!k) return;
+        const list = map[k] || (map[k] = []);
+        if (list.length >= 5) return;
+        const done = (e.sets || []).filter(setHasData); if (!done.length) return;
+        const prev = { type: e.type || 'weight', sets: done, metrics: e.metrics, totals: e.totals };
+        list.push({ date: sess.date, text: compactSets(prev), best: entryBest(e).value, note: e.note || '',
+          pr: (sess.prs || []).some(p => p.name === e.name && !p.first) });
+      }));
+    return map;
   }
 
   // ----- Récords personales (PR): mejor marca histórica por ejercicio -----
@@ -2166,5 +2209,5 @@ const VSessions = (() => {
   return { live, liveBind, list, listBind, detail, detailBind, checkDayAfter, sessionVolume, reportModel, checkResume, liveHasData, restEnsure, TIME_FIELDS, CHECK_FIELDS,
     notifStatus, setRestNotify, restNotifyOn, testPush, REST_NOTIFY_TEXT,
     getRestDuration, setRestDefault, restSoundOn, restVibrateOn, setRestSound, setRestVibrate, fmtClock,
-    setPaceSec, repDistKm, fmtPace };
+    setPaceSec, repDistKm, fmtPace, exerciseHistory, keyForEntry };
 })();
