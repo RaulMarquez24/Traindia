@@ -1891,5 +1891,5 @@ const VPlan = (() => {
     return `<div class="empty-state"><p>No hay rutina configurada.</p></div>`;
   }
 
-  return { week, weekBind, day, dayBind, normalizeDayTypes, guides, guidesBind, guide, guideBind, templateOf, guideList, findGuide, planChoicesHTML, bindPlanChoices, templatePreview, info, infoBind, exercises, exercisesBind, checkDuplicates };
+  return { week, weekBind, day, dayBind, normalizeDayTypes, guides, guidesBind, guide, guideBind, templateOf, guideList, findGuide, planChoicesHTML, bindPlanChoices, templatePreview, info, infoBind, exercises, exercisesBind, checkDuplicates, haceCuanto };
 })();

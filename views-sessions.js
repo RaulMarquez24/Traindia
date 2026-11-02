@@ -1423,6 +1423,8 @@ const VSessions = (() => {
         date: DB.todayISO(),
         name: day ? day.name : 'Entreno libre',
         dayId: params.dayId || null,
+        ...(day && day.type ? { dayType: day.type } : {}),
+        ...(day && day.focus ? { focus: day.focus } : {}),
         routineId: app.routine ? app.routine.id : null,
         entries,
         notes: '',
@@ -1661,7 +1663,6 @@ const VSessions = (() => {
   // =====================================================
   // HISTORIAL
   // =====================================================
-  const MONTH_NAMES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 
   function dayLabel(iso) {
     if (!iso) return 'Sin fecha';
@@ -1676,38 +1677,78 @@ const VSessions = (() => {
   const calAddDays = (iso, n) => { const d = new Date(iso + 'T12:00:00'); d.setDate(d.getDate() + n); return calIso(d); };
   const calMonday = (iso) => { const d = new Date(iso + 'T12:00:00'); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return calIso(d); };
   const DOW = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
-  let _calData = null;  // { trained, color, today, oldest }
+  let _calData = null;  // { byDate: {fecha: {type, sessions}}, today, oldest }
+
+  // Intensidad y enfoque de una sesión: los del día del plan del que viene (en
+  // cualquiera de tus planes); si ese día ya no existe, lo que se guardó con ella.
+  const INT_ORDER = { strong: 3, moderate: 2, light: 1 };
+  const INT_LABEL = { strong: 'Fuerte', moderate: 'Moderado', light: 'Ligero' };
+  function dayInfoOf(s, dayMap) {
+    const d = s.dayId && dayMap[s.dayId];
+    const type = d ? d.type : s.dayType;
+    return { type: INT_ORDER[type] ? type : '', focus: ((d ? d.focus : s.focus) || '').trim() };
+  }
+  // El enfoque solo si dice algo más que el nombre («Pierna» / «Piernas» no)
+  const sing = (s) => UI.norm(s || '').trim().replace(/s$/, '');
+  const focusLine = (name, focus) => focus && sing(focus) !== sing(name) ? focus : '';
+
+  // «22 min», «2 h», «1 h 16»
+  function fmtDur(sec) {
+    const m = Math.max(1, Math.round(sec / 60));
+    if (m < 60) return `${m} min`;
+    const h = Math.floor(m / 60), r = m % 60;
+    return r ? `${h} h ${String(r).padStart(2, '0')}` : `${h} h`;
+  }
+
+  // Un día del calendario, del color de la intensidad de lo que entrenaste
+  // (la más alta si hubo varias sesiones). Si hubo entreno, se puede tocar.
+  function calCell(day, extra) {
+    const { byDate, today } = _calData;
+    const hit = byDate[day];
+    const cls = ['cal-cell', extra, hit ? `on t-${hit.type || 'none'}` : '', day === today ? 'today' : '', day > today ? 'future' : ''].filter(Boolean).join(' ');
+    return `<span class="${cls}"${hit ? ` data-date="${day}" role="button"` : ''}>${parseInt(day.slice(8, 10), 10)}</span>`;
+  }
 
   // Calendario compacto inline: las últimas 4 semanas, sin controles.
   function calInlineGrid() {
-    const { trained, color, today } = _calData;
-    const startMon = calAddDays(calMonday(today), -7 * 3); // 4 semanas terminando esta
+    const startMon = calAddDays(calMonday(_calData.today), -7 * 3); // 4 semanas terminando esta
     let cells = DOW.map(d => `<span class="cal-dow">${d}</span>`).join('');
-    for (let i = 0; i < 28; i++) {
-      const day = calAddDays(startMon, i);
-      const on = trained.has(day), isToday = day === today, future = day > today;
-      cells += `<span class="cal-cell${on ? ' on' : ''}${isToday ? ' today' : ''}${future ? ' future' : ''}"${on ? ` style="background:${color}"` : ''}>${parseInt(day.slice(8, 10), 10)}</span>`;
-    }
+    for (let i = 0; i < 28; i++) cells += calCell(calAddDays(startMon, i), '');
     return cells;
+  }
+
+  // Tocar un día del calendario: su sesión; si hubo varias, la lista en ese día.
+  function openCalDay(app, date) {
+    const hit = _calData && _calData.byDate[date];
+    if (!hit) return;
+    if (hit.sessions.length === 1) {
+      const s = hit.sessions[0];
+      app.go('session', { sessionId: s.id, ownerId: s.userId });
+      return;
+    }
+    const search = document.querySelector('#ssSearch');
+    if (search && search.value) { search.value = ''; search.dispatchEvent(new Event('input')); }
+    const card = document.querySelector(`.ss-row[data-date="${date}"]`);
+    if (!card) return;
+    card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    card.classList.remove('flash'); void card.offsetWidth; card.classList.add('flash');
   }
 
   // ----- Modal de historial: calendario mensual navegable -----
   let _histY = 0, _histM = 0;
   function histMonthHTML() {
-    const { trained, color, today } = _calData;
+    const { byDate, today } = _calData;
     const monthKey = `${_histY}-${String(_histM + 1).padStart(2, '0')}`;
     const startMon = calMonday(monthKey + '-01');
     let cells = DOW.map(d => `<span class="cal-dow">${d}</span>`).join('');
     for (let i = 0; i < 42; i++) {
       const day = calAddDays(startMon, i);
-      const inMonth = day.slice(0, 7) === monthKey;
-      const on = trained.has(day), isToday = day === today, future = day > today;
-      cells += `<span class="cal-cell hist${on ? ' on' : ''}${isToday ? ' today' : ''}${inMonth ? '' : ' out'}${future ? ' future' : ''}"${on ? ` style="background:${color}"` : ''}>${parseInt(day.slice(8, 10), 10)}</span>`;
+      cells += calCell(day, day.slice(0, 7) === monthKey ? 'hist' : 'hist out');
     }
     const nm = new Date(_histY, _histM, 1).toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
     const nice = nm.charAt(0).toUpperCase() + nm.slice(1);
     const monthName = nm.split(' ')[0]; // "junio"
-    const count = [...trained].filter(d => d.startsWith(monthKey)).length;
+    const count = Object.keys(byDate).filter(d => d.startsWith(monthKey)).length;
     const atPresent = monthKey >= today.slice(0, 7);
     const atOldest = monthKey <= _calData.oldest.slice(0, 7);
     return `<div class="hist-nav">
@@ -1716,18 +1757,20 @@ const VSessions = (() => {
         <button class="cal-arrow${atPresent ? ' disabled' : ''}" data-hist-next aria-label="Mes siguiente"${atPresent ? ' disabled' : ''}>›</button>
       </div>
       <div class="cal-grid hist-grid">${cells}</div>
-      <p class="hist-summary">${count} día${count === 1 ? '' : 's'} entrenado${count === 1 ? '' : 's'} en ${monthName}</p>`;
+      <p class="hist-summary">${count} día${count === 1 ? '' : 's'} entrenado${count === 1 ? '' : 's'} en ${monthName}</p>
+      ${calLegend()}`;
   }
-  function bindHist(root) {
+  function bindHist(root, app) {
     const body = root.querySelector('#histBody');
     if (!body) return;
-    const redraw = () => { body.innerHTML = histMonthHTML(); bindHist(root); };
+    const redraw = () => { body.innerHTML = histMonthHTML(); bindHist(root, app); };
     const prev = body.querySelector('[data-hist-prev]');
     const next = body.querySelector('[data-hist-next]');
     if (prev && !prev.disabled) prev.addEventListener('click', () => { if (--_histM < 0) { _histM = 11; _histY--; } redraw(); });
     if (next && !next.disabled) next.addEventListener('click', () => { if (++_histM > 11) { _histM = 0; _histY++; } redraw(); });
+    body.querySelectorAll('.cal-cell[data-date]').forEach(c => c.addEventListener('click', () => { UI.closeModal(root); openCalDay(app, c.dataset.date); }));
   }
-  function openHistory() {
+  function openHistory(app) {
     if (!_calData) return;
     _histY = parseInt(_calData.today.slice(0, 4), 10);
     _histM = parseInt(_calData.today.slice(5, 7), 10) - 1;
@@ -1735,42 +1778,107 @@ const VSessions = (() => {
       title: 'Historial de entrenos', size: 'wide',
       bodyHTML: `<div id="histBody">${histMonthHTML()}</div>`,
       actions: [{ label: 'Cerrar', kind: 'ghost' }],
-      onMount: (root) => bindHist(root),
+      onMount: (root) => bindHist(root, app),
     });
   }
 
-  // Racha y consistencia: racha de semanas seguidas + entrenos esta semana +
-  // días totales + calendario compacto (toca para ver el historial mensual).
-  function streakWidget(sessions, color) {
-    const trained = new Set(sessions.map(s => s.date).filter(Boolean));
-    if (trained.size === 0) return '';
+  // Leyenda: solo las intensidades que aparecen en tus entrenos
+  function calLegend(extra = '') {
+    const used = new Set(Object.values(_calData.byDate).map(h => h.type || 'none'));
+    const items = ['strong', 'moderate', 'light', 'none'].filter(t => used.has(t))
+      .map(t => `<span class="cal-leg t-${t}"><i></i>${INT_LABEL[t] || 'Sin intensidad'}</span>`).join('');
+    return `<div class="cal-legend">${items}${extra}</div>`;
+  }
+
+  // Racha y consistencia: semanas seguidas, entrenos esta semana (sobre los días
+  // de tu plan) y este mes, y el calendario de 4 semanas por intensidad.
+  function streakWidget(sessions, dayMap, target) {
+    const byDate = {};
+    sessions.forEach(s => {
+      if (!s.date) return;
+      const t = dayInfoOf(s, dayMap).type;
+      const h = byDate[s.date] || (byDate[s.date] = { type: '', sessions: [] });
+      h.sessions.push(s);
+      if ((INT_ORDER[t] || 0) > (INT_ORDER[h.type] || 0)) h.type = t;
+    });
+    const trained = Object.keys(byDate).sort();
+    if (!trained.length) return '';
     const today = DB.todayISO();
 
-    const weeks = new Set([...trained].map(calMonday));
+    const weeks = new Set(trained.map(calMonday));
     const thisMon = calMonday(today);
     let cursor = thisMon;
     if (!weeks.has(cursor)) cursor = calAddDays(cursor, -7); // gracia: esta semana sin entrenar aún no rompe la racha
     let streak = 0;
     while (weeks.has(cursor)) { streak++; cursor = calAddDays(cursor, -7); }
-    const thisWeekCount = [...trained].filter(d => calMonday(d) === thisMon).length;
-    const totalDays = trained.size;
+    const thisWeekCount = trained.filter(d => calMonday(d) === thisMon).length;
+    const monthCount = trained.filter(d => d.slice(0, 7) === today.slice(0, 7)).length;
+    const monthName = new Date(today + 'T12:00:00').toLocaleDateString('es-ES', { month: 'long' });
 
-    _calData = { trained, color, today, oldest: [...trained].sort()[0] };
+    _calData = { byDate, today, oldest: trained[0] };
 
     return `<div class="streak-card">
-      <button class="streak-expand" data-hist aria-label="Ver historial mensual" title="Ver historial">${UI.icon('expand', 15)}</button>
       <div class="streak-stats">
-        <div class="streak-fig"><span class="streak-num">🔥 ${streak}</span><span class="streak-lbl">semana${streak === 1 ? '' : 's'}</span></div>
-        <div class="streak-fig"><span class="streak-num">${thisWeekCount}</span><span class="streak-lbl">esta semana</span></div>
-        <div class="streak-fig"><span class="streak-num">${totalDays}</span><span class="streak-lbl">días totales</span></div>
+        <div class="streak-fig"><span class="streak-num">🔥 ${streak}</span><span class="streak-lbl">${streak === 1 ? 'semana seguida' : 'semanas seguidas'}</span></div>
+        <div class="streak-fig"><span class="streak-num">${thisWeekCount}${target ? `<small> / ${target}</small>` : ''}</span><span class="streak-lbl">esta semana</span></div>
+        <div class="streak-fig"><span class="streak-num">${monthCount}</span><span class="streak-lbl">en ${monthName}</span></div>
       </div>
-      <div class="cal-grid" data-hist role="button" title="Ver historial">${calInlineGrid()}</div>
+      <div class="cal-grid">${calInlineGrid()}</div>
+      ${calLegend(`<button type="button" class="cal-more" data-hist>Ver historial ›</button>`)}
     </div>`;
+  }
+
+  // «Esta semana», «Semana pasada», «Semana del 13 oct», «Semana del 29 dic 2025»
+  function weekLabel(mon, thisMon) {
+    if (!mon) return 'Sin fecha';
+    if (mon === thisMon) return 'Esta semana';
+    if (mon === calAddDays(thisMon, -7)) return 'Semana pasada';
+    const d = new Date(mon + 'T12:00:00');
+    const txt = d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }).replace('.', '');
+    return `Semana del ${txt}${mon.slice(0, 4) !== thisMon.slice(0, 4) ? ' ' + mon.slice(0, 4) : ''}`;
+  }
+
+  // Tarjeta de una sesión: fecha compacta, color de la intensidad, nombre y
+  // enfoque, y en pastillas duración, ejercicios/series, récords y cómo amaneciste.
+  function sessionCard(app, s, dayMap, showAuthor, isLatest) {
+    const today = DB.todayISO();
+    const { type, focus } = dayInfoOf(s, dayMap);
+    const name = s.name || 'Sesión';
+    const fl = focusLine(name, focus);
+    const nEx = (s.entries || []).length;
+    const nSets = (s.entries || []).reduce((n, e) => n + (e.sets ? e.sets.filter(st => !st.skip).length : 0), 0); // «no hecho» no es una serie hecha
+    const recs = (s.prs || []).filter(p => !p.first).length;
+    const d = s.date ? new Date(s.date + 'T12:00:00') : null;
+    const dow = d ? d.toLocaleDateString('es-ES', { weekday: 'short' }).replace('.', '') : '';
+    // Cómo amaneciste: en texto en la última sesión o si pide no subir carga; si no, el punto
+    const r = s.response && RESPONSE[s.response];
+    let resp = '';
+    if (r) resp = isLatest || r.cls !== 'go'
+      ? `<span class="ss-resp ${r.cls}"><i></i>${r.label}</span>`
+      : `<span class="resp-dot ${r.cls}" title="Al día siguiente: ${r.label}"></span>`;
+    else if (!s.responseSkipped && s.userId === app.activeUser.id && s.date && s.date < today && s.date >= calAddDays(today, -3))
+      resp = `<button type="button" class="ss-ask" data-ask="${s.id}">¿Cómo amaneciste?</button>`;
+    const pills = [
+      s.durationSec ? `<span class="ss-pill">${fmtDur(s.durationSec)}</span>` : '',
+      `<span class="ss-pill">${nEx ? `${nEx} ej · ${nSets} ${nSets === 1 ? 'serie' : 'series'}` : 'Sin ejercicios'}</span>`,
+      recs ? `<span class="ss-pill pr">${UI.icon('trophy', 11)} ${recs}</span>` : '',
+      resp,
+    ].join('');
+    const q = [name, focus, INT_LABEL[type] || '', s.date ? dayLabel(s.date) : '', d ? d.toLocaleDateString('es-ES') : ''].join(' ');
+    const author = showAuthor ? app.userById(s.userId) : null;
+    return `<div class="ss-row t-${type || 'none'}" role="button" tabindex="0" data-link="session" data-params='${JSON.stringify({ sessionId: s.id, ownerId: s.userId })}' data-date="${s.date || ''}" data-q="${UI.esc(UI.norm(q))}">
+        <span class="ss-date"><small>${dow}</small><b>${d ? d.getDate() : '–'}</b></span>
+        <span class="ss-body">
+          <span class="ss-title">${UI.esc(name)}</span>
+          ${fl ? `<span class="ss-focus">${UI.esc(fl)}</span>` : ''}
+          <span class="ss-pills">${pills}</span>
+        </span>
+        ${author ? UI.avatar(author, 26) : ''}
+      </div>`;
   }
 
   async function list(app, params) {
     const filter = params.filterUser || app.mainUser.id;
-    const year = params.year || '', month = params.month || '', day = params.day || '';
     const users = await DB.getUsers();
 
     let all;
@@ -1782,78 +1890,95 @@ const VSessions = (() => {
     }
     all = all.filter(s => !s.draft);
 
+    // Los días de todos los planes, para saber la intensidad y el enfoque de cada sesión
+    const dayMap = {};
+    (await DB.getAll('routines')).forEach(rt => (rt.days || []).forEach(d => { dayMap[d.id] = d; }));
+
     // Racha/consistencia del usuario relevante (el filtrado; si "Todos", el principal)
     const streakUser = app.userById(filter === 'all' ? app.mainUser.id : filter) || app.mainUser;
     const streakSessions = filter === 'all' ? all.filter(s => s.userId === streakUser.id) : all;
+    const plan = await DB.primaryRoutineOf(streakUser.id);
+    const target = plan ? (plan.days || []).filter(d => !d.isRest && d.type !== 'rest').length : 0;
 
-    // años disponibles (antes de filtrar por fecha, para no perder opciones)
-    const years = [...new Set(all.map(s => (s.date || '').slice(0, 4)).filter(Boolean))].sort().reverse();
-
-    const inFilter = (s) => {
-      const dt = s.date || '';
-      if (year && dt.slice(0, 4) !== year) return false;
-      if (month && dt.slice(5, 7) !== month) return false;
-      if (day && dt.slice(8, 10) !== day) return false;
-      return true;
-    };
-    const sessions = all.filter(inFilter).sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt || 0) - (a.createdAt || 0));
+    const sessions = all.sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt || 0) - (a.createdAt || 0));
 
     const chips = [{ id: 'all', name: 'Todos' }].concat(users.map(u => ({ id: u.id, name: u.name })))
       .map(c => `<button class="chip${filter === c.id ? ' on' : ''}" data-filter="${c.id}">${UI.esc(c.name)}</button>`).join('');
 
-    const yearSel = `<select class="inp date-filter" data-df="year"><option value="">Año</option>${years.map(y => `<option value="${y}"${year === y ? ' selected' : ''}>${y}</option>`).join('')}</select>`;
-    const monthSel = `<select class="inp date-filter" data-df="month"><option value="">Mes</option>${MONTH_NAMES.map((n, i) => { const mm = String(i + 1).padStart(2, '0'); return `<option value="${mm}"${month === mm ? ' selected' : ''}>${n}</option>`; }).join('')}</select>`;
-    const daySel = `<select class="inp date-filter" data-df="day"><option value="">Día</option>${Array.from({ length: 31 }, (_, i) => { const dd = String(i + 1).padStart(2, '0'); return `<option value="${dd}"${day === dd ? ' selected' : ''}>${i + 1}</option>`; }).join('')}</select>`;
-    const anyDateFilter = year || month || day;
+    // Agrupadas por semana (de lunes a domingo), con sus totales
+    const thisMon = calMonday(DB.todayISO());
+    const weeks = {};
+    sessions.forEach(s => { const k = s.date ? calMonday(s.date) : ''; (weeks[k] = weeks[k] || []).push(s); });
+    const latestOf = {}; // la última sesión anotada de cada uno dice en texto cómo amaneciste
+    sessions.forEach(s => { if (s.response && !latestOf[s.userId]) latestOf[s.userId] = s.id; });
+    const body = Object.keys(weeks).sort().reverse().map(k => {
+      const ws = weeks[k];
+      const secs = ws.reduce((n, s) => n + (s.durationSec || 0), 0);
+      const recs = ws.reduce((n, s) => n + (s.prs || []).filter(p => !p.first).length, 0);
+      const tot = [`${ws.length} ${ws.length === 1 ? 'entreno' : 'entrenos'}`, secs ? fmtDur(secs) : '', recs ? `${UI.icon('trophy', 11)} ${recs}` : ''].filter(Boolean).join(' · ');
+      return `<div class="ss-week">
+        <div class="ss-week-head"><strong>${weekLabel(k, thisMon)}</strong><span>${tot}</span></div>
+        ${ws.map(s => sessionCard(app, s, dayMap, filter === 'all', latestOf[s.userId] === s.id)).join('')}
+      </div>`;
+    }).join('');
 
-    // agrupar por DÍA (fecha completa)
-    const groups = {};
-    sessions.forEach(s => { const key = s.date || 'Sin fecha'; (groups[key] = groups[key] || []).push(s); });
-
-    const body = Object.keys(groups).sort().reverse().map(key => `
-      <div class="month-group"><div class="month-label">${dayLabel(key)}</div>
-      ${groups[key].map(s => {
-        const author = app.userById(s.userId);
-        const setCount = (s.entries || []).reduce((n, e) => n + (e.sets ? e.sets.filter(st => !st.skip).length : 0), 0); // «no hecho» no es una serie hecha
-        return `<button class="session-row" data-link="session" data-params='${JSON.stringify({ sessionId: s.id, ownerId: s.userId })}'>
-          <div class="session-main">
-            <strong>${UI.esc(s.name || 'Sesión')}</strong>
-            <span class="dim">${responseDot(s)}${(s.entries || []).length} ejercicio${(s.entries || []).length === 1 ? '' : 's'} · ${setCount} serie${setCount === 1 ? '' : 's'}${s.durationSec ? ' · ' + fmtClock(s.durationSec) : ''}</span>
-          </div>
-          ${filter === 'all' && author ? UI.avatar(author, 26) : '<span class="chev">›</span>'}
-        </button>`;
-      }).join('')}
-      </div>`).join('');
-
-    const emptyMsg = anyDateFilter
-      ? '<div class="empty-state"><p>No hay sesiones con ese filtro.</p></div>'
-      : '<div class="empty-state"><p>Aún no hay sesiones registradas.</p><p class="dim">Empieza un entreno desde un día de tu plan o añádelo manualmente.</p></div>';
+    const emptyMsg = '<div class="empty-state"><p>Aún no hay sesiones registradas.</p><p class="dim">Empieza un entreno de tu plan o añade uno que ya hiciste con el +.</p></div>';
 
     return `<div class="section">
-      <div class="chips-row">${chips}</div>
-      ${streakWidget(streakSessions, streakUser.color)}
-      <div class="date-filters">${yearSel}${monthSel}${daySel}${anyDateFilter ? '<button class="btn ghost small" id="clearDates">✕ Limpiar</button>' : ''}</div>
-      <div class="sessions-cta">
-        <button class="btn primary" id="startFromDay">${UI.icon('play', 15)} ${app._live ? 'Continuar entreno' : 'Registrar entreno'}</button>
-        <button class="btn ghost" id="addManual">+ Añadir manual</button>
+      <div class="ss-top">
+        <div class="chips-row">${chips}</div>
+        ${sessions.length ? `<button class="icon-btn" id="ssSearchBtn" aria-label="Buscar sesiones" title="Buscar">${UI.icon('search', 19)}</button>` : ''}
       </div>
-      ${sessions.length ? body : emptyMsg}
+      <div class="ss-search" hidden><input class="inp" id="ssSearch" type="search" placeholder="Busca por nombre, enfoque o fecha" autocomplete="off"></div>
+      ${streakWidget(streakSessions, dayMap, target)}
+      <div class="sessions-cta">
+        <button class="btn primary" id="startFromDay">${UI.icon('play', 15)} ${app._live ? 'Continuar entreno' : 'Empezar entreno'}</button>
+        <button class="btn ghost ss-add" id="addManual" aria-label="Añadir una sesión ya hecha" title="Añadir una sesión ya hecha">${UI.icon('plus', 20)}</button>
+      </div>
+      ${sessions.length ? `<div id="ssList">${body}</div><p class="empty-state dim" id="ssNone" hidden>Ninguna sesión coincide.</p>` : emptyMsg}
     </div>`;
   }
 
   function listBind(app, root) {
-    const cur = app.params || {};
-    root.querySelectorAll('[data-hist]').forEach(b => b.addEventListener('click', () => openHistory())); // abre el historial mensual
-    const go = (patch) => app.go('sessions', { filterUser: cur.filterUser, year: cur.year, month: cur.month, day: cur.day, ...patch }, true);
-    root.querySelectorAll('[data-filter]').forEach(c => c.addEventListener('click', () => go({ filterUser: c.dataset.filter })));
-    root.querySelectorAll('[data-df]').forEach(sel => sel.addEventListener('change', () => go({ [sel.dataset.df]: sel.value || undefined })));
-    const clear = root.querySelector('#clearDates');
-    if (clear) clear.addEventListener('click', () => go({ year: undefined, month: undefined, day: undefined }));
+    root.querySelectorAll('[data-hist]').forEach(b => b.addEventListener('click', () => openHistory(app))); // abre el historial mensual
+    root.querySelectorAll('.streak-card .cal-cell[data-date]').forEach(c => c.addEventListener('click', () => openCalDay(app, c.dataset.date)));
+    root.querySelectorAll('[data-filter]').forEach(c => c.addEventListener('click', () => app.go('sessions', { filterUser: c.dataset.filter }, true)));
     root.querySelector('#startFromDay').addEventListener('click', () => {
       if (app._live) { app.go('live', { dayId: app._live.dayId }); return; }
       pickDayToStart(app);
     });
     root.querySelector('#addManual').addEventListener('click', () => sessionEditor(app, null));
+    root.querySelectorAll('.ss-row').forEach(row => row.addEventListener('keydown', (e) => {
+      if (e.target === row && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); row.click(); }
+    }));
+    root.querySelectorAll('[data-ask]').forEach(b => b.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const s = await DB.get('sessions', b.dataset.ask);
+      if (s) askResponse(app, s, () => app.render());
+    }));
+
+    // Buscador: filtra las tarjetas por nombre, enfoque, intensidad o fecha
+    const btn = root.querySelector('#ssSearchBtn');
+    const box = root.querySelector('.ss-search');
+    const inp = root.querySelector('#ssSearch');
+    if (!btn || !inp) return;
+    btn.addEventListener('click', () => {
+      box.hidden = !box.hidden;
+      if (box.hidden) { inp.value = ''; inp.dispatchEvent(new Event('input')); } else inp.focus();
+    });
+    inp.addEventListener('input', () => {
+      const words = UI.norm(inp.value).trim().split(/\s+/).filter(Boolean);
+      let any = false;
+      root.querySelectorAll('.ss-week').forEach(w => {
+        let vis = 0;
+        w.querySelectorAll('.ss-row').forEach(r => {
+          const ok = words.every(x => r.dataset.q.includes(x));
+          r.hidden = !ok; if (ok) vis++;
+        });
+        w.hidden = !vis; if (vis) any = true;
+      });
+      root.querySelector('#ssNone').hidden = any;
+    });
   }
 
   // Comprueba si hay un entreno a medias (borrador) al arrancar y ofrece continuarlo.
@@ -1875,14 +2000,34 @@ const VSessions = (() => {
     });
   }
 
-  function pickDayToStart(app) {
+  // Elegir qué entrenar: cualquier día de tu plan (con su intensidad, enfoque y
+  // cuándo lo hiciste por última vez) o un entreno libre.
+  async function pickDayToStart(app) {
     const days = (app.routine?.days || []).filter(d => !d.isRest);
+    const sessions = (await DB.sessionsOf(app.activeUser.id)).filter(s => !s.draft);
+    const lastOf = (d) => {
+      const porNombre = !/^(lunes|martes|miercoles|jueves|viernes|sabado|domingo)$/.test(UI.norm(d.name || ''));
+      const dates = sessions.filter(s => s.dayId === d.id || (porNombre && UI.norm(s.name || '') === UI.norm(d.name || ''))).map(s => s.date || '').sort();
+      return dates.length ? VPlan.haceCuanto(dates[dates.length - 1]) : 'nunca';
+    };
+    const row = (d) => {
+      const t = INT_ORDER[d.type] ? d.type : '';
+      const fl = focusLine(d.name, (d.focus || '').trim());
+      return `<button class="menu-row ss-pick t-${t || 'none'}" data-day="${d.id}">
+          <span class="ss-body">
+            <span class="ss-title">${UI.esc(d.name)}${t ? ` <span class="ss-int">${INT_LABEL[t]}</span>` : ''}</span>
+            ${fl ? `<span class="ss-focus">${UI.esc(fl)}</span>` : ''}
+          </span>
+          <span class="ss-when">${lastOf(d)}</span>
+        </button>`;
+    };
     UI.modal({
-      title: 'Empezar entreno',
-      bodyHTML: `<p class="modal-text dim">Elige el día de tu plan que vas a entrenar:</p>
+      title: '¿Qué vas a entrenar?',
+      bodyHTML: `${days.length ? `<p class="field-label">${UI.esc(app.routine.name || 'Tu plan')}</p>
+        <div class="menu-list">${days.map(row).join('')}</div>
+        <p class="field-label ss-pick-sep">Sin plan</p>` : ''}
         <div class="menu-list">
-          ${days.map(d => `<button class="menu-row" data-day="${d.id}"><span><strong>${UI.esc(d.name)}</strong> — ${UI.esc(d.focus || '')}</span><span class="chev">›</span></button>`).join('')}
-          <button class="menu-row" data-day=""><span>Entreno libre (sin plan)</span><span class="chev">›</span></button>
+          <button class="menu-row ss-pick t-none" data-day=""><span class="ss-body"><span class="ss-title">Entreno libre</span><span class="ss-focus">Añades los ejercicios sobre la marcha</span></span></button>
         </div>`,
       actions: [{ label: 'Cancelar', kind: 'ghost' }],
       onMount: (root) => root.querySelectorAll('[data-day]').forEach(b => b.addEventListener('click', () => {
@@ -1906,10 +2051,6 @@ const VSessions = (() => {
     const r = s && s.response && RESPONSE[s.response];
     if (!r) return '';
     return `<span class="resp-chip ${r.cls}" title="Al día siguiente: ${r.label}"><i></i>${r.label}</span>`;
-  }
-  function responseDot(s) {
-    const r = s && s.response && RESPONSE[s.response];
-    return r ? `<span class="resp-dot ${r.cls}" title="Al día siguiente: ${r.label}"></span>` : '';
   }
   // Pregunta por una sesión concreta. onDone(guardada) tras responder o saltar.
   function askResponse(app, sess, onDone) {
