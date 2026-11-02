@@ -952,6 +952,13 @@
 </nav>
 </div>
 
+<!-- ACTUALIZACIÓN DISPONIBLE (si estás en algo y no se puede recargar sola) -->
+<div class="install-prompt upd-prompt" id="updPrompt" role="status">
+  <p>Hay una versión nueva de Traindía</p>
+  <button id="updBtn">Actualizar</button>
+  <button class="close" id="updClose" aria-label="Más tarde">×</button>
+</div>
+
 <!-- INSTALL PROMPT -->
 <div class="install-prompt" id="installPrompt">
   <p>Instala la app en tu pantalla de inicio para acceso rápido</p>
@@ -976,22 +983,17 @@
   // Service Worker + auto-actualización
   if ('serviceWorker' in navigator) {
     // Si YA había un SW controlando (no es la primera instalación) y entra uno
-    // nuevo, recarga una vez para servir la versión nueva.
-    // Excepción: si se ha abierto por "Compartir" (?shared=1), NO se recarga: el
-    // archivo ya se sacó del buzón y recargar cerraría el modal de importar y se
-    // perdería. El build nuevo queda activo y se ve en la siguiente apertura.
+    // nuevo, la versión nueva está lista: app.updateReady() decide si recarga ya
+    // (en reposo) o avisa (si estás en algo).
+    // Si se ha abierto por "Compartir" (?shared=1) cuenta como «en algo»: el archivo
+    // ya se sacó del buzón y recargar cerraría el modal de importar.
     if (/[?&]shared=1/.test(location.search)) window.__holdReload = true;
     if (navigator.serviceWorker.controller) {
-      let refreshing = false;
-      navigator.serviceWorker.addEventListener('controllerchange', () => {
-        if (refreshing || window.__holdReload) return;
-        refreshing = true;
-        window.location.reload();
-      });
+      navigator.serviceWorker.addEventListener('controllerchange', () => app.updateReady());
     }
     window.addEventListener('load', () => {
       navigator.serviceWorker.register('sw.js')
-        .then(reg => reg.update())   // comprueba si hay build nuevo en cada apertura
+        .then(reg => { app.watchUpdates(reg); return reg.update(); }) // y en cada apertura
         .catch(err => console.log('SW error:', err));
     });
   }

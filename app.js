@@ -237,6 +237,68 @@ const app = {
     document.body.classList.toggle('has-active-bar', !!show);
   },
 
+  // ---- Actualizaciones ----
+  // Se mira si hay versión nueva al arrancar, al volver a la app (en iPhone volver de
+  // otra app no la arranca de nuevo, así que si no, no se enteraba) y cada 30 min con
+  // ella abierta: solo se pide sw.js, unos pocos KB. El SW nuevo se activa solo; aquí
+  // se elige cuándo recargar: nada más entrar si estás en reposo, y si no, un aviso
+  // con «Actualizar» (y se aplica sola la próxima vez que vuelvas en reposo).
+  _swReg: null, _updReady: false, _updForce: false, _updChecked: 0, _visibleAt: Date.now(),
+  watchUpdates(reg) {
+    this._swReg = reg;
+    this._updChecked = Date.now();
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState !== 'visible') return;
+      this._visibleAt = Date.now();
+      if (this._updReady) { if (this.isIdle()) this.applyUpdate(); return; }
+      if (Date.now() - this._updChecked > 5 * 60000) this.checkUpdate();
+    });
+    setInterval(() => { if (document.visibilityState === 'visible') this.checkUpdate(); }, 30 * 60000);
+    const btn = document.getElementById('updBtn'), close = document.getElementById('updClose');
+    if (btn) btn.addEventListener('click', () => this.applyUpdate());
+    if (close) close.addEventListener('click', () => document.getElementById('updPrompt').classList.remove('show'));
+  },
+  // true: hay versión nueva · false: ya es la última · null: no se pudo mirar
+  async checkUpdate() {
+    if (!this._swReg || navigator.onLine === false) return null;
+    this._updChecked = Date.now();
+    try { await this._swReg.update(); } catch (e) { return null; }
+    return !!(this._swReg.installing || this._swReg.waiting);
+  },
+  // En reposo: sin entreno en marcha, sin ventana abierta y sin nada escrito a medias.
+  isIdle() {
+    if (this._live || window.__holdReload) return false;
+    if (document.querySelector('.modal-overlay')) return false;
+    const a = document.activeElement;
+    if (a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) return false;
+    return ![...document.querySelectorAll('input, textarea')].some(el => !/^(checkbox|radio|hidden|button|submit)$/.test(el.type) && el.value !== el.defaultValue);
+  },
+  updateReady() {
+    if (this._updReady) return;
+    this._updReady = true;
+    // Solo al momento si acabas de entrar o lo has pedido tú: con la app delante, recargar
+    // de golpe desconcierta aunque no estés haciendo nada.
+    const recien = Date.now() - this._visibleAt < 15000;
+    if (this._updForce || (recien && this.isIdle())) return this.applyUpdate();
+    const ip = document.getElementById('installPrompt'); if (ip) ip.classList.remove('show');
+    const p = document.getElementById('updPrompt'); if (p) p.classList.add('show');
+  },
+  applyUpdate() {
+    if (this._reloading) return;
+    this._reloading = true;
+    this.persistLive();
+    location.reload();
+  },
+  async checkUpdateNow() {
+    if (this._updReady) return this.applyUpdate();
+    if (navigator.onLine === false) { UI.toast('Sin conexión: conéctate para buscar actualizaciones', 'err'); return; }
+    UI.toast('Buscando actualizaciones…');
+    this._updForce = true;
+    const r = await this.checkUpdate();
+    if (r === true) UI.toast('Hay una versión nueva: se aplica en un momento');
+    else { this._updForce = false; UI.toast(r === false ? 'Ya tienes la última versión (v2.59.0)' : 'No se pudo comprobar. Prueba en un rato', r === false ? undefined : 'err'); }
+  },
+
   registerViews() {
     this.views = {
       week:     { render: (a, p) => VPlan.week(a, p),     bind: (a, r, p) => VPlan.weekBind(a, r, p) },
@@ -826,7 +888,7 @@ const app = {
                 tipo: d.tipo,
                 mensaje: d.mensaje.trim(),
                 contacto: (d.contacto || '').trim() || '(no indicado)',
-                version: 'v2.58.1',
+                version: 'v2.59.0',
                 perfil: (this.mainUser && this.mainUser.name) || '',
                 navegador: navigator.userAgent,
               }),
@@ -886,7 +948,7 @@ const app = {
         <div class="more-group">${g.rows.map(r => `<button class="more-row" ${r.feedback ? 'data-feedback' : `data-link="${r.v}"`}>
           <span class="more-ic" style="background:${g.color}">${UI.icon(r.icon, 20)}</span>
           <span class="more-txt"><strong>${r.label}</strong><span${r.warn ? ' class="warn"' : ''}>${UI.esc(r.sub)}</span></span><span class="chev">›</span></button>`).join('')}</div>`).join('')}
-      <p class="version-foot">Traindía · v2.58.1<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
+      <p class="version-foot">Traindía · v2.59.0<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
     </div>`;
   },
   bindMore(root) {
@@ -1335,6 +1397,7 @@ const app = {
         ${(window.traindiaInstalled && window.traindiaInstalled())
           ? `<div class="more-row set-static"><span class="more-ic" style="background:var(--light)">${UI.icon('check', 18)}</span><span class="more-txt"><strong>Instalada en este móvil</strong><span>La estás usando como app</span></span></div>`
           : row('id="installRow"', 'download', 'var(--light)', 'Instalar en el móvil', 'Como una app, a pantalla completa y sin conexión')}
+        ${row('id="checkUpd"', 'repeat', 'var(--light)', 'Buscar actualizaciones', 'Tienes la v2.59.0. Se actualiza sola, esto es por si quieres forzarlo')}
         ${row('id="seeLanding"', 'info', 'var(--rest)', 'Ver la presentación', 'Qué es Traindía y cómo funciona')}
         ${row('id="seeRepo"', 'code', 'var(--rest)', 'Código en GitHub', 'Novedades de cada versión', `<span class="chev">↗</span>`)}
       </div>
@@ -1352,6 +1415,7 @@ const app = {
     const on = (sel, fn) => { const b = root.querySelector(sel); if (b) b.addEventListener('click', fn); };
     on('#seeLanding', () => this.previewLanding());
     on('#installRow', () => this.installApp());
+    on('#checkUpd', () => this.checkUpdateNow());
     on('#seeRepo', () => window.open(this.REPO_URL + '/releases', '_blank', 'noopener'));
     const snd = root.querySelector('#setRestSound'); if (snd) snd.addEventListener('change', () => VSessions.setRestSound(snd.checked));
     const vib = root.querySelector('#setRestVibrate'); if (vib) vib.addEventListener('change', () => { VSessions.setRestVibrate(vib.checked); if (vib.checked) { try { navigator.vibrate && navigator.vibrate(120); } catch (e) {} } });
