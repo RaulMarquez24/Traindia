@@ -1935,7 +1935,7 @@ const VSessions = (() => {
         <button class="btn primary" id="startFromDay">${UI.icon('play', 15)} ${app._live ? 'Continuar entreno' : 'Empezar entreno'}</button>
         <button class="btn ghost ss-add" id="addManual" aria-label="Añadir una sesión ya hecha" title="Añadir una sesión ya hecha">${UI.icon('plus', 20)}</button>
       </div>
-      ${sessions.length ? `<div id="ssList">${body}</div><p class="empty-state dim" id="ssNone" hidden>Ninguna sesión coincide.</p>` : emptyMsg}
+      ${sessions.length ? `<p class="ss-count" id="ssCount" hidden></p><div id="ssList">${body}</div>` : emptyMsg}
     </div>`;
   }
 
@@ -1966,18 +1966,22 @@ const VSessions = (() => {
       box.hidden = !box.hidden;
       if (box.hidden) { inp.value = ''; inp.dispatchEvent(new Event('input')); } else inp.focus();
     });
+    // Mientras buscas solo quedan los resultados: sin calendario ni totales de semana
     inp.addEventListener('input', () => {
       const words = UI.norm(inp.value).trim().split(/\s+/).filter(Boolean);
-      let any = false;
+      let n = 0;
       root.querySelectorAll('.ss-week').forEach(w => {
         let vis = 0;
         w.querySelectorAll('.ss-row').forEach(r => {
           const ok = words.every(x => r.dataset.q.includes(x));
           r.hidden = !ok; if (ok) vis++;
         });
-        w.hidden = !vis; if (vis) any = true;
+        w.hidden = !vis; n += vis;
       });
-      root.querySelector('#ssNone').hidden = any;
+      root.querySelector('.section').classList.toggle('ss-searching', words.length > 0);
+      const count = root.querySelector('#ssCount');
+      count.hidden = !words.length;
+      count.textContent = !n ? `Ninguna sesión con «${inp.value.trim()}»` : `${n} ${n === 1 ? 'sesión' : 'sesiones'} con «${inp.value.trim()}»`;
     });
   }
 
