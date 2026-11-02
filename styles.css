@@ -1536,3 +1536,12 @@ body.has-active-bar .dv-start { bottom: calc(var(--nav-h) + var(--safe-bottom) +
 .share-paste { margin-top: 12px; }
 .share-steps { margin: 4px 0 12px; padding-left: 22px; display: flex; flex-direction: column; gap: 8px; font-size: 14px; color: var(--ink); line-height: 1.4; }
 .share-steps .ic { vertical-align: -2px; }
+.sh-mine { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+.sh-link { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg-card); }
+.sh-link-txt { flex: 1 1 140px; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.sh-link-txt strong { font-size: 14px; color: var(--ink); }
+.sh-link-txt span { font-size: 12.5px; color: var(--ink-soft); }
+.sh-link-act, .sh-link-ask { display: flex; align-items: center; gap: 6px; }
+.sh-link-ask { flex: 1 1 100%; justify-content: flex-end; }
+.sh-link-ask span { margin-right: auto; font-size: 13px; color: var(--ink-soft); }
+.sh-link-act[hidden], .sh-link-ask[hidden] { display: none; }
