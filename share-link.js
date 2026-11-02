@@ -18,7 +18,8 @@ const VShare = (() => {
   const SERVER_DEF = 'https://push.raulmarquez.dev';
   const server = () => { try { return localStorage.getItem('traindia.pushUrl') || SERVER_DEF; } catch (e) { return SERVER_DEF; } };
   const PENDING_KEY = 'traindia.pendingShare';
-  const LAST_KEY = 'traindia.lastShare';
+  const LAST_KEY = 'traindia.lastShare'; // antes solo se guardaba el último (sin la llave)
+  const MINE_KEY = 'traindia.myShares';   // los que has creado: [{ id, key, del, exp, what }]
   const HERE_KEY = 'traindia.shareHere'; // en Safari de iPhone: «úsalo aquí» (solo esta visita)
   const USED_KEY = 'traindia.sharesUsed'; // enlaces ya usados aquí: { id: { at, did: [...] } }
   const TTL_TXT = '48 horas';
@@ -291,15 +292,71 @@ const VShare = (() => {
     await DB.saveSettings({ shareLinkId: id });
     return id;
   }
+  // ---- Tus enlaces activos (en este móvil, que es el que guarda el permiso para retirarlos) ----
+  const WHAT_TXT = { sessions: 'Entrenos', progress: 'peso y medidas', plan: 'plan', nutrition: 'nutrición' };
+  const whatTxt = (w) => { const s = humanList((w || []).map(k => WHAT_TXT[k]).filter(Boolean)); return s ? s[0].toUpperCase() + s.slice(1) : 'Enlace anterior'; };
+  const hastaTxt = (exp) => { // «hasta hoy / mañana / el miércoles 4 a las 18:24»
+    try {
+      const d = new Date(exp), hoy = new Date(), man = new Date(); man.setDate(hoy.getDate() + 1);
+      const dia = d.toDateString() === hoy.toDateString() ? 'hoy' : d.toDateString() === man.toDateString() ? 'mañana' : `el ${d.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric' })}`;
+      return `hasta ${dia} a las ${d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}`;
+    } catch (e) { return ''; }
+  };
+  function myShares() {
+    let a = [], moved = false;
+    try { a = JSON.parse(localStorage.getItem(MINE_KEY)) || []; } catch (e) {}
+    try { // el último de antes de la lista
+      const last = JSON.parse(localStorage.getItem(LAST_KEY));
+      if (last && last.id && !a.some(x => x.id === last.id)) { a.push(last); moved = true; }
+      localStorage.removeItem(LAST_KEY);
+    } catch (e) {}
+    const live = a.filter(x => x && x.id && x.exp > Date.now()).sort((x, y) => y.exp - x.exp);
+    if (moved || live.length !== a.length) saveMine(live);
+    return live;
+  }
+  function saveMine(a) { try { localStorage.setItem(MINE_KEY, JSON.stringify(a)); } catch (e) {} }
+  const forget = (id) => saveMine(myShares().filter(x => x.id !== id));
+  async function revoke(s) {
+    try { await api(`/share/${s.id}?del=${encodeURIComponent(s.del)}`, { method: 'DELETE' }); }
+    catch (e) { if (!(e && e.status === 404)) { UI.toast('No se pudo retirar. ¿Tienes conexión?', 'err'); return false; } }
+    forget(s.id);
+    UI.toast('Enlace retirado: ya no se puede abrir');
+    return true;
+  }
+  const mineHTML = (list) => !list.length ? '' : `<span class="field-label">Tus enlaces activos</span>
+    <div class="sh-mine">${list.map(s => `<div class="sh-link" data-id="${s.id}">
+        <div class="sh-link-txt"><strong>${UI.esc(whatTxt(s.what))}</strong><span>${UI.esc(hastaTxt(s.exp))}</span></div>
+        <div class="sh-link-act">${s.key ? `<button class="btn ghost small" data-copy>Copiar</button>` : ''}<button class="btn ghost danger small" data-revoke>Retirar</button></div>
+        <div class="sh-link-ask" hidden><span>Nadie más podrá abrirlo.</span><button class="btn ghost small" data-no>Cancelar</button><button class="btn danger small" data-yes>Retirar</button></div>
+      </div>`).join('')}</div>`;
+  function bindMine(m) {
+    m.querySelectorAll('.sh-link').forEach(row => {
+      const s = myShares().find(x => x.id === row.dataset.id); if (!s) return;
+      const act = row.querySelector('.sh-link-act'), ask = row.querySelector('.sh-link-ask');
+      const c = row.querySelector('[data-copy]');
+      if (c) c.addEventListener('click', async () => { try { await navigator.clipboard.writeText(linkOf(s.id, s.key)); UI.toast('Enlace copiado'); } catch (e) { UI.toast('No se pudo copiar', 'err'); } });
+      row.querySelector('[data-revoke]').addEventListener('click', () => { act.hidden = true; ask.hidden = false; });
+      row.querySelector('[data-no]').addEventListener('click', () => { ask.hidden = true; act.hidden = false; });
+      row.querySelector('[data-yes]').addEventListener('click', async (ev) => {
+        ev.currentTarget.disabled = true;
+        if (!(await revoke(s))) { ev.currentTarget.disabled = false; return; }
+        row.remove();
+        if (!m.querySelector('.sh-link')) { const box = m.querySelector('.sh-mine'); box.previousElementSibling.remove(); box.remove(); }
+      });
+    });
+  }
+
   async function start(app) {
     const u = app.mainUser, uid = u.id;
+    const mine = myShares();
     const [ses, prg, nut] = await Promise.all([DB.sessionsOf(uid), DB.progressOf(uid), DB.nutritionOf(uid).catch(() => [])]);
     const sessions = ses.filter(x => !x.draft);
     const opt = (k, label, n, on) => `<label class="metric-opt"><input type="checkbox" data-part="${k}"${on ? ' checked' : ''}${n === 0 ? ' disabled' : ''}><span>${label}${n != null ? ` <span class="dim">(${n})</span>` : ''}</span></label>`;
     UI.modal({
       title: 'Compartir con amigos', size: 'wide',
       bodyHTML: `<p class="modal-text">Te sale un <strong>enlace</strong> para mandarlo por WhatsApp a quien quieras, también a un grupo. Quien lo abra podrá guardarte como invitado para compararos o quedarse con tu plan o tu nutrición.</p>
-        <p class="field-hint" style="margin-top:0">¿Qué compartes?</p>
+        ${mineHTML(mine)}
+        <p class="field-hint"${mine.length ? '' : ' style="margin-top:0"'}>${mine.length ? '¿Creas otro? ' : ''}¿Qué compartes?</p>
         <div class="metric-opts">
           ${opt('sessions', 'Mis entrenos', sessions.length, true)}
           ${opt('progress', 'Peso y medidas', prg.length, true)}
@@ -321,7 +378,7 @@ const VShare = (() => {
             const { data, key } = await seal(payload);
             const r = await api('/share', { method: 'POST', body: JSON.stringify({ data }) });
             const link = linkOf(r.id, key);
-            try { localStorage.setItem(LAST_KEY, JSON.stringify({ id: r.id, del: r.del, exp: r.exp })); } catch (e) {}
+            saveMine([{ id: r.id, key, del: r.del, exp: r.exp, what: [...want] }, ...myShares()]);
             setTimeout(() => showLink(app, link, r), 60);
           } catch (e) {
             btn.textContent = 'Crear enlace'; btn.disabled = false;
@@ -330,16 +387,18 @@ const VShare = (() => {
           }
         } },
       ],
+      onMount: bindMine,
     });
   }
   function showLink(app, link, r) {
-    const hasta = (() => { try { const d = new Date(r.exp); return `${d.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric' })} a las ${d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}`; } catch (e) { return ''; } })();
+    const hasta = hastaTxt(r.exp);
     const canShare = !!(navigator.share);
     UI.modal({
       title: 'Enlace listo',
-      bodyHTML: `<p class="modal-text">Mándaselo a quien quieras, también a un grupo. Se puede abrir <strong>las veces que haga falta</strong>${hasta ? ` hasta el <strong>${UI.esc(hasta)}</strong>` : ''}.</p>
+      bodyHTML: `<p class="modal-text">Mándaselo a quien quieras, también a un grupo. Se puede abrir <strong>las veces que haga falta</strong>${hasta ? ` <strong>${UI.esc(hasta)}</strong>` : ''}.</p>
         <input class="inp share-link-inp" readonly value="${UI.esc(link)}">
-        <button class="btn ghost danger small" id="shRevoke" style="margin-top:10px">Retirar el enlace</button>`,
+        <p class="field-hint">Si te arrepientes, lo retiras desde ${UI.icon('upload', 13)} → <strong>Compartir con amigos</strong>.</p>
+        <button class="btn ghost danger small" id="shRevoke" style="margin-top:4px">Retirar el enlace</button>`,
       actions: [
         { label: 'Copiar', kind: 'ghost', onClick: async () => { try { await navigator.clipboard.writeText(link); UI.toast('Enlace copiado'); } catch (e) { UI.toast('Mantén pulsado el enlace para copiarlo', 'err'); } return false; } },
         ...(canShare ? [{ label: 'Compartir', kind: 'primary', onClick: () => {
@@ -350,9 +409,7 @@ const VShare = (() => {
       onMount: (m) => {
         const inp = m.querySelector('.share-link-inp'); inp.addEventListener('focus', () => inp.select());
         m.querySelector('#shRevoke').addEventListener('click', async () => {
-          try { await api(`/share/${r.id}?del=${encodeURIComponent(r.del)}`, { method: 'DELETE' }); } catch (e) {}
-          try { localStorage.removeItem(LAST_KEY); } catch (e) {}
-          UI.closeModal(); UI.toast('Enlace retirado: ya no se puede abrir');
+          if (await revoke(r)) UI.closeModal();
         });
       },
     });
