@@ -217,6 +217,7 @@ body.has-active-bar .pl-new-wrap { bottom: calc(var(--nav-h) + var(--safe-bottom
 .pai-steps li { flex: 1; min-width: 0; border-top: 3px solid var(--line); padding-top: 5px; font-size: 12px; line-height: 1.25; color: var(--ink-dim); counter-increment: paso; }
 .pai-steps li::before { content: counter(paso) " · "; }
 .pai-steps li.on { border-color: var(--strong); color: var(--strong); font-weight: 600; }
+.pai-steps li.done { border-color: color-mix(in srgb, var(--strong) 45%, transparent); }
 .pai-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 10px; }
 .pai-chip { border: 1px solid var(--line); background: var(--bg-card); color: var(--ink-soft); border-radius: 999px; padding: 7px 13px; font-family: inherit; font-size: 13px; cursor: pointer; }
 .pai-chip.on { border-color: var(--strong); background: var(--strong-bg); color: var(--strong); font-weight: 600; }
