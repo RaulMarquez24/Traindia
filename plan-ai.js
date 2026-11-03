@@ -30,6 +30,19 @@ const VPlanAI = (() => {
   const marcarPrompt = (on) => { try { if (on) localStorage.setItem(PROMPT_KEY, typeof on === 'object' ? JSON.stringify(on) : '1'); else localStorage.removeItem(PROMPT_KEY); } catch (e) {} };
   const pedido = () => { try { const v = JSON.parse(localStorage.getItem(PROMPT_KEY) || 'null'); return v && typeof v === 'object' ? v : {}; } catch (e) { return {}; } };
 
+  // Al volver de la IA, Android puede haber recargado la app: si se pidió hace poco y
+  // no se ha llegado a ver el paso 3, se abre al arrancar (una vez).
+  function checkPending(app) {
+    const p = pedido();
+    if (!p.at || p.visto || Date.now() - p.at > 6 * 3600e3) return false;
+    marcarPrompt({ ...p, visto: true });
+    paste(app);
+    return true;
+  }
+
+  // Los tres pasos, arriba de cada ventana del asistente
+  const pasos = (n) => `<ol class="pai-steps">${['Preparas', 'Se lo das a la IA', 'Pegas y revisas'].map((t, i) => `<li class="${i + 1 === n ? 'on' : i + 1 < n ? 'done' : ''}">${t}</li>`).join('')}</ol>`;
+
   const str = (v) => (v === null || v === undefined) ? '' : String(v).trim();
   const key = (n) => str(n).toLowerCase();
 
@@ -60,7 +73,7 @@ const VPlanAI = (() => {
           <div><strong>¿Ya te lo ha hecho la IA?</strong><span>Pega su respuesta o elige el archivo y Traindía monta el plan.</span></div>
           <button type="button" class="btn primary small" data-ya>Importar</button>
         </div>` : ''}
-        <ol class="pai-steps"><li class="on">Preparas</li><li>Se lo das a la IA</li><li>Revisas y guardas</li></ol>
+        ${pasos(1)}
         <div class="seg" role="radiogroup" id="paiMode">
           <button type="button" class="seg-opt on" data-mode="doc">Plan de mi entrenador</button>
           <button type="button" class="seg-opt" data-mode="ia">Que lo proponga la IA</button>
@@ -102,8 +115,14 @@ const VPlanAI = (() => {
           const sel = root.querySelector('select[name="base"]');
           const base = rel !== 'nuevo' && sel ? bases.find(p => p.id === sel.value) : null;
           const ctx = contexto(tuyos, exs, plans, sessions, base, mode === 'ia');
-          UI.askAI(buildPrompt(op, cats, ctx), mode === 'doc' ? { note: 'Al abrir la IA, <strong>adjúntale el PDF o las fotos del plan</strong> antes de enviar.' } : {});
-          marcarPrompt(base ? { rel, baseId: base.id, baseName: base.name || 'tu plan' } : true); // al volver, «El plan» ofrece pegar el resultado
+          // Paso 2: al abrir la IA (o con «Ya lo tengo») se queda abierto el paso 3, esperando a que vuelvas
+          UI.askAI(buildPrompt(op, cats, ctx), {
+            head: pasos(2),
+            note: mode === 'doc' ? 'Al abrir la IA, <strong>adjúntale el PDF o las fotos del plan</strong> antes de enviar.' : '',
+            next: { label: 'Ya lo tengo ›', onClick: () => paste(app) },
+            onOpened: () => paste(app),
+          });
+          marcarPrompt({ at: Date.now(), ...(base ? { rel, baseId: base.id, baseName: base.name || 'tu plan' } : {}) }); // al volver, «El plan» ofrece pegar el resultado
         } },
       ],
     });
@@ -190,8 +209,8 @@ const VPlanAI = (() => {
       title: prev ? 'Pegar la continuación' : 'Pegar el resultado de la IA',
       size: 'wide',
       bodyHTML: (prev
-        ? `<p class="modal-text">Escríbele a la IA <strong>«continúa»</strong> y pega aquí lo que te dé. Traindía lo junta con lo de antes.</p>`
-        : `<p class="modal-text">La IA te devuelve un bloque de texto o un archivo:</p>
+        ? `${pasos(3)}<p class="modal-text">Escríbele a la IA <strong>«continúa»</strong> y pega aquí lo que te dé. Traindía lo junta con lo de antes.</p>`
+        : `${pasos(3)}<p class="modal-text">Cuando la IA te conteste, vuelve aquí. Te devuelve un bloque de texto o un archivo:</p>
         <ul class="nut-check">
           <li><strong>Si te ha dado un archivo</strong>: búscalo con el botón de aquí abajo, o ábrelo desde tus descargas y dale a <strong>Compartir → Traindía</strong>.</li>
           <li><strong>Si te lo ha escrito en el chat</strong>: toca el <strong>botón de copiar</strong> del bloque, vuelve aquí y pégalo abajo.</li>
@@ -686,5 +705,5 @@ FORMATO:
 "notas":[],${ctx.plan && op.rel === 'evolucion' ? '"cambios":[],' : ''}"dudas":[]}${doc ? '\nSi el documento no es un plan de entrenamiento, devuelve {"error":"no-es-un-plan"}.' : ''}`;
   }
 
-  return { open, paste, preview, leer, esPlan, normalizar, buildPrompt, pidioPrompt, olvidarPrompt: () => marcarPrompt(false), KIND };
+  return { open, paste, preview, leer, esPlan, normalizar, buildPrompt, pidioPrompt, checkPending, olvidarPrompt: () => marcarPrompt(false), KIND };
 })();

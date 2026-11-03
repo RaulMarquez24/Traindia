@@ -246,15 +246,17 @@ const UI = (() => {
     { key: 'gemini', label: 'Gemini', url: (t) => 'https://gemini.google.com/app?q=' + encodeURIComponent(t) },
     { key: 'claude', label: 'Claude', url: (t) => 'https://claude.ai/new?q=' + encodeURIComponent(t) },
   ];
-  // opts.note: una línea más (HTML) con lo que hay que hacer al abrirla
+  // opts.head: HTML arriba (p. ej. los pasos de un asistente) · opts.note: una línea más
+  // con lo que hay que hacer al abrirla · opts.onOpened: qué sigue al abrir la IA (para que
+  // al volver esté esperando) · opts.next {label, onClick}: botón para seguir sin abrirla
   function askAI(initialText, opts = {}) {
     modal({
       title: 'Preguntar a una IA',
-      bodyHTML: `<p class="field-hint" style="margin-top:0">Edita el texto si quieres y elige con qué IA abrir. En Gemini se copia el texto para que lo pegues.</p>
+      bodyHTML: `${opts.head || ''}<p class="field-hint" style="margin-top:0">Edita el texto si quieres y elige con qué IA abrir. En Gemini se copia el texto para que lo pegues.</p>
         ${opts.note ? `<p class="modal-text ai-note">${opts.note}</p>` : ''}
         ${textarea('aiPrompt', initialText, '', 7)}
         <div class="ai-providers" id="aiProviders"></div>`,
-      actions: [{ label: 'Cerrar', kind: 'ghost' }],
+      actions: [{ label: 'Cerrar', kind: 'ghost' }, ...(opts.next ? [{ label: opts.next.label, kind: 'primary', onClick: () => { setTimeout(opts.next.onClick, 50); } }] : [])],
       onMount: (root) => {
         const ta = root.querySelector('textarea[name="aiPrompt"]');
         const box = root.querySelector('#aiProviders');
@@ -267,7 +269,8 @@ const UI = (() => {
             copyText(text); // respaldo en portapapeles (no roba foco), por si la IA no prerrellena
             openUrl(p.url(text));
             toast(`Abriendo ${p.label}…`);
-            closeModal();
+            closeModal(root);
+            if (opts.onOpened) setTimeout(opts.onOpened, 300);
           });
           box.appendChild(b);
         });
