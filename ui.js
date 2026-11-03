@@ -246,10 +246,12 @@ const UI = (() => {
     { key: 'gemini', label: 'Gemini', url: (t) => 'https://gemini.google.com/app?q=' + encodeURIComponent(t) },
     { key: 'claude', label: 'Claude', url: (t) => 'https://claude.ai/new?q=' + encodeURIComponent(t) },
   ];
-  function askAI(initialText) {
+  // opts.note: una línea más (HTML) con lo que hay que hacer al abrirla
+  function askAI(initialText, opts = {}) {
     modal({
       title: 'Preguntar a una IA',
       bodyHTML: `<p class="field-hint" style="margin-top:0">Edita el texto si quieres y elige con qué IA abrir. En Gemini se copia el texto para que lo pegues.</p>
+        ${opts.note ? `<p class="modal-text ai-note">${opts.note}</p>` : ''}
         ${textarea('aiPrompt', initialText, '', 7)}
         <div class="ai-providers" id="aiProviders"></div>`,
       actions: [{ label: 'Cerrar', kind: 'ghost' }],

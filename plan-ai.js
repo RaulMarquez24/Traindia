@@ -35,9 +35,9 @@ const VPlanAI = (() => {
 
   // ---------- 1. Pedir el texto para la IA ----------
   const RELS = [
-    { v: 'nuevo', ic: '✨', l: 'Uno nuevo', d: 'No se parece a ninguno de tus planes.' },
-    { v: 'parecido', ic: '🔁', l: 'Parecido a…', d: 'Del mismo tipo que uno tuyo: copia sus nombres y su forma.' },
-    { v: 'evolucion', ic: '📈', l: 'Evolución de…', d: 'El siguiente bloque de uno tuyo: te dice qué cambia.' },
+    { v: 'nuevo', l: 'No, es nuevo' },
+    { v: 'parecido', l: 'Parecido a…' },     // del mismo tipo: copia sus nombres y su forma
+    { v: 'evolucion', l: 'Evolución de…' },  // el siguiente bloque: dice qué cambia
   ];
   const hasExercises = (rt) => (rt.days || []).some(d => (d.blocks || []).some(b => (b.exercises || []).length));
 
@@ -49,37 +49,36 @@ const VPlanAI = (() => {
     const bases = plans.filter(hasExercises).sort((a, b) => (a.order || 0) - (b.order || 0));
     const activeId = app.routine && app.routine.id;
     let mode = 'doc', rel = 'nuevo';
+    // Lo de pegar la respuesta va arriba y en grande solo si ya le pediste el texto (vuelves de la IA)
+    const vuelves = pidioPrompt();
     UI.modal({
       title: 'Plan con una IA',
       size: 'wide',
       bodyHTML: `
-        <div class="pl-ai-banner pai-ya">
+        ${vuelves ? `<div class="pl-ai-banner pai-ya">
           <span>${UI.icon('chat', 18)}</span>
           <div><strong>¿Ya te lo ha hecho la IA?</strong><span>Pega su respuesta o elige el archivo y Traindía monta el plan.</span></div>
-          <button type="button" class="btn ${pidioPrompt() ? 'primary' : 'ghost'} small" id="paiYa">Importar</button>
-        </div>
+          <button type="button" class="btn primary small" data-ya>Importar</button>
+        </div>` : ''}
+        <ol class="pai-steps"><li class="on">Preparas</li><li>Se lo das a la IA</li><li>Revisas y guardas</li></ol>
         <div class="seg" role="radiogroup" id="paiMode">
           <button type="button" class="seg-opt on" data-mode="doc">Plan de mi entrenador</button>
           <button type="button" class="seg-opt" data-mode="ia">Que lo proponga la IA</button>
         </div>
-        <p class="modal-text" data-show="doc">Traindía te prepara un texto para que se lo des a una IA <strong>junto con el PDF o las fotos del plan de tu entrenador</strong>. La IA te devuelve un archivo que la app entiende y tú revisas antes de guardar.</p>
-        <p class="modal-text" data-show="ia" hidden>Cuéntale qué quieres y la IA te <strong>diseña el plan</strong> con tus ejercicios${bases.length ? ' y, si parte de uno tuyo, con lo que has ido levantando' : ''}. Tú lo revisas antes de guardar.</p>
-        <span class="field-label">¿Qué es este plan?</span>
-        <div class="pai-rels" role="radiogroup">${RELS.map(r => `<button type="button" class="pai-rel${r.v === rel ? ' on' : ''}" data-rel="${r.v}" role="radio" aria-checked="${r.v === rel}"${r.v !== 'nuevo' && !bases.length ? ' disabled' : ''}><span class="pai-ic">${r.ic}</span><strong>${r.l}</strong><span class="dim">${r.d}</span></button>`).join('')}</div>
-        ${bases.length ? `<div id="paiBase" hidden>${UI.field('Tu plan', UI.select('base', bases.map(p => ({ value: p.id, label: `${p.name || 'Plan'}${p.id === activeId ? ' (activo)' : ''}` })), bases.some(p => p.id === activeId) ? activeId : bases[0].id))}</div>` : '<p class="field-hint">Cuando tengas un plan con ejercicios podrás decir que el nuevo se parece a él o que es su evolución.</p>'}
-        <div data-show="ia" hidden>${UI.field('¿Qué quieres?', UI.textarea('objetivo', '', 'Objetivo, días a la semana, cuánto dura cada sesión, dónde entrenas y con qué material, molestias o lesiones…', 4))}</div>
-        ${tuyos.list.length ? `<p class="field-hint pai-cat">${UI.icon('check', 13)}<span>Le pasa tus <strong>${tuyos.list.length} ejercicios</strong> (los que usas o tienes en algún plan) para que use los tuyos, con su nombre exacto y la variante en la etiqueta, y no te cree repetidos.</span></p>` : ''}
-        <p class="field-hint" style="margin-bottom:0">Marca lo que aplique a tu caso:</p>
-        <div class="metric-opts">
-          <label class="metric-opt" data-show="doc"><input type="checkbox" data-opt="fotos"><span>Lo tengo en fotos, no en PDF</span></label>
-          <label class="metric-opt" data-show="doc"><input type="checkbox" data-opt="idioma"><span>El documento está en otro idioma</span></label>
-          <label class="metric-opt"><input type="checkbox" data-opt="tecnica"><span>Que añada una nota breve de técnica en cada ejercicio</span></label>
-          <label class="metric-opt"><input type="checkbox" data-opt="sustitutos"><span>Que proponga 1-2 alternativas por ejercicio</span></label>
-        </div>
-        <p class="field-hint" style="margin-top:6px">Mejor sin marcar si usas la IA gratis: la respuesta sale más corta y no se corta a medias.</p>
-        <p class="field-hint" data-show="doc">Las series, repeticiones, descansos y cargas se copian <strong>tal cual</strong> del documento; lo que no esté claro sale como duda para que lo revises.</p>
-        <p class="field-hint" data-show="ia" hidden>La IA no te conoce como tu entrenador: revisa las cargas y, si tienes alguna lesión, consúltalo con un profesional.</p>
-        <p class="field-hint" data-show="doc">⚠️ Tu documento se sube al servicio de IA que elijas y puede llevar datos personales. El texto le pide que <strong>no los copie</strong> al resultado.</p>`,
+        <p class="modal-text" data-show="doc">En el paso 2 le adjuntas el <strong>PDF o las fotos</strong> del plan. Copia series y cargas tal cual, venga en el idioma que venga.</p>
+        <div data-show="ia" hidden>${UI.field('¿Qué quieres?', UI.textarea('objetivo', '', 'Objetivo, días a la semana, cuánto dura cada sesión, dónde entrenas y con qué material, molestias o lesiones…', 4))}
+          <p class="field-hint pai-ia-hint">La IA no te conoce como tu entrenador: revisa las cargas y, si tienes alguna lesión, consúltalo con un profesional.</p></div>
+        ${bases.length ? `<span class="field-label">¿Parte de un plan tuyo?</span>
+        <div class="pai-chips" role="radiogroup">${RELS.map(r => `<button type="button" class="pai-chip${r.v === rel ? ' on' : ''}" data-rel="${r.v}" role="radio" aria-checked="${r.v === rel}">${r.l}</button>`).join('')}</div>
+        <div id="paiBase" hidden>${UI.select('base', bases.map(p => ({ value: p.id, label: `${p.name || 'Plan'}${p.id === activeId ? ' (activo)' : ''}` })), bases.some(p => p.id === activeId) ? activeId : bases[0].id)}</div>` : ''}
+        <details class="pai-more"><summary>Más opciones</summary>
+          <div class="metric-opts">
+            <label class="metric-opt"><input type="checkbox" data-opt="tecnica"><span>Que añada una nota breve de técnica en cada ejercicio</span></label>
+            <label class="metric-opt"><input type="checkbox" data-opt="sustitutos"><span>Que proponga 1-2 alternativas por ejercicio</span></label>
+          </div>
+          <p class="field-hint">Mejor sin marcar si usas la IA gratis: la respuesta sale más corta y no se corta a medias.</p>
+        </details>
+        ${vuelves ? '' : '<button type="button" class="pai-link" data-ya>¿Ya tienes la respuesta de la IA? Pégala ›</button>'}`,
       onMount: (root) => {
         const sync = () => {
           root.querySelectorAll('[data-mode]').forEach(b => b.classList.toggle('on', b.dataset.mode === mode));
@@ -89,21 +88,21 @@ const VPlanAI = (() => {
         };
         root.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click', () => { mode = b.dataset.mode; sync(); }));
         root.querySelectorAll('[data-rel]').forEach(b => b.addEventListener('click', () => { rel = b.dataset.rel; sync(); }));
-        // Vuelves con la respuesta ya hecha: directo a pegarla, sin pasar por «Importar»
-        root.querySelector('#paiYa').addEventListener('click', () => { UI.closeModal(root); paste(app); });
+        // Vuelves con la respuesta ya hecha: directo a pegarla
+        root.querySelector('[data-ya]').addEventListener('click', () => { UI.closeModal(root); paste(app); });
         sync();
       },
       actions: [
         { label: 'Cancelar', kind: 'ghost' },
-        { label: 'Continuar', kind: 'primary', onClick: async (root) => {
+        { label: 'Preparar texto ›', kind: 'primary', onClick: async (root) => {
           const op = { modo: mode, rel };
-          root.querySelectorAll('[data-opt]').forEach(c => { op[c.dataset.opt] = mode === 'doc' || !['fotos', 'idioma'].includes(c.dataset.opt) ? c.checked : false; });
+          root.querySelectorAll('[data-opt]').forEach(c => { op[c.dataset.opt] = c.checked; });
           op.objetivo = mode === 'ia' ? (root.querySelector('textarea[name="objetivo"]').value || '').trim() : '';
           if (mode === 'ia' && rel === 'nuevo' && !op.objetivo) { UI.toast('Cuéntale qué quieres: objetivo, días, material…', 'err'); return false; }
           const sel = root.querySelector('select[name="base"]');
           const base = rel !== 'nuevo' && sel ? bases.find(p => p.id === sel.value) : null;
           const ctx = contexto(tuyos, exs, plans, sessions, base, mode === 'ia');
-          UI.askAI(buildPrompt(op, cats, ctx));
+          UI.askAI(buildPrompt(op, cats, ctx), mode === 'doc' ? { note: 'Al abrir la IA, <strong>adjúntale el PDF o las fotos del plan</strong> antes de enviar.' } : {});
           marcarPrompt(base ? { rel, baseId: base.id, baseName: base.name || 'tu plan' } : true); // al volver, «El plan» ofrece pegar el resultado
         } },
       ],
@@ -560,6 +559,8 @@ const VPlanAI = (() => {
   // info: { cortado, raw } si la respuesta llegó a medias (se ofrece pegar la continuación)
   function preview(app, payload, info = {}) {
     const r = normalizar(payload);
+    // Una evolución suele empezar más adelante (al acabar el bloque actual): por defecto, sin activar
+    const act = info.activar != null ? info.activar : pedido().rel !== 'evolucion';
     if (r.errores.length) {
       UI.modal({
         title: 'No se puede importar',
@@ -588,7 +589,8 @@ const VPlanAI = (() => {
         ${lista('Avisos', r.avisos, 'warn')}
         ${lista('Dudas de la IA', r.dudas, 'warn')}
         ${lista('Notas del entrenador', r.notas, '')}
-        <p class="field-hint">Ahora revisas con cuál de tus ejercicios va cada uno. Se crea como un plan nuevo y pasa a ser el activo; tu plan actual no se toca: lo recuperas cuando quieras desde «El plan».</p>`,
+        <label class="metric-opt pai-act"><input type="checkbox" id="paiAct"${act ? ' checked' : ''}><span>Empezar a usarlo ya<span class="dim">Si no, se guarda en Planes y lo activas cuando empieces. Tu plan actual no se toca.</span></span></label>
+        <p class="field-hint">Ahora revisas con cuál de tus ejercicios va cada uno.</p>`,
       onMount: (root) => {
         const more = root.querySelector('#paiMore');
         if (more) more.addEventListener('click', () => { UI.closeModal(root); paste(app, info.raw); });
@@ -598,18 +600,29 @@ const VPlanAI = (() => {
         { label: 'Contar qué tal', kind: 'ghost', onClick: () => { reportar(app, r, info); return false; } },
         { label: 'Revisar ejercicios', kind: 'primary', onClick: (root) => {
           const name = (root.querySelector('input[name="planName"]').value || '').trim() || r.routine.name;
-          setTimeout(() => VReview.importar(app, { routine: r.routine, exercises: r.exercises, onBack: () => preview(app, payload, info),
-            onConfirm: (links) => crear(app, r, name, links) }), 50);
+          const activar = root.querySelector('#paiAct').checked;
+          setTimeout(() => VReview.importar(app, { routine: r.routine, exercises: r.exercises, onBack: () => preview(app, payload, { ...info, activar }),
+            finalLabel: activar ? 'Crear y activar' : 'Guardar plan',
+            onConfirm: (links) => crear(app, r, name, links, activar) }), 50);
         } },
       ],
     });
   }
   // El día donde se cortó la respuesta: el último con sesión según el orden en que llegaron
   const cortadoEn = (r) => { const d = r.routine.days.filter(x => !x.isRest).pop(); return d ? `el ${d.name.toLowerCase()}` : 'el último día'; };
-  // Crea el plan con los ejercicios ya enlazados (links: id del archivo → tu ejercicio)
-  async function crear(app, r, name, links) {
+  // Crea el plan con los ejercicios ya enlazados (links: id del archivo → tu ejercicio).
+  // activar=false: se queda guardado en Planes, sin tocar el activo.
+  async function crear(app, r, name, links, activar = true) {
     const prev = app.routine;
     const rt = await VData.createImportedPlan(app.activeUser.id, r.routine, new Set(r.routine.days.map(d => d.id)), name, r.exercises, { links });
+    if (!activar) {
+      marcarPrompt(false);
+      await app.refreshRoutine();
+      app.history = [];
+      app.go('info', {}, true);
+      UI.toast(`«${rt.name}» guardado en Planes: actívalo cuando empieces`);
+      return;
+    }
     await DB.setActivePlan(app.activeUser.id, rt.id);
     // El plan en blanco que se crea al darse de alta (sin un solo ejercicio) ya no pinta nada.
     const vacio = prev && prev.planType === 'custom' && !(prev.days || []).some(d => (d.blocks || []).some(b => (b.exercises || []).length));
@@ -651,8 +664,7 @@ const VPlanAI = (() => {
     r.push('"series" corto ("4×12", "3×Máx", "5×400 m", "10 min"); en "detalle", el descanso y lo demás, breve.');
     r.push(`"dia": el día de la semana${doc ? ' si lo dice' : ''} ("Lunes"…); si no, null. Los días de descanso no se ponen.`);
     r.push(`Lo que vale para todo el plan va en "notas".${doc ? ' Si dice cuánto dura o cuándo empieza: "duracion" e "inicio" (AAAA-MM-DD).' : ''}`);
-    if (op.fotos) r.push('Son FOTOS: si no puedes leer algo con seguridad, no lo adivines: apúntalo en "dudas".');
-    if (op.idioma) r.push('El documento está en otro idioma: traduce los nombres al español de gimnasio; las cifras, tal cual.');
+    if (doc) r.push('Si está en otro idioma, traduce los nombres al español de gimnasio; las cifras, tal cual.');
     r.push(op.tecnica ? 'Añade "tecnica" a cada ejercicio: una frase con la clave de ejecución.' : 'No pongas técnica.');
     if (op.sustitutos) r.push(`Añade "alternativas" a cada ejercicio: 1-2 del mismo movimiento con otro material${ctx.catalogo ? ', mejor de MIS EJERCICIOS' : ''}.`);
     r.push('Si el documento trae enlaces de vídeo de un ejercicio, ponlos en "videos": ["https://…"]. Si marca algo como opcional: "opcional": true.');
