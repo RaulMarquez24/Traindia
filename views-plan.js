@@ -1287,7 +1287,8 @@ const VPlan = (() => {
       bodyHTML: `<div id="newPlanForm">
         <span class="field-label">Empieza con</span>
         <div class="plan-choices" id="planChoices">${planChoicesHTML(type)}</div>
-        ${UI.field('Nombre (opcional)', UI.input('name', '', { placeholder: 'Si lo dejas vacío, el de la plantilla' }))}
+        <div id="npName">${UI.field('Nombre (opcional)', UI.input('name', '', { placeholder: 'Si lo dejas vacío, el de la plantilla' }))}</div>
+        <p class="field-hint" id="npAiHint" hidden>El nombre lo pones al final, cuando veas el plan que te ha hecho la IA.</p>
       </div>`,
       actions: [
         { label: 'Cancelar', kind: 'ghost' },
@@ -1301,7 +1302,17 @@ const VPlan = (() => {
           UI.toast('Plan creado y activado');
         }},
       ],
-      onMount: (rootEl) => bindPlanChoices(rootEl, (v) => { type = v; }),
+      onMount: (rootEl) => {
+        // Con IA aquí no se crea nada todavía: se abre el asistente (el nombre va al final)
+        const sync = () => {
+          const ai = type === 'ai';
+          rootEl.querySelector('#npName').hidden = ai;
+          rootEl.querySelector('#npAiHint').hidden = !ai;
+          rootEl.querySelector('.modal-actions .btn.primary').textContent = ai ? 'Continuar ›' : 'Crear y activar';
+        };
+        bindPlanChoices(rootEl, (v) => { type = v; sync(); });
+        sync();
+      },
     });
   }
 
