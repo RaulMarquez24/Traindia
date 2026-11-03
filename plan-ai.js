@@ -71,13 +71,13 @@ const VPlanAI = (() => {
         ${bases.length ? `<span class="field-label">¿Parte de un plan tuyo?</span>
         <div class="pai-chips" role="radiogroup">${RELS.map(r => `<button type="button" class="pai-chip${r.v === rel ? ' on' : ''}" data-rel="${r.v}" role="radio" aria-checked="${r.v === rel}">${r.l}</button>`).join('')}</div>
         <div id="paiBase" hidden>${UI.select('base', bases.map(p => ({ value: p.id, label: `${p.name || 'Plan'}${p.id === activeId ? ' (activo)' : ''}` })), bases.some(p => p.id === activeId) ? activeId : bases[0].id)}</div>` : ''}
-        <details class="pai-more"><summary>Más opciones</summary>
+        <span class="field-label">Opciones</span><div class="pai-more">
           <div class="metric-opts">
             <label class="metric-opt"><input type="checkbox" data-opt="tecnica"><span>Que añada una nota breve de técnica en cada ejercicio</span></label>
             <label class="metric-opt"><input type="checkbox" data-opt="sustitutos"><span>Que proponga 1-2 alternativas por ejercicio</span></label>
           </div>
           <p class="field-hint">Mejor sin marcar si usas la IA gratis: la respuesta sale más corta y no se corta a medias.</p>
-        </details>
+        </div>
         ${vuelves ? '' : '<button type="button" class="pai-link" data-ya>¿Ya tienes la respuesta de la IA? Pégala ›</button>'}`,
       onMount: (root) => {
         const sync = () => {

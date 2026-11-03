@@ -222,10 +222,6 @@ body.has-active-bar .pl-new-wrap { bottom: calc(var(--nav-h) + var(--safe-bottom
 .pai-chip.on { border-color: var(--strong); background: var(--strong-bg); color: var(--strong); font-weight: 600; }
 #paiBase { margin-bottom: 10px; }
 .pai-more { margin: 2px 0 4px; }
-.pai-more summary { list-style: none; cursor: pointer; color: var(--strong); font-size: 13.5px; font-weight: 600; padding: 8px 0; }
-.pai-more summary::-webkit-details-marker { display: none; }
-.pai-more summary::before { content: "+ "; }
-.pai-more[open] summary::before { content: "− "; }
 .pai-link { display: block; margin: 10px auto 0; padding: 8px; border: none; background: none; color: var(--strong); font-family: inherit; font-size: 13px; cursor: pointer; }
 .pai-act { margin-top: 12px; }
 .pai-act > span { display: flex; flex-direction: column; gap: 2px; }
