@@ -1,11 +1,13 @@
-// Novedades (historias a pantalla completa) y Tutoriales (vídeos).
-// De momento en VISTA PREVIA: no le salta a nadie al entrar. Solo se ven si activas la
-// vista previa tocando 5 veces «Traindía · vX» al pie de Más; entonces aparecen
-// «Novedades» y «Tutoriales» en Más (solo en ese móvil).
+// «Aprende»: novedades (historias a pantalla completa), tutoriales (vídeos) y trucos
+// por temas (tips.js), con buscador. De momento en VISTA PREVIA: no le salta a nadie al
+// entrar. Solo se ve si activas la vista previa tocando 5 veces «Traindía · vX» al pie
+// de Más; entonces aparece «Aprende» en Más (solo en ese móvil).
 // Regla: con un entreno en marcha no se saca nada de esto solo (ver app.isIdle).
 const VNews = (() => {
   const PREVIEW_KEY = 'traindia.newsPreview';
   const SEEN_KEY = 'traindia.tutosSeen';
+  const TIPS_SEEN_KEY = 'traindia.tipsSeen';
+  const { cats: CATS, tips: TIPS } = typeof TIPS_DATA !== 'undefined' ? TIPS_DATA : { cats: [], tips: [] };
   const DUR = 8000; // lo que dura cada historia sin vídeo
 
   // Vídeos verticales en tutoriales/. No los guarda el SW: se bajan solo al verlos.
@@ -32,6 +34,12 @@ const VNews = (() => {
   const seen = () => { try { return JSON.parse(ls(SEEN_KEY) || '[]'); } catch (e) { return []; } };
   const markSeen = (id) => { const s = seen(); if (!s.includes(id)) { s.push(id); ls(SEEN_KEY, JSON.stringify(s)); } };
   const tuto = (id) => TUTOS.find(t => t.id === id);
+  const tipsSeen = () => { try { return JSON.parse(ls(TIPS_SEEN_KEY) || '[]'); } catch (e) { return []; } };
+  const markTip = (id) => { const s = tipsSeen(); if (!s.includes(id)) { s.push(id); ls(TIPS_SEEN_KEY, JSON.stringify(s)); } };
+  const cat = (id) => CATS.find(c => c.id === id);
+  // Un truco se abre como una historia más, con el color y el nombre de su tema.
+  const tipStory = (t) => { const c = cat(t.cat) || CATS[0]; return { ...t, tg: { txt: c.name, bg: c.bg, dk: c.dk }, shots: t.shot ? [t.shot] : [], head: 'Trucos', tipId: t.id }; };
+  const thumbOf = (t) => t.shot || (t.video && tuto(t.video) ? tuto(t.video).poster : '') || (t.shots || [])[0] || '';
   // La barra del sistema (theme-color) toma el color de lo que está a pantalla completa.
   let _tinted = null;
   const tint = (c) => { const m = document.querySelector('meta[name="theme-color"]'); if (!m) return; if (_tinted === null) _tinted = m.content; m.content = c; };
@@ -65,7 +73,8 @@ const VNews = (() => {
     const prev = () => { if (i > 0) i--; show(); };
 
     function show() {
-      const s = list[i], tg = TAGS[s.tag] || TAGS.nuevo, tv = s.video && tuto(s.video);
+      const s = list[i], tg = s.tg || TAGS[s.tag] || TAGS.nuevo, tv = s.video && tuto(s.video);
+      if (s.tipId) markTip(s.tipId);
       ov.style.setProperty('--nv-bg', tg.bg); ov.style.setProperty('--nv-dk', tg.dk);
       tint(tv ? '#000' : tg.bg);
       // Con vídeo: el avance se ve de fondo a pantalla completa y el texto va abajo. Solo
@@ -76,11 +85,11 @@ const VNews = (() => {
         <p class="nv-text">${esc(s.text)}</p>`;
       ov.innerHTML = `${tv ? `<video class="nv-bgv" src="${tv.teaser}" poster="${tv.poster}" muted autoplay loop playsinline></video><div class="nv-shade"></div>` : ''}<div class="nv-in">
         <div class="nv-bars">${list.map((_, k) => `<span><i style="width:${k < i ? 100 : 0}%"></i></span>`).join('')}</div>
-        <div class="nv-head"><span class="nv-logo">T</span>Novedades<span class="nv-sp"></span><button class="nv-x" aria-label="Cerrar">${UI.icon('x', 22)}</button></div>
+        <div class="nv-head"><span class="nv-logo">T</span>${s.head || 'Novedades'}<span class="nv-sp"></span><button class="nv-x" aria-label="Cerrar">${UI.icon('x', 22)}</button></div>
         ${tv ? `<div class="nv-sp"></div><button class="nv-watch" data-video><span class="nv-play">${UI.icon('play', 30)}</span><span class="nv-watch-l">Ver el vídeo · ${tv.dur}</span></button><div class="nv-sp"></div>${txt}`
           : `<div class="nv-stage"><div class="nv-phone${(s.shots || []).length > 1 ? ' nv-two' : ''}">${(s.shots || []).map(src => `<img src="${src}" alt="">`).join('')}</div></div>${txt}`}
         <button class="nv-cta" data-cta>${s.try ? `Pruébalo ${UI.icon('chevronRight', 16)}` : (i < list.length - 1 ? 'Siguiente' : 'Listo')}</button>
-        <p class="nv-foot">${i + 1} de ${list.length} · luego las tienes en Más → Novedades</p></div>`;
+        <p class="nv-foot">${i + 1} de ${list.length}${s.tipId ? '' : ' · luego las tienes en Más → Aprende'}</p></div>`;
       ov.querySelector('.nv-x').onclick = (e) => { e.stopPropagation(); fin(); };
       ov.querySelector('[data-cta]').onclick = (e) => { e.stopPropagation(); if (s.try) { cancelAnimationFrame(raf); tryIt(app, s.try, () => play(app, list, i + 1 < list.length ? i + 1 : i, onEnd), i + 1 < list.length); } else next(); };
       const pv = ov.querySelector('[data-video]');
@@ -175,6 +184,8 @@ const VNews = (() => {
   function tryIt(app, what, resume, hasMore) {
     close();
     if (what === 'planAI') { VPlanAI.open(app); return; }
+    if (what === 'feedback') { app.openFeedback(); return; }
+    if (what.startsWith('go:')) { const [, v, tab] = what.split(':'); app.go(v, tab ? { tab } : {}); return; }
     if (what === 'share') spotlight('#dataBtn', '<strong>Toca aquí</strong> y elige «Compartir con amigos». Le mandas el enlace a quien quieras.', hasMore ? resume : null);
   }
   function spotlight(sel, html, resume) {
@@ -221,22 +232,103 @@ const VNews = (() => {
       <p class="nv-prev">Vista previa: solo la ves tú.</p>
     </div>`;
   }
-  function tutosBind(app, root) {
+  function tutosBind(app, root) { bindTutos(app, root); }
+
+  // ---- Más → Aprende (portada) ----
+  // Como «Mi Pixel»: buscador, lo nuevo en grande, tutoriales y trucos por temas.
+  const tipRow = (t, seenIds) => `<button class="lr-tip" data-tip="${t.id}">
+      <span class="lr-mini">${thumbOf(t) ? `<img src="${thumbOf(t)}" alt="" loading="lazy">` : ''}${t.video ? `<i>${UI.icon('play', 14)}</i>` : ''}</span>
+      <span class="lr-tip-txt"><strong>${esc(t.title)}</strong><span>${esc(t.text)}</span></span>
+      ${seenIds.includes(t.id) ? `<span class="lr-ok" aria-label="Visto">${UI.icon('check', 15)}</span>` : '<span class="lr-dot" aria-label="Sin ver"></span>'}</button>`;
+  const tutoCard = (t, vistos) => `<button class="lr-tuto" data-tuto="${t.id}">
+      <img src="${t.poster}" alt="" loading="lazy"><span class="lr-tuto-sh"></span>
+      ${vistos.includes(t.id) ? '' : '<em class="lr-new">Nuevo</em>'}<span class="lr-play">${UI.icon('play', 16)}</span>
+      <span class="lr-tuto-t"><strong>${esc(t.title)}</strong><small>${t.dur}</small></span></button>`;
+  function learnView() {
+    const n = NEWS[0], vistos = seen(), seenIds = tipsSeen();
+    return `<div class="section lr">
+      <label class="lr-search">${UI.icon('search', 18)}<input id="lrQ" type="search" placeholder="Busca: descanso, copia, IA…" autocomplete="off" enterkeyhint="search"></label>
+      <div id="lrRes" hidden></div>
+      <div id="lrHome">
+        ${n ? `<div class="lr-h"><span>Lo nuevo · ${fecha(n.date)}</span><button class="link-btn" data-all-news>Ver todo</button></div>
+        <div class="lr-row">${n.stories.map((st, k) => { const tg = TAGS[st.tag] || TAGS.nuevo, img = st.video ? (tuto(st.video) || {}).poster : (st.shots || [])[0];
+          return `<button class="lr-new-c" data-story="${k}" style="--c:${tg.bg};--d:${tg.dk}">
+            <span class="lr-tags"><b>${tg.txt}</b>${st.video ? `<i>${UI.icon('play', 11)} vídeo</i>` : ''}</span>
+            <span class="lr-ph">${img ? `<img src="${img}" alt="" loading="lazy">` : ''}</span>
+            <strong>${esc(st.title)}</strong></button>`; }).join('')}</div>` : ''}
+        ${TUTOS.length ? `<div class="lr-h"><span>Tutoriales</span>${TUTOS.length > 2 ? '<button class="link-btn" data-go="tutorials">Ver todos</button>' : ''}</div>
+        <div class="lr-row">${TUTOS.map(t => tutoCard(t, vistos)).join('')}</div>` : ''}
+        <div class="lr-h"><span>Por temas</span><small>${TIPS.length} trucos</small></div>
+        <div class="lr-cats">${CATS.map(c => { const ts = TIPS.filter(t => t.cat === c.id), nuevos = ts.filter(t => !seenIds.includes(t.id)).length;
+          return `<button class="lr-cat" data-cat="${c.id}"><span class="lr-cat-ic" style="background:${c.bg}">${UI.icon(c.icon, 18)}</span>
+            <strong>${esc(c.name)}</strong><small>${ts.length} trucos${nuevos && nuevos < ts.length ? ` · ${nuevos} sin ver` : ''}</small></button>`; }).join('')}</div>
+        <p class="nv-prev">Vista previa: solo la ves tú (5 toques al pie de Más para quitarla).</p>
+      </div>
+    </div>`;
+  }
+  // Abre una lista de trucos como historias desde el que toques.
+  const playTips = (app, list, id) => play(app, list.map(tipStory), Math.max(0, list.findIndex(t => t.id === id)), () => app.render());
+  function bindTips(app, root, list) {
+    root.querySelectorAll('[data-tip]').forEach(b => b.addEventListener('click', () => playTips(app, list(), b.dataset.tip)));
+  }
+  function bindTutos(app, root) {
     root.querySelectorAll('[data-tuto]').forEach(b => b.addEventListener('click', () => {
       const t = tuto(b.dataset.tuto);
       if (t) video(app, t, () => app.render(), t.try ? () => tryIt(app, t.try) : null);
     }));
   }
+  function learnBind(app, root) {
+    const n = NEWS[0];
+    root.querySelectorAll('[data-story]').forEach(b => b.addEventListener('click', () => play(app, n.stories, +b.dataset.story)));
+    const all = root.querySelector('[data-all-news]');
+    if (all) all.addEventListener('click', () => app.go('news'));
+    root.querySelectorAll('[data-go]').forEach(b => b.addEventListener('click', () => app.go(b.dataset.go)));
+    root.querySelectorAll('[data-cat]').forEach(b => b.addEventListener('click', () => app.go('learnCat', { cat: b.dataset.cat })));
+    bindTutos(app, root);
+    // Buscador: trucos y tutoriales por título, texto, tema y palabras clave.
+    const q = root.querySelector('#lrQ'), res = root.querySelector('#lrRes'), home = root.querySelector('#lrHome');
+    let found = [];
+    q.addEventListener('input', () => {
+      const words = UI.norm(q.value).split(/\s+/).filter(Boolean);
+      home.hidden = !!words.length; res.hidden = !words.length;
+      if (!words.length) return;
+      const hay = (x) => words.every(w => UI.norm(x).includes(w));
+      found = TIPS.filter(t => hay(`${t.title} ${t.text} ${t.k || ''} ${(cat(t.cat) || {}).name || ''}`));
+      const tus = TUTOS.filter(t => hay(`${t.title} ${t.sub}`));
+      const seenIds = tipsSeen(), vistos = seen();
+      res.innerHTML = found.length || tus.length
+        ? `<p class="lr-count">${found.length + tus.length} ${found.length + tus.length === 1 ? 'resultado' : 'resultados'}</p>
+          ${tus.length ? `<div class="lr-row">${tus.map(t => tutoCard(t, vistos)).join('')}</div>` : ''}
+          <div class="lr-tips">${found.map(t => tipRow(t, seenIds)).join('')}</div>`
+        : `<p class="lr-count">Nada con «${esc(q.value.trim())}». Prueba con otra palabra.</p>`;
+      bindTips(app, res, () => found);
+      bindTutos(app, res);
+    });
+  }
 
-  // Grupo «Aprende» para Más (solo con la vista previa activa).
+  // ---- Más → Aprende → un tema ----
+  function catView(params) {
+    const c = cat(params.cat) || CATS[0], ts = TIPS.filter(t => t.cat === c.id), seenIds = tipsSeen();
+    const vistos = ts.filter(t => seenIds.includes(t.id)).length;
+    return `<div class="section lr">
+      <div class="lr-cat-head"><span class="lr-cat-ic" style="background:${c.bg}">${UI.icon(c.icon, 20)}</span>
+        <span><strong>${esc(c.name)}</strong><small>${ts.length} trucos${vistos ? ` · ${vistos} ${vistos === 1 ? 'visto' : 'vistos'}` : ''}</small></span></div>
+      <div class="lr-tips">${ts.map(t => tipRow(t, seenIds)).join('')}</div>
+    </div>`;
+  }
+  function catBind(app, root, params) {
+    const c = cat(params.cat) || CATS[0];
+    bindTips(app, root, () => TIPS.filter(t => t.cat === c.id));
+  }
+
+  // Fila «Aprende» para Más (solo con la vista previa activa).
   function moreGroup() {
     if (!preview()) return null;
-    const nuevos = TUTOS.filter(t => !seen().includes(t.id)).length;
+    const sinVer = TIPS.filter(t => !tipsSeen().includes(t.id)).length + TUTOS.filter(t => !seen().includes(t.id)).length;
     return { title: 'Aprende', color: 'var(--strong)', rows: [
-      { v: 'news', icon: 'star', label: 'Novedades', sub: 'Lo último que ha cambiado' },
-      { v: 'tutorials', icon: 'play', label: 'Tutoriales', sub: nuevos ? `${nuevos} ${nuevos === 1 ? 'vídeo nuevo' : 'vídeos nuevos'}` : `${TUTOS.length} ${TUTOS.length === 1 ? 'vídeo' : 'vídeos'}` },
+      { v: 'learn', icon: 'star', label: 'Aprende', sub: `Novedades, tutoriales y ${TIPS.length} trucos${sinVer ? ` · ${sinVer} sin ver` : ''}` },
     ] };
   }
 
-  return { tapFoot, moreGroup, listView, listBind, tutosView, tutosBind, play, video, close, preview };
+  return { tapFoot, moreGroup, learnView, learnBind, catView, catBind, listView, listBind, tutosView, tutosBind, play, video, close, preview };
 })();
