@@ -52,8 +52,11 @@ const TIPS_DATA = {
     { id: 'comparativa', cat: 'progreso', title: 'Compárate con un amigo', text: 'Progreso → Comparativa: su peso o un ejercicio contra el tuyo, en la misma gráfica.', shot: 'aprende/prog-cmp.jpg', try: 'go:progress:compare', k: 'comparar amigo invitado' },
 
     // ---- Nutrición ----
-    { id: 'pauta', cat: 'nutricion', title: 'Tu pauta de comidas', text: 'Créala a mano o desde el documento del nutricionista con una IA. Cada día te enseña lo que te toca según tu entreno.', shot: 'aprende/nutrition.jpg', try: 'go:nutrition', k: 'dieta comida nutricionista' },
-    { id: 'platos', cat: 'nutricion', title: 'Guarda tus platos', text: 'En cada comida, «Plato con esto» guarda la receta, con foto, para repetirla otro día.', shot: 'aprende/nutrition.jpg', try: 'go:nutrition', k: 'receta plato foto' },
+    { id: 'pauta', cat: 'nutricion', title: 'Tu pauta de comidas', text: 'Cada comida del día en su tarjeta. La app elige sola «Día de entreno» o «Día de descanso» mirando tu plan.', shot: 'aprende/nutricion-pauta.jpg', try: 'go:nutrition', k: 'dieta comida nutricionista dia descanso' },
+    { id: 'comida', cat: 'nutricion', title: 'Lo que te toca, con sus gramos', text: 'Dentro de cada comida ves los alimentos con su cantidad y por cuáles puedes cambiarlos.', shot: 'aprende/nutricion-comida.jpg', try: 'go:nutrition', k: 'gramos cantidad cambiar alimento' },
+    { id: 'platos', cat: 'nutricion', title: 'Guarda tus platos', text: 'En cada comida, «Plato con esto» guarda la receta, con foto y preparación. La próxima vez la tienes arriba.', shot: 'aprende/nutricion-platos.jpg', try: 'go:nutrition', k: 'receta plato foto preparacion' },
+    { id: 'pauta-documento', cat: 'nutricion', title: 'Desde el documento del nutricionista', text: '«Crear desde un documento»: le pasas el PDF a una IA y pegas lo que te devuelva. O empiezas a mano.', shot: 'aprende/nutrition.jpg', try: 'go:nutrition', k: 'pdf nutricionista ia importar' },
+    { id: 'suplementos', cat: 'nutricion', title: 'Normas, suplementos y documentos', text: 'Debajo de las comidas: lo que te dijo tu nutricionista, tu suplementación y sus documentos a mano.', shot: 'aprende/nutricion-extra.jpg', try: 'go:nutrition', k: 'creatina proteina suplemento agua' },
 
     // ---- Compartir y datos ----
     { id: 'amigos', cat: 'compartir', title: 'Comparte con amigos', text: '⇧ → «Compartir con amigos» crea un enlace para WhatsApp. Vale para todo el grupo durante 48 horas.', shot: 'novedades/compartir-1.jpg', try: 'share', k: 'enlace whatsapp grupo amigo' },
