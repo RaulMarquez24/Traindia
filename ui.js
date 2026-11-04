@@ -35,6 +35,8 @@ const UI = (() => {
     chevronRight: '<path d="m9 18 6-6-6-6"/>',
     chevronUp: '<path d="m18 15-6-6-6 6"/>',
     chevronDown: '<path d="m6 9 6 6 6-6"/>',
+    volume: '<path d="M11 5 6 9H2v6h4l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/>',
+    volumeOff: '<path d="M11 5 6 9H2v6h4l5 4z"/><path d="m22 9-6 6M16 9l6 6"/>',
     play: '<path d="M6 4v16l14-8z" fill="currentColor" stroke="none"/>',
     refresh: '<path d="M3 12a9 9 0 0 1 15-6.7L21 8M21 3v5h-5M21 12a9 9 0 0 1-15 6.7L3 16M3 21v-5h5"/>',
     pin: '<path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/>',

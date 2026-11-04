@@ -1552,3 +1552,76 @@ body.has-active-bar .dv-start { bottom: calc(var(--nav-h) + var(--safe-bottom) +
 .sh-link-ask { flex: 1 1 100%; justify-content: flex-end; }
 .sh-link-ask span { margin-right: auto; font-size: 13px; color: var(--ink-soft); }
 .sh-link-act[hidden], .sh-link-ask[hidden] { display: none; }
+
+/* ===== Novedades (historias) y Tutoriales (vídeos) — news.js ===== */
+.nv { position: fixed; inset: 0; z-index: 3000; background: var(--nv-bg, #4f46e5); color: #fff; touch-action: manipulation; user-select: none; -webkit-user-select: none; animation: nvIn .2s ease-out; }
+.nv-video { background: #111; }
+@keyframes nvIn { from { opacity: 0; transform: scale(.98); } to { opacity: 1; transform: none; } }
+.nv-in { height: 100%; max-width: 520px; margin: 0 auto; display: flex; flex-direction: column; padding: calc(var(--safe-top) + 12px) 18px calc(var(--safe-bottom) + 16px); box-sizing: border-box; }
+.nv-bars { display: flex; gap: 4px; }
+.nv-bars span { flex: 1; height: 3px; border-radius: 2px; background: rgba(255,255,255,.35); overflow: hidden; }
+.nv-bars i { display: block; height: 100%; width: 0; background: #fff; }
+.nv-head { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 14px; }
+.nv-logo { width: 28px; height: 28px; border-radius: 8px; background: #fff; color: var(--nv-dk, #312e81); display: flex; align-items: center; justify-content: center; font-weight: 800; }
+.nv-sp { flex: 1; }
+.nv-x, .nv-snd { background: none; border: 0; color: #fff; padding: 6px; display: flex; cursor: pointer; }
+.nv-snd svg:last-child, .nv-snd.off svg:first-child { display: none; }
+.nv-snd.off svg:last-child { display: block; }
+.nv-time { font-family: 'IBM Plex Mono', monospace; font-size: 13px; }
+.nv-tags { display: flex; gap: 6px; margin-top: clamp(16px, 5vh, 36px); }
+.nv-tag { background: #fff; color: var(--nv-dk, #312e81); font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 999px; }
+.nv-tag2 { background: rgba(255,255,255,.2); font-size: 12px; padding: 3px 10px; border-radius: 999px; }
+.nv-title { font-size: clamp(26px, 7.5vw, 34px); line-height: 1.12; font-weight: 800; margin: 12px 0 0; color: #fff; letter-spacing: -.01em; }
+.nv-text { font-size: 16px; line-height: 1.5; margin: 10px 0 0; color: rgba(255,255,255,.9); }
+.nv-cta { background: #fff; color: var(--nv-dk, #312e81); border: 0; border-radius: 14px; padding: 14px; font-size: 16px; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 4px; width: 100%; cursor: pointer; }
+.nv-cta.nv-ghost { background: transparent; color: #fff; border: 1px solid rgba(255,255,255,.5); font-weight: 600; }
+.nv-foot { text-align: center; font-size: 12px; color: rgba(255,255,255,.75); margin: 8px 0 0; }
+.nv-poster { margin: 20px auto 0; display: flex; align-items: center; gap: 16px; background: none; border: 0; color: #fff; cursor: pointer; text-align: left; }
+.nv-poster img { width: min(34vw, 150px); aspect-ratio: 9 / 16; object-fit: cover; border-radius: 14px; border: 2px solid rgba(255,255,255,.6); }
+.nv-play { width: 60px; height: 60px; border-radius: 50%; background: #fff; color: var(--nv-dk, #312e81); display: flex; align-items: center; justify-content: center; flex: none; }
+.nv-pl { display: flex; flex-direction: column; font-size: 16px; font-weight: 700; }
+.nv-pl small { font-size: 12px; font-weight: 400; color: rgba(255,255,255,.75); margin-top: 2px; }
+.nv-v { flex: 1; min-height: 0; width: 100%; object-fit: contain; margin-top: 10px; border-radius: 12px; background: #000; }
+.nv-end { display: flex; gap: 8px; margin-top: 12px; }
+.nv-end[hidden] { display: none; }
+.nv-vis { margin-top: 22px; height: 170px; display: flex; align-items: center; justify-content: center; position: relative; }
+.nv-amigo .nv-ph { position: absolute; left: 4%; top: 15px; width: 74px; height: 130px; border-radius: 14px; background: rgba(255,255,255,.16); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; font-size: 12px; }
+.nv-amigo .nv-ph b { width: 36px; height: 36px; border-radius: 50%; background: #fff; color: var(--nv-dk); display: flex; align-items: center; justify-content: center; }
+.nv-amigo .nv-ph2 { left: auto; right: 4%; }
+.nv-amigo .nv-ph2 b { background: #c7d2fe; }
+.nv-link { position: absolute; top: 66px; left: 4%; height: 28px; padding: 0 10px; border-radius: 14px; background: #fff; color: var(--nv-dk); font-size: 12px; display: flex; align-items: center; gap: 4px; animation: nvViaja 2.8s ease-in-out infinite; }
+@keyframes nvViaja { 0% { left: 4%; opacity: 0; } 15% { opacity: 1; } 55% { left: calc(96% - 80px); opacity: 1; } 70%, 100% { left: calc(96% - 80px); opacity: 0; } }
+.nv-opts { display: flex; flex-direction: column; gap: 6px; animation: nvSale 2.8s ease-out infinite; }
+.nv-opts span { background: #fff; color: var(--nv-dk); border-radius: 8px; font-size: 12px; padding: 5px 9px; }
+@keyframes nvSale { 0%, 55% { opacity: 0; transform: translateY(8px); } 75%, 100% { opacity: 1; transform: none; } }
+.nv-card { width: min(260px, 80%); background: #fff; color: var(--nv-dk); border-radius: 16px; padding: 14px 16px; }
+.nv-card-h { display: flex; justify-content: space-between; align-items: center; }
+.nv-card-h span { font-family: 'IBM Plex Mono', monospace; font-size: 20px; font-weight: 600; }
+.nv-card-r { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 14px; }
+.nv-spin { display: inline-flex; animation: nvGira 2.4s ease-in-out infinite; }
+@keyframes nvGira { 0% { transform: rotate(0); } 40%, 100% { transform: rotate(360deg); } }
+.nv-card-s { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+.nv-card-s span { background: #ccfbf1; border-radius: 6px; font-size: 12px; padding: 3px 7px; }
+.nv-screen { width: min(260px, 80%); height: 140px; border-radius: 16px; background: rgba(255,255,255,.16); position: relative; overflow: hidden; }
+.nv-banner { position: absolute; left: 10px; right: 10px; top: 10px; background: #fff; color: var(--nv-dk); border-radius: 10px; padding: 9px 10px; font-size: 13px; display: flex; justify-content: space-between; align-items: center; animation: nvBaja 3s ease-out infinite; }
+.nv-banner span { background: var(--nv-bg); color: #fff; border-radius: 6px; padding: 3px 8px; font-size: 12px; }
+@keyframes nvBaja { 0%, 30% { transform: translateY(-70px); opacity: 0; } 50%, 100% { transform: none; opacity: 1; } }
+.nv-screen p { position: absolute; left: 12px; right: 12px; bottom: 12px; margin: 0; font-size: 13px; }
+.nv-spot { position: fixed; inset: 0; z-index: 3000; }
+.nv-hole { position: fixed; border-radius: 50%; box-shadow: 0 0 0 9999px rgba(0,0,0,.6); animation: nvPulso 1.4s ease-out infinite; pointer-events: none; }
+@keyframes nvPulso { 0% { outline: 0 solid rgba(255,255,255,.9); } 100% { outline: 12px solid rgba(255,255,255,0); } }
+.nv-tip { position: fixed; right: 12px; width: min(260px, calc(100vw - 24px)); background: var(--bg-card); color: var(--ink); border-radius: 14px; padding: 12px 14px; font-size: 14px; line-height: 1.45; }
+.nv-tip span { display: block; margin-top: 8px; font-size: 12px; color: var(--ink-dim); }
+.nv-prev { font-size: 12px; color: var(--ink-dim); text-align: center; margin: 14px 0; }
+.nv-tutos { display: flex; flex-direction: column; gap: 10px; }
+.nv-tu { display: flex; gap: 12px; align-items: center; background: var(--bg-card); border: 1px solid var(--line); border-radius: 14px; padding: 8px; text-align: left; color: var(--ink); cursor: pointer; width: 100%; }
+.nv-thumb { width: 56px; aspect-ratio: 9 / 16; border-radius: 8px; overflow: hidden; position: relative; flex: none; background: var(--strong-bg); }
+.nv-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.nv-thumb em { position: absolute; right: 3px; bottom: 3px; font-style: normal; font-size: 10px; background: rgba(0,0,0,.7); color: #fff; border-radius: 4px; padding: 0 4px; }
+.nv-thumb i { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: #fff; }
+.nv-tu-txt { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.nv-tu-txt strong { font-size: 15px; }
+.nv-tu-txt > span { font-size: 13px; color: var(--ink-soft); }
+.nv-tu-txt small { font-size: 12px; margin-top: 4px; display: inline-flex; align-items: center; gap: 3px; }
+.nv-tu-txt small.ok { color: var(--light); }
+.nv-tu-txt small.new { color: var(--priority); font-weight: 600; }
