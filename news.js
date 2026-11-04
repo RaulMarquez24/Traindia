@@ -17,15 +17,36 @@ const VNews = (() => {
   ];
   // Color por tipo: Nuevo, morado; Mejora, verde azulado.
   const TAGS = { nuevo: { txt: 'Nuevo', bg: '#4f46e5', dk: '#312e81' }, mejora: { txt: 'Mejora', bg: '#0f766e', dk: '#134e4a' } };
+  // Degradado de las tarjetas de «Lo nuevo»: luz (arriba a la derecha), sombra (abajo a la
+  // izquierda), base y texto marcado. Por defecto el del tipo; una historia puede pedir otro.
+  const PALS = {
+    mejora: { a: '#2dd4bf', b: '#064e3b', c: '#0f766e', d: '#134e4a', k: '#0f766e' },
+    nuevo: { a: '#a78bfa', b: '#1e1b4b', c: '#4f46e5', d: '#312e81', k: '#4338ca' },
+    rosa: { a: '#f472b6', b: '#4c0519', c: '#db2777', d: '#831843', k: '#be185d' },
+  };
   // Cada anuncio, máximo 4 historias. En Aprende solo sale el último: lo anterior queda
-  // como truco en su tema (cada novedad tiene su truco en tips.js). Sin vídeo, capturas
+  // como truco en su tema (cada novedad tiene su truco en tips.js).
+  // card: la tarjeta en «Lo nuevo» (estilo póster). lines + mark: titular en líneas, la
+  // marcada va en blanco. crop: el trozo de captura que flota (iw = ancho al que se pinta la
+  // imagen; x, y = desde dónde se ve; w, h = tamaño; r, b = posición; rot = giro). chip: la
+  // etiqueta que lo remata (timer cuenta solo). Sin cifras que se queden viejas. Sin vídeo, capturas
   // de la app (con datos de ejemplo, en novedades/) dentro de un móvil.
   const NEWS = [
     { id: '2026-11-04', date: '2026-11-04', stories: [
-      { tag: 'mejora', title: 'Del PDF de tu entrenador a tu Traindía', text: 'Crear tu plan con una IA ahora es más corto: preparas el texto, se lo das a tu IA y pegas lo que te devuelva.', video: 'plan-ia', try: 'planAI' },
-      { tag: 'nuevo', title: 'Entrenad con el mismo plan', text: 'Mándale un enlace a un amigo y en un toque tiene tu plan o tu nutrición, o os comparáis. Vale para todo el grupo durante 48 horas.', shots: ['novedades/compartir-1.jpg', 'novedades/compartir-2.jpg'], try: 'share' },
-      { tag: 'mejora', title: 'Tu entreno no se pierde nunca', text: 'Recarga, cierra o abre un enlace: al volver estás donde lo dejaste, con el tiempo corriendo.', shots: ['novedades/entreno.jpg'] },
-      { tag: 'nuevo', title: 'Aprende: trucos y tutoriales', text: 'Más de 40 trucos por temas, tutoriales en vídeo y un buscador para encontrar lo que quieras. En Más → Aprende.', shots: ['novedades/aprende-1.jpg', 'novedades/aprende-2.jpg'], try: 'go:learn' },
+      { tag: 'mejora', title: 'Del PDF de tu entrenador a tu Traindía', text: 'Crear tu plan con una IA ahora es más corto: preparas el texto, se lo das a tu IA y pegas lo que te devuelva.', video: 'plan-ia', try: 'planAI',
+        card: { lines: ['Del PDF', 'de tu entrenador', 'a tu Traindía'], mark: 0 } },
+      { tag: 'nuevo', title: 'Entrenad con el mismo plan', text: 'Mándale un enlace a un amigo y en un toque tiene tu plan o tu nutrición, o os comparáis. Vale para todo el grupo durante 48 horas.', shots: ['novedades/compartir-1.jpg', 'novedades/compartir-2.jpg'], try: 'share',
+        card: { lines: ['Entrenad', 'con el mismo', 'plan'], mark: 1, go: 'Pruébalo',
+          crop: { img: 'novedades/compartir-2.jpg', iw: 360, x: 11, y: 536, w: 207, h: 128, r: 16, b: 58, rot: -4 },
+          chip: { avatar: 'M', color: '#e11d48', txt: 'Marta abrió tu enlace', l: 16, b: 168, rot: 3 } } },
+      { tag: 'mejora', title: 'Tu entreno no se pierde nunca', text: 'Recarga, cierra o abre un enlace: al volver estás donde lo dejaste, con el tiempo corriendo.', shots: ['novedades/entreno.jpg'],
+        card: { lines: ['Tu entreno', 'no se pierde', 'nunca'], mark: 1, go: 'Ver cómo',
+          crop: { img: 'novedades/entreno.jpg', iw: 470, x: 116, y: 745, w: 236, h: 76, r: 14, b: 100, rot: -3 },
+          chip: { timer: 1451, txt: 'sigue corriendo', l: 20, b: 56 } } },
+      { tag: 'nuevo', title: 'Aprende: trucos y tutoriales', text: 'Trucos por temas, tutoriales en vídeo y un buscador para encontrar lo que quieras. En Más → Aprende.', shots: ['novedades/aprende-1.jpg', 'novedades/aprende-2.jpg'], try: 'go:learn',
+        card: { pal: 'rosa', lines: ['Trucos', 'y tutoriales', 'en Aprende'], mark: 0, go: 'Ir a Aprende',
+          crop: { img: 'novedades/aprende-1.jpg', iw: 378, x: 0, y: 180, w: 225, h: 153, r: -27, b: 38, rot: -6 },
+          chip: { icon: 'search', txt: '«notificación»', l: 20, b: 64 } } },
     ] },
   ];
 
@@ -220,6 +241,28 @@ const VNews = (() => {
   }
   function tutosBind(app, root) { bindTutos(app, root); }
 
+  // ---- Tarjeta de «Lo nuevo»: póster con titular grande, palabra marcada y el momento
+  // clave de la app flotando (o el avance del vídeo de fondo). ----
+  const hms = (s) => `${Math.floor(s / 3600)}:${String(Math.floor(s / 60) % 60).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+  function newCard(st, k) {
+    const tg = TAGS[st.tag] || TAGS.nuevo, tv = st.video && tuto(st.video), cd = st.card || { lines: [st.title], mark: -1 };
+    const p = PALS[cd.pal] || PALS[st.tag] || PALS.nuevo, cr = cd.crop, ch = cd.chip;
+    const titulo = cd.lines.map((l, i) => i === cd.mark ? `<em>${esc(l)}</em>` : esc(l)).join('<br>');
+    const chip = !ch ? '' : `<span class="lr-chip" style="left:${ch.l}px;bottom:${ch.b}px;--rot:${ch.rot || 0}deg">${
+      ch.timer != null ? `<b class="lr-timer" data-s="${ch.timer}">${hms(ch.timer)}</b>`
+      : ch.avatar ? `<i class="lr-av" style="background:${ch.color}">${esc(ch.avatar)}</i>`
+      : ch.icon ? `<i class="lr-ic">${UI.icon(ch.icon, 15)}</i>` : ''}${esc(ch.txt)}</span>`;
+    return `<button class="lr-new-c${tv ? ' lr-v' : ''}" data-story="${k}" style="--a:${p.a};--b:${p.b};--c:${p.c};--d:${p.d};--k:${p.k}">
+      ${tv ? `<video class="lr-bgv" src="${tv.teaser}" poster="${tv.poster}" muted ${autoplay()} loop playsinline></video><span class="lr-shade"></span>`
+        : '<span class="lr-bg"></span><i class="lr-ring"></i><i class="lr-ring lr-ring2"></i>'}
+      <span class="lr-tags"><b>${tg.txt}</b>${tv ? `<i>${UI.icon('play', 11)} vídeo</i>` : ''}</span>
+      <strong class="lr-t">${titulo}</strong>
+      ${cr ? `<span class="lr-crop" style="right:${cr.r}px;bottom:${cr.b}px;width:${cr.w}px;height:${cr.h}px;--rot:${cr.rot}deg"><img src="${cr.img}" alt="" loading="lazy" style="width:${cr.iw}px;left:-${cr.x}px;top:-${cr.y}px"></span>` : ''}
+      ${chip}
+      ${tv ? `<span class="lr-chip lr-play-chip" style="left:20px;bottom:20px"><i class="lr-ic">${UI.icon('play', 14)}</i>Ver el vídeo · ${tv.dur}</span>`
+        : `<span class="lr-go">${esc(cd.go || 'Ver')} ›</span>`}</button>`;
+  }
+
   // ---- Más → Aprende (portada) ----
   // Como «Mi Pixel»: buscador, lo nuevo en grande, tutoriales y trucos por temas.
   const tipRow = (t, seenIds) => `<button class="lr-tip" data-tip="${t.id}">
@@ -237,14 +280,7 @@ const VNews = (() => {
       <div id="lrRes" hidden></div>
       <div id="lrHome">
         ${n ? `<div class="lr-h"><span>Lo nuevo · ${fecha(n.date)}</span></div>
-        <div class="lr-row">${n.stories.map((st, k) => { const tg = TAGS[st.tag] || TAGS.nuevo, tv = st.video && tuto(st.video), img = (st.shots || [])[0];
-          // Con vídeo: el avance en bucle a toda la tarjeta. Sin vídeo: el móvil grande e inclinado, asomando.
-          return `<button class="lr-new-c${tv ? ' lr-v' : ''}" data-story="${k}" style="--c:${tg.bg};--d:${tg.dk}">
-            ${tv ? `<video class="lr-bgv" src="${tv.teaser}" poster="${tv.poster}" muted ${autoplay()} loop playsinline></video><span class="lr-shade"></span>`
-              : `<span class="lr-ph">${img ? `<img src="${img}" alt="" loading="lazy">` : ''}</span>`}
-            <span class="lr-tags"><b>${tg.txt}</b>${tv ? `<i>${UI.icon('play', 11)} vídeo</i>` : ''}</span>
-            <strong>${esc(st.title)}</strong>
-            ${tv ? `<span class="lr-vplay">${UI.icon('play', 20)}</span>` : ''}</button>`; }).join('')}</div>` : ''}
+        <div class="lr-row">${n.stories.map((st, k) => newCard(st, k)).join('')}</div>` : ''}
         ${TUTOS.length ? `<div class="lr-h"><span>Tutoriales</span>${TUTOS.length > 2 ? '<button class="link-btn" data-go="tutorials">Ver todos</button>' : ''}</div>
         <div class="lr-row">${TUTOS.map(t => tutoCard(t, vistos)).join('')}</div>` : ''}
         <div class="lr-h"><span>Por temas</span><small>${TIPS.length} trucos</small></div>
@@ -268,6 +304,13 @@ const VNews = (() => {
   }
   function learnBind(app, root) {
     const n = NEWS[0];
+    const timers = [...root.querySelectorAll('.lr-timer')];
+    if (timers.length) {
+      const iv = setInterval(() => {
+        if (!timers[0].isConnected) return clearInterval(iv);
+        timers.forEach(t => { t.dataset.s = +t.dataset.s + 1; t.textContent = hms(+t.dataset.s); });
+      }, 1000);
+    }
     root.querySelectorAll('[data-story]').forEach(b => b.addEventListener('click', () => play(app, n.stories, +b.dataset.story)));
     root.querySelectorAll('[data-go]').forEach(b => b.addEventListener('click', () => app.go(b.dataset.go)));
     root.querySelectorAll('[data-cat]').forEach(b => b.addEventListener('click', () => app.go('learnCat', { cat: b.dataset.cat })));

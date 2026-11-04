@@ -1621,19 +1621,29 @@ body.has-active-bar .dv-start { bottom: calc(var(--nav-h) + var(--safe-bottom) +
 .lr-h small { font-size: 12px; color: var(--ink-dim); }
 .lr-row { display: flex; gap: 10px; overflow-x: auto; margin: 0 -16px; padding: 0 16px 4px; scroll-snap-type: x mandatory; scrollbar-width: none; }
 .lr-row::-webkit-scrollbar { display: none; }
-/* «Lo nuevo»: tarjetas grandes; la siguiente asoma para invitar a deslizar. */
-.lr-new-c { flex: none; width: min(72vw, 290px); height: min(100vw, 400px); border: 0; border-radius: 24px; background: var(--c); color: #fff; padding: 16px; display: flex; flex-direction: column; align-items: flex-start; gap: 10px; text-align: left; scroll-snap-align: start; cursor: pointer; overflow: hidden; position: relative; isolation: isolate; }
-.lr-tags { display: flex; gap: 4px; font-size: 12px; position: relative; z-index: 1; }
-.lr-tags b { background: #fff; color: var(--d); padding: 3px 10px; border-radius: 999px; }
-.lr-tags i { font-style: normal; background: rgba(0,0,0,.35); padding: 3px 10px; border-radius: 999px; display: inline-flex; align-items: center; gap: 3px; }
-.lr-new-c strong { font-size: 23px; font-weight: 800; line-height: 1.1; letter-spacing: -.01em; position: relative; z-index: 1; max-width: 92%; text-shadow: 0 1px 10px rgba(0,0,0,.35); }
-.lr-ph { position: absolute; z-index: 0; width: 62%; right: -2%; bottom: -42%; aspect-ratio: 390 / 844; border: 5px solid #0b0b0f; border-radius: 22px; overflow: hidden; background: #0b0b0f; transform: rotate(-8deg); box-shadow: 0 18px 40px rgba(0,0,0,.35); transition: transform .3s; }
-.lr-new-c:active .lr-ph { transform: rotate(-4deg) translateY(-6px); }
-.lr-ph img { width: 100%; height: 100%; object-fit: contain; display: block; }
+/* «Lo nuevo» en estilo póster: degradado vivo, titular enorme con la palabra clave marcada
+   y el momento clave de la app flotando. La siguiente tarjeta asoma para deslizar. */
+.lr-new-c { flex: none; width: 280px; height: 390px; border: 0; border-radius: 26px; background: var(--c); color: #fff; padding: 20px; display: flex; flex-direction: column; align-items: flex-start; text-align: left; scroll-snap-align: start; cursor: pointer; overflow: hidden; position: relative; isolation: isolate; font-family: inherit; }
+.lr-bg { position: absolute; inset: 0; z-index: -1; background: radial-gradient(120% 90% at 100% 0%, var(--a) 0%, transparent 55%), radial-gradient(90% 80% at 0% 100%, var(--b) 0%, transparent 60%), linear-gradient(160deg, var(--c), var(--d)); }
+.lr-ring { position: absolute; z-index: -1; width: 240px; height: 240px; right: -84px; bottom: -56px; border-radius: 50%; border: 1.5px solid rgba(255,255,255,.2); }
+.lr-ring2 { width: 156px; height: 156px; right: -42px; bottom: -14px; }
+.lr-tags { display: flex; gap: 5px; font-size: 12px; font-weight: 700; }
+.lr-tags b, .lr-tags i { font-style: normal; background: rgba(255,255,255,.2); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); padding: 4px 11px; border-radius: 999px; display: inline-flex; align-items: center; gap: 4px; }
+.lr-t { font-size: 31px; font-weight: 900; line-height: 1.02; letter-spacing: -.035em; margin-top: 14px; }
+.lr-t em { font-style: normal; background: #fff; color: var(--k); padding: 0 7px; border-radius: 9px; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
+.lr-crop { position: absolute; overflow: hidden; border-radius: 16px; box-shadow: 0 22px 46px rgba(0,0,0,.45), 0 0 0 1px rgba(255,255,255,.25); transform: rotate(var(--rot)); animation: lrFlota 3.6s ease-in-out infinite alternate; }
+.lr-crop img { position: absolute; display: block; max-width: none; }
+.lr-chip { position: absolute; display: inline-flex; align-items: center; gap: 8px; background: rgba(255,255,255,.96); color: #11131a; border-radius: 14px; padding: 8px 12px; font-size: 13px; font-weight: 700; box-shadow: 0 14px 30px rgba(0,0,0,.3); transform: rotate(var(--rot, 0deg)); white-space: nowrap; }
+.lr-timer { font-family: 'IBM Plex Mono', monospace; font-size: 16px; color: #4f46e5; font-variant-numeric: tabular-nums; }
+.lr-av { font-style: normal; width: 22px; height: 22px; border-radius: 50%; color: #fff; font-size: 12px; display: inline-flex; align-items: center; justify-content: center; }
+.lr-ic { font-style: normal; display: inline-flex; color: var(--k); }
+.lr-go { position: absolute; left: 20px; bottom: 18px; font-size: 13px; font-weight: 700; opacity: .92; }
+@keyframes lrFlota { from { transform: rotate(var(--rot)) translateY(0); } to { transform: rotate(var(--rot)) translateY(-7px); } }
+@media (prefers-reduced-motion: reduce) { .lr-crop { animation: none; } }
 .lr-v { background: #000; }
-.lr-bgv { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 0; }
-.lr-shade { position: absolute; inset: 0; z-index: 0; background: linear-gradient(var(--d) 0%, var(--d) 22%, rgba(0,0,0,.2) 58%, rgba(0,0,0,.55)); }
-.lr-vplay { position: absolute; z-index: 1; left: 16px; bottom: 16px; width: 54px; height: 54px; border-radius: 50%; background: rgba(255,255,255,.94); color: var(--d); display: flex; align-items: center; justify-content: center; padding-left: 3px; box-sizing: border-box; }
+.lr-bgv { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: -1; }
+.lr-shade { position: absolute; inset: 0; z-index: -1; background: linear-gradient(var(--d) 0%, var(--d) 24%, rgba(0,0,0,.1) 58%, rgba(0,0,0,.55)); }
+.lr-play-chip .lr-ic { color: var(--k); }
 .lr-tuto { flex: none; width: 132px; aspect-ratio: 9 / 16; border: 0; border-radius: 16px; position: relative; overflow: hidden; padding: 0; background: #111; cursor: pointer; scroll-snap-align: start; text-align: left; }
 .lr-tuto img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .lr-tuto-sh { position: absolute; inset: 0; background: linear-gradient(transparent 45%, rgba(0,0,0,.85)); }
