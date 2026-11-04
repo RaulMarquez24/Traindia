@@ -1,10 +1,10 @@
 // Service Worker - Traindía
-// La versión visible de la app es v2.60.2 (ver pie en la app).
+// La versión visible de la app es v2.61.0 (ver pie en la app).
 // CACHE_NAME es solo la clave de caché: súbele el número de build en cada deploy
 // (build-6, build-7, …) para que los cambios lleguen a las apps ya instaladas.
 // Los fetch usan {cache:'reload'} para saltarse la caché HTTP del navegador/Pages
 // y traer SIEMPRE la última versión con red (offline tira de CACHE_NAME).
-const CACHE_NAME = 'traindia-build-246';
+const CACHE_NAME = 'traindia-build-247';
 // Buzón temporal para archivos que llegan por "Compartir" desde otra app
 // (WhatsApp, Archivos…). No se borra al activar: lo lee y vacía la app.
 const SHARE_CACHE = 'traindia-share-inbox';
@@ -25,6 +25,7 @@ const ASSETS = [
   './share-link.js',
   './plan-review.js',
   './plan-ai.js',
+  './news.js',
   './app.js',
   './manifest.json',
   './icon.svg',
@@ -109,6 +110,9 @@ self.addEventListener('fetch', (event) => {
   if (url.origin !== self.location.origin && url.pathname.startsWith('/share')) return;
 
   const sameOrigin = url.origin === self.location.origin;
+  // Vídeos de tutoriales: los pide el navegador por trozos y no se guardan offline
+  // (pesan y nadie los necesita sin red). Fuera del SW.
+  if (sameOrigin && url.pathname.includes('/tutoriales/')) return;
 
   if (sameOrigin) {
     // Archivos de la app: NETWORK-FIRST sin caché HTTP. Con red siempre sirve lo

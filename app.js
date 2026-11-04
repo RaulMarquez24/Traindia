@@ -273,7 +273,7 @@ const app = {
   // En reposo: sin entreno en marcha, sin ventana abierta y sin nada escrito a medias.
   isIdle() {
     if (this._live || window.__holdReload) return false;
-    if (document.querySelector('.modal-overlay')) return false;
+    if (document.querySelector('.modal-overlay, .nv, .nv-spot')) return false; // ventana, novedades o vídeo
     const a = document.activeElement;
     if (a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) return false;
     return ![...document.querySelectorAll('input, textarea')].some(el => !/^(checkbox|radio|hidden|button|submit)$/.test(el.type) && el.value !== el.defaultValue);
@@ -302,7 +302,7 @@ const app = {
     this._updForce = true;
     const r = await this.checkUpdate();
     if (r === true) UI.toast('Hay una versión nueva: se aplica en un momento');
-    else { this._updForce = false; UI.toast(r === false ? 'Ya tienes la última versión (v2.60.2)' : 'No se pudo comprobar. Prueba en un rato', r === false ? undefined : 'err'); }
+    else { this._updForce = false; UI.toast(r === false ? 'Ya tienes la última versión (v2.61.0)' : 'No se pudo comprobar. Prueba en un rato', r === false ? undefined : 'err'); }
   },
 
   registerViews() {
@@ -326,6 +326,8 @@ const app = {
       settings: { render: (a, p) => this.renderSettings(),  bind: (a, r) => this.bindSettings(r) },
       backups:  { render: (a, p) => this.renderBackups(),   bind: (a, r) => this.bindBackups(r) },
       docs:     { render: (a, p) => this.renderDocs(),      bind: (a, r) => this.bindDocs(r) },
+      news:     { render: (a, p) => VNews.listView(),       bind: (a, r) => VNews.listBind(a, r) },
+      tutorials:{ render: (a, p) => VNews.tutosView(),      bind: (a, r) => VNews.tutosBind(a, r) },
     };
   },
 
@@ -426,6 +428,7 @@ const app = {
       sessions: 'Sesiones', live: 'Entreno', session: 'Sesión',
       progress: 'Progreso', nutrition: 'Nutrición',
       more: 'Más', profiles: 'Perfiles', settings: 'Ajustes', backups: 'Copias y datos', docs: 'Documentos',
+      news: 'Novedades', tutorials: 'Tutoriales',
     };
     let label = titles[this.currentView] || 'Traindía';
     if (this.currentView === 'nutrition' && typeof VNutrition !== 'undefined') {
@@ -455,7 +458,7 @@ const app = {
       week: 'week', day: 'week', exercises: 'week',
       sessions: 'sessions', session: 'sessions', live: 'sessions',
       progress: 'progress', nutrition: 'nutrition',
-      more: 'more', exercises: 'more', profiles: 'more', settings: 'more', guides: 'more', guide: 'more', info: 'more', backups: 'more', docs: 'more',
+      more: 'more', exercises: 'more', profiles: 'more', settings: 'more', guides: 'more', guide: 'more', info: 'more', backups: 'more', docs: 'more', news: 'more', tutorials: 'more',
     };
     const active = map[this.currentView] || 'week';
     document.querySelectorAll('.nav-btn').forEach(btn => {
@@ -894,7 +897,7 @@ const app = {
                 tipo: d.tipo,
                 mensaje: d.mensaje.trim(),
                 contacto: (d.contacto || '').trim() || '(no indicado)',
-                version: 'v2.60.2',
+                version: 'v2.61.0',
                 perfil: (this.mainUser && this.mainUser.name) || '',
                 navegador: navigator.userAgent,
               }),
@@ -944,22 +947,25 @@ const app = {
         { v: 'backups', icon: 'swap', label: 'Copias y datos', sub: copia.txt, warn: copia.warn },
         { v: 'profiles', icon: 'users', label: 'Perfiles', sub: `${this.mainUser ? this.mainUser.name : 'Tú'}${invitados > 0 ? ` · ${n(invitados, 'invitado', 'invitados')}` : ' · sin invitados'}` },
       ] },
+      VNews.moreGroup(), // Novedades y Tutoriales: de momento solo con la vista previa
       { title: 'App', color: 'var(--rest)', rows: [
         { v: 'settings', icon: 'settings', label: 'Ajustes', sub: `${tema} · avisos ${VSessions.restNotifyOn() ? 'activados' : 'desactivados'}` },
         { feedback: true, icon: 'chat', label: 'Sugerencias y reportes', sub: 'Envíame ideas o fallos' },
       ] },
-    ];
+    ].filter(Boolean);
     return `<div class="section">
       ${groups.map(g => `<div class="more-sec">${g.title}</div>
         <div class="more-group">${g.rows.map(r => `<button class="more-row" ${r.feedback ? 'data-feedback' : `data-link="${r.v}"`}>
           <span class="more-ic" style="background:${g.color}">${UI.icon(r.icon, 20)}</span>
           <span class="more-txt"><strong>${r.label}</strong><span${r.warn ? ' class="warn"' : ''}>${UI.esc(r.sub)}</span></span><span class="chev">›</span></button>`).join('')}</div>`).join('')}
-      <p class="version-foot">Traindía · v2.60.2<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
+      <p class="version-foot" id="verFoot">Traindía · v2.61.0<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
     </div>`;
   },
   bindMore(root) {
     const fb = root && root.querySelector('[data-feedback]');
     if (fb) fb.addEventListener('click', () => this.openFeedback());
+    const foot = root && root.querySelector('#verFoot');
+    if (foot) foot.addEventListener('click', (e) => { if (!e.target.closest('a')) VNews.tapFoot(this); });
   },
 
   // ---- Vista DOCUMENTOS (adjuntos consultables durante el entreno) ----
@@ -1403,7 +1409,7 @@ const app = {
         ${(window.traindiaInstalled && window.traindiaInstalled())
           ? `<div class="more-row set-static"><span class="more-ic" style="background:var(--light)">${UI.icon('check', 18)}</span><span class="more-txt"><strong>Instalada en este móvil</strong><span>La estás usando como app</span></span></div>`
           : row('id="installRow"', 'download', 'var(--light)', 'Instalar en el móvil', 'Como una app, a pantalla completa y sin conexión')}
-        ${row('id="checkUpd"', 'repeat', 'var(--light)', 'Buscar actualizaciones', 'Tienes la v2.60.2. Se actualiza sola, esto es por si quieres forzarlo')}
+        ${row('id="checkUpd"', 'repeat', 'var(--light)', 'Buscar actualizaciones', 'Tienes la v2.61.0. Se actualiza sola, esto es por si quieres forzarlo')}
         ${row('id="seeLanding"', 'info', 'var(--rest)', 'Ver la presentación', 'Qué es Traindía y cómo funciona')}
         ${row('id="seeRepo"', 'code', 'var(--rest)', 'Código en GitHub', 'Novedades de cada versión', `<span class="chev">↗</span>`)}
       </div>
