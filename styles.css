@@ -1613,6 +1613,48 @@ body.has-active-bar .dv-start { bottom: calc(var(--nav-h) + var(--safe-bottom) +
 @keyframes nvPulso { 0% { outline: 0 solid rgba(255,255,255,.9); } 100% { outline: 12px solid rgba(255,255,255,0); } }
 .nv-tip { position: fixed; right: 12px; width: min(260px, calc(100vw - 24px)); background: var(--bg-card); color: var(--ink); border-radius: 14px; padding: 12px 14px; font-size: 14px; line-height: 1.45; }
 .nv-tip span { display: block; margin-top: 8px; font-size: 12px; color: var(--ink-dim); }
+/* Más → Aprende */
+.lr-search { display: flex; align-items: center; gap: 8px; background: var(--bg-card); border: 1px solid var(--line); border-radius: 999px; padding: 0 14px; color: var(--ink-dim); }
+.lr-search input { flex: 1; border: 0; background: none; outline: none; font: inherit; font-size: 15px; color: var(--ink); padding: 11px 0; min-width: 0; }
+.lr-h { display: flex; align-items: baseline; justify-content: space-between; margin: 22px 2px 10px; }
+.lr-h span { font-size: 17px; font-weight: 800; }
+.lr-h small { font-size: 12px; color: var(--ink-dim); }
+.lr-row { display: flex; gap: 10px; overflow-x: auto; margin: 0 -16px; padding: 0 16px 4px; scroll-snap-type: x mandatory; scrollbar-width: none; }
+.lr-row::-webkit-scrollbar { display: none; }
+.lr-new-c { flex: none; width: 168px; height: 250px; border: 0; border-radius: 20px; background: var(--c); color: #fff; padding: 12px; display: flex; flex-direction: column; gap: 8px; text-align: left; scroll-snap-align: start; cursor: pointer; overflow: hidden; }
+.lr-tags { display: flex; gap: 4px; font-size: 11px; }
+.lr-tags b { background: #fff; color: var(--d); padding: 2px 8px; border-radius: 999px; }
+.lr-tags i { font-style: normal; background: rgba(0,0,0,.3); padding: 2px 8px; border-radius: 999px; display: inline-flex; align-items: center; gap: 3px; }
+.lr-ph { flex: 1; min-height: 0; align-self: center; aspect-ratio: 390 / 844; border: 4px solid #0b0b0f; border-radius: 16px; overflow: hidden; background: #0b0b0f; }
+.lr-ph img { width: 100%; height: 100%; object-fit: cover; object-position: top; display: block; }
+.lr-new-c strong { font-size: 15px; line-height: 1.2; }
+.lr-tuto { flex: none; width: 132px; aspect-ratio: 9 / 16; border: 0; border-radius: 16px; position: relative; overflow: hidden; padding: 0; background: #111; cursor: pointer; scroll-snap-align: start; text-align: left; }
+.lr-tuto img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.lr-tuto-sh { position: absolute; inset: 0; background: linear-gradient(transparent 45%, rgba(0,0,0,.85)); }
+.lr-new { position: absolute; left: 8px; top: 8px; font-style: normal; font-size: 11px; font-weight: 700; background: var(--priority); color: #fff; border-radius: 6px; padding: 1px 6px; }
+.lr-play { position: absolute; right: 8px; top: 8px; width: 30px; height: 30px; border-radius: 50%; background: rgba(255,255,255,.92); color: #111; display: flex; align-items: center; justify-content: center; }
+.lr-tuto-t { position: absolute; left: 10px; right: 10px; bottom: 10px; color: #fff; display: flex; flex-direction: column; gap: 2px; }
+.lr-tuto-t strong { font-size: 13px; line-height: 1.25; }
+.lr-tuto-t small { font-size: 11px; opacity: .8; font-family: 'IBM Plex Mono', monospace; }
+.lr-cats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.lr-cat { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; background: var(--bg-card); border: 1px solid var(--line); border-radius: 16px; padding: 14px; text-align: left; color: var(--ink); cursor: pointer; }
+.lr-cat-ic { width: 36px; height: 36px; border-radius: 11px; color: #fff; display: flex; align-items: center; justify-content: center; flex: none; }
+.lr-cat strong { font-size: 15px; }
+.lr-cat small, .lr-cat-head small { font-size: 12px; color: var(--ink-dim); }
+.lr-cat-head { display: flex; align-items: center; gap: 12px; margin: 4px 0 14px; }
+.lr-cat-head span:last-child { display: flex; flex-direction: column; }
+.lr-cat-head strong { font-size: 22px; font-weight: 800; }
+.lr-tips { display: flex; flex-direction: column; gap: 8px; }
+.lr-tip { display: flex; gap: 12px; align-items: center; background: var(--bg-card); border: 1px solid var(--line); border-radius: 14px; padding: 8px 12px 8px 8px; text-align: left; color: var(--ink); cursor: pointer; width: 100%; }
+.lr-mini { width: 46px; aspect-ratio: 390 / 844; border: 3px solid #0b0b0f; border-radius: 9px; overflow: hidden; flex: none; position: relative; background: #0b0b0f; }
+.lr-mini img { width: 100%; height: 100%; object-fit: cover; object-position: top; display: block; }
+.lr-mini i { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: #fff; background: rgba(0,0,0,.35); }
+.lr-tip-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.lr-tip-txt strong { font-size: 15px; line-height: 1.25; }
+.lr-tip-txt span { font-size: 13px; color: var(--ink-soft); line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.lr-ok { color: var(--light); flex: none; display: flex; }
+.lr-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--priority); flex: none; }
+.lr-count { font-size: 13px; color: var(--ink-dim); margin: 14px 2px 10px; }
 .nv-prev { font-size: 12px; color: var(--ink-dim); text-align: center; margin: 14px 0; }
 .nv-tutos { display: flex; flex-direction: column; gap: 10px; }
 .nv-tu { display: flex; gap: 12px; align-items: center; background: var(--bg-card); border: 1px solid var(--line); border-radius: 14px; padding: 8px; text-align: left; color: var(--ink); cursor: pointer; width: 100%; }
