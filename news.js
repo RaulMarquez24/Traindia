@@ -25,7 +25,7 @@ const VNews = (() => {
       { tag: 'mejora', title: 'Del PDF de tu entrenador a tu Traindía', text: 'Crear tu plan con una IA ahora es más corto: preparas el texto, se lo das a tu IA y pegas lo que te devuelva.', video: 'plan-ia', try: 'planAI' },
       { tag: 'nuevo', title: 'Entrenad con el mismo plan', text: 'Mándale un enlace a un amigo y en un toque tiene tu plan o tu nutrición, o os comparáis. Vale para todo el grupo durante 48 horas.', shots: ['novedades/compartir-1.jpg', 'novedades/compartir-2.jpg'], try: 'share' },
       { tag: 'mejora', title: 'Tu entreno no se pierde nunca', text: 'Recarga, cierra o abre un enlace: al volver estás donde lo dejaste, con el tiempo corriendo.', shots: ['novedades/entreno.jpg'] },
-      { tag: 'mejora', title: 'Ya no hace falta cerrar la app', text: 'Traindía se pone al día sola cuando no estás en nada. Y si estás entrenando, espera.', shots: ['novedades/actualizar.jpg'] },
+      { tag: 'nuevo', title: 'Aprende: trucos y tutoriales', text: 'Más de 40 trucos por temas, tutoriales en vídeo y un buscador para encontrar lo que quieras. En Más → Aprende.', shots: ['novedades/aprende-1.jpg', 'novedades/aprende-2.jpg'], try: 'go:learn' },
     ] },
   ];
 
