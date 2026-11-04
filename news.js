@@ -15,13 +15,14 @@ const VNews = (() => {
   ];
   // Color por tipo: Nuevo, morado; Mejora, verde azulado.
   const TAGS = { nuevo: { txt: 'Nuevo', bg: '#4f46e5', dk: '#312e81' }, mejora: { txt: 'Mejora', bg: '#0f766e', dk: '#134e4a' } };
-  // Cada anuncio, máximo 4 historias; el resto, solo en la lista.
+  // Cada anuncio, máximo 4 historias; el resto, solo en la lista. Sin vídeo, capturas
+  // de la app (con datos de ejemplo, en novedades/) dentro de un móvil.
   const NEWS = [
     { id: '2026-11-04', date: '2026-11-04', stories: [
       { tag: 'mejora', title: 'Del PDF de tu entrenador a tu Traindía', text: 'Crear tu plan con una IA ahora es más corto: preparas el texto, se lo das a tu IA y pegas lo que te devuelva.', video: 'plan-ia', try: 'planAI' },
-      { tag: 'nuevo', title: 'Entrenad con el mismo plan', text: 'Mándale un enlace a un amigo y en un toque tiene tu plan o tu nutrición, o os comparáis. Vale para todo el grupo durante 48 horas.', visual: 'amigo', try: 'share' },
-      { tag: 'mejora', title: 'Tu entreno no se pierde nunca', text: 'Recarga, cierra o abre un enlace: al volver estás donde lo dejaste, con el tiempo corriendo.', visual: 'salvo' },
-      { tag: 'mejora', title: 'Ya no hace falta cerrar la app', text: 'Traindía se pone al día sola cuando no estás en nada. Y si estás entrenando, espera.', visual: 'upd' },
+      { tag: 'nuevo', title: 'Entrenad con el mismo plan', text: 'Mándale un enlace a un amigo y en un toque tiene tu plan o tu nutrición, o os comparáis. Vale para todo el grupo durante 48 horas.', shots: ['novedades/compartir-1.jpg', 'novedades/compartir-2.jpg'], try: 'share' },
+      { tag: 'mejora', title: 'Tu entreno no se pierde nunca', text: 'Recarga, cierra o abre un enlace: al volver estás donde lo dejaste, con el tiempo corriendo.', shots: ['novedades/entreno.jpg'] },
+      { tag: 'mejora', title: 'Ya no hace falta cerrar la app', text: 'Traindía se pone al día sola cuando no estás en nada. Y si estás entrenando, espera.', shots: ['novedades/actualizar.jpg'] },
     ] },
   ];
 
@@ -48,22 +49,6 @@ const VNews = (() => {
     ls(PREVIEW_KEY, on ? '1' : '0');
     UI.toast(on ? 'Vista previa de novedades activada' : 'Vista previa de novedades quitada');
     app.render();
-  }
-
-  // ---- Dibujos animados de cada historia ----
-  function visual(v) {
-    if (v === 'amigo') return `<div class="nv-vis nv-amigo">
-        <div class="nv-ph"><b>R</b>Tú</div><div class="nv-ph nv-ph2"><b>M</b>Marta</div>
-        <div class="nv-link">${UI.icon('link', 14)} enlace</div>
-        <div class="nv-opts"><span>Compararnos</span><span>Su plan</span><span>Su nutrición</span></div></div>`;
-    if (v === 'salvo') return `<div class="nv-vis"><div class="nv-card">
-        <div class="nv-card-h"><strong>Día 1</strong><span>0:24:11</span></div>
-        <div class="nv-card-r"><i class="nv-spin">${UI.icon('refresh', 16)}</i>Recargas… y sigue ahí</div>
-        <div class="nv-card-s"><span>80 kg × 8</span><span>80 kg × 8</span><span>82,5 × 6</span></div></div></div>`;
-    if (v === 'upd') return `<div class="nv-vis"><div class="nv-screen">
-        <div class="nv-banner">Hay una versión nueva<span>Actualizar</span></div>
-        <p>Sin cerrar la app. Sin perder nada.</p></div></div>`;
-    return '';
   }
 
   // ---- Reproductor de historias ----
@@ -93,7 +78,7 @@ const VNews = (() => {
         <div class="nv-bars">${list.map((_, k) => `<span><i style="width:${k < i ? 100 : 0}%"></i></span>`).join('')}</div>
         <div class="nv-head"><span class="nv-logo">T</span>Novedades<span class="nv-sp"></span><button class="nv-x" aria-label="Cerrar">${UI.icon('x', 22)}</button></div>
         ${tv ? `<div class="nv-sp"></div><button class="nv-watch" data-video><span class="nv-play">${UI.icon('play', 30)}</span><span class="nv-watch-l">Ver el vídeo · ${tv.dur}</span></button><div class="nv-sp"></div>${txt}`
-          : `${txt}${visual(s.visual)}<div class="nv-sp"></div>`}
+          : `<div class="nv-stage"><div class="nv-phone${(s.shots || []).length > 1 ? ' nv-two' : ''}">${(s.shots || []).map(src => `<img src="${src}" alt="">`).join('')}</div></div>${txt}`}
         <button class="nv-cta" data-cta>${s.try ? `Pruébalo ${UI.icon('chevronRight', 16)}` : (i < list.length - 1 ? 'Siguiente' : 'Listo')}</button>
         <p class="nv-foot">${i + 1} de ${list.length} · luego las tienes en Más → Novedades</p></div>`;
       ov.querySelector('.nv-x').onclick = (e) => { e.stopPropagation(); fin(); };

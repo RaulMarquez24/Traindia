@@ -1567,7 +1567,7 @@ body.has-active-bar .dv-start { bottom: calc(var(--nav-h) + var(--safe-bottom) +
 .nv-x, .nv-snd { background: none; border: 0; color: #fff; padding: 6px; display: flex; cursor: pointer; }
 .nv-snd svg:last-child, .nv-snd.off svg:first-child { display: none; }
 .nv-snd.off svg:last-child { display: block; }
-.nv-tags { display: flex; gap: 6px; margin-top: clamp(16px, 5vh, 36px); }
+.nv-tags { display: flex; gap: 6px; }
 .nv-tag { background: #fff; color: var(--nv-dk, #312e81); font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 999px; }
 .nv-tag2 { background: rgba(255,255,255,.2); font-size: 12px; padding: 3px 10px; border-radius: 999px; }
 .nv-title { font-size: clamp(26px, 7.5vw, 34px); line-height: 1.12; font-weight: 800; margin: 12px 0 0; color: #fff; letter-spacing: -.01em; }
@@ -1580,12 +1580,19 @@ body.has-active-bar .dv-start { bottom: calc(var(--nav-h) + var(--safe-bottom) +
 .nv-bgv { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .nv-shade { position: absolute; inset: 0; background: linear-gradient(rgba(0,0,0,.55), rgba(0,0,0,.25) 20%, rgba(0,0,0,.25) 45%, var(--nv-dk) 80%); }
 .nv-media .nv-in { position: relative; }
-.nv-media .nv-tags { margin-top: 0; }
 .nv-media .nv-tag2 { background: rgba(0,0,0,.5); }
 .nv-watch { align-self: center; display: flex; flex-direction: column; align-items: center; gap: 10px; background: none; border: 0; color: #fff; cursor: pointer; }
 .nv-watch-l { background: rgba(0,0,0,.6); border-radius: 999px; padding: 6px 14px; font-size: 15px; font-weight: 700; }
 .nv-play { width: 76px; height: 76px; border-radius: 50%; background: rgba(255,255,255,.94); color: var(--nv-dk, #312e81); display: flex; align-items: center; justify-content: center; padding-left: 4px; box-sizing: border-box; }
-.nv-media .nv-text { margin-bottom: 18px; }
+.nv-text { margin-bottom: 18px; }
+/* Historia sin vídeo: capturas de la app dentro de un móvil (dos se van turnando). */
+.nv-stage { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 18px 0; }
+.nv-phone { height: 100%; max-height: 560px; aspect-ratio: 390 / 844; position: relative; border: 7px solid #0b0b0f; border-radius: 34px; overflow: hidden; background: #0b0b0f; box-shadow: 0 18px 40px rgba(0,0,0,.35); animation: nvUp .5s ease-out; }
+.nv-phone img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: top; animation: nvZoom 8s ease-out forwards; }
+.nv-phone.nv-two img:nth-child(2) { opacity: 0; animation: nvSwap 5.6s ease-in-out infinite; }
+@keyframes nvUp { from { transform: translateY(24px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes nvZoom { from { transform: scale(1); } to { transform: scale(1.05); } }
+@keyframes nvSwap { 0%, 40% { opacity: 0; } 50%, 90% { opacity: 1; } 100% { opacity: 0; } }
 /* Reproductor tipo WhatsApp: un toque enseña los controles, se esconden solos. */
 .nv-video { background: #000; }
 .nv-v { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; }
@@ -1601,29 +1608,6 @@ body.has-active-bar .dv-start { bottom: calc(var(--nav-h) + var(--safe-bottom) +
 .nv-end { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: flex-end; gap: 8px; padding: 0 18px calc(var(--safe-bottom) + 24px); background: rgba(0,0,0,.7); }
 .nv-end > * { max-width: 480px; margin: 0 auto; }
 .nv-end[hidden] { display: none; }
-.nv-vis { margin-top: 22px; height: 170px; display: flex; align-items: center; justify-content: center; position: relative; }
-.nv-amigo .nv-ph { position: absolute; left: 4%; top: 15px; width: 74px; height: 130px; border-radius: 14px; background: rgba(255,255,255,.16); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; font-size: 12px; }
-.nv-amigo .nv-ph b { width: 36px; height: 36px; border-radius: 50%; background: #fff; color: var(--nv-dk); display: flex; align-items: center; justify-content: center; }
-.nv-amigo .nv-ph2 { left: auto; right: 4%; }
-.nv-amigo .nv-ph2 b { background: #c7d2fe; }
-.nv-link { position: absolute; top: 66px; left: 4%; height: 28px; padding: 0 10px; border-radius: 14px; background: #fff; color: var(--nv-dk); font-size: 12px; display: flex; align-items: center; gap: 4px; animation: nvViaja 2.8s ease-in-out infinite; }
-@keyframes nvViaja { 0% { left: 4%; opacity: 0; } 15% { opacity: 1; } 55% { left: calc(96% - 80px); opacity: 1; } 70%, 100% { left: calc(96% - 80px); opacity: 0; } }
-.nv-opts { display: flex; flex-direction: column; gap: 6px; animation: nvSale 2.8s ease-out infinite; }
-.nv-opts span { background: #fff; color: var(--nv-dk); border-radius: 8px; font-size: 12px; padding: 5px 9px; }
-@keyframes nvSale { 0%, 55% { opacity: 0; transform: translateY(8px); } 75%, 100% { opacity: 1; transform: none; } }
-.nv-card { width: min(260px, 80%); background: #fff; color: var(--nv-dk); border-radius: 16px; padding: 14px 16px; }
-.nv-card-h { display: flex; justify-content: space-between; align-items: center; }
-.nv-card-h span { font-family: 'IBM Plex Mono', monospace; font-size: 20px; font-weight: 600; }
-.nv-card-r { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 14px; }
-.nv-spin { display: inline-flex; animation: nvGira 2.4s ease-in-out infinite; }
-@keyframes nvGira { 0% { transform: rotate(0); } 40%, 100% { transform: rotate(360deg); } }
-.nv-card-s { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
-.nv-card-s span { background: #ccfbf1; border-radius: 6px; font-size: 12px; padding: 3px 7px; }
-.nv-screen { width: min(260px, 80%); height: 140px; border-radius: 16px; background: rgba(255,255,255,.16); position: relative; overflow: hidden; }
-.nv-banner { position: absolute; left: 10px; right: 10px; top: 10px; background: #fff; color: var(--nv-dk); border-radius: 10px; padding: 9px 10px; font-size: 13px; display: flex; justify-content: space-between; align-items: center; animation: nvBaja 3s ease-out infinite; }
-.nv-banner span { background: var(--nv-bg); color: #fff; border-radius: 6px; padding: 3px 8px; font-size: 12px; }
-@keyframes nvBaja { 0%, 30% { transform: translateY(-70px); opacity: 0; } 50%, 100% { transform: none; opacity: 1; } }
-.nv-screen p { position: absolute; left: 12px; right: 12px; bottom: 12px; margin: 0; font-size: 13px; }
 .nv-spot { position: fixed; inset: 0; z-index: 3000; }
 .nv-hole { position: fixed; border-radius: 50%; box-shadow: 0 0 0 9999px rgba(0,0,0,.6); animation: nvPulso 1.4s ease-out infinite; pointer-events: none; }
 @keyframes nvPulso { 0% { outline: 0 solid rgba(255,255,255,.9); } 100% { outline: 12px solid rgba(255,255,255,0); } }
