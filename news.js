@@ -9,8 +9,9 @@ const VNews = (() => {
   const DUR = 8000; // lo que dura cada historia sin vídeo
 
   // Vídeos verticales en tutoriales/. No los guarda el SW: se bajan solo al verlos.
+  // teaser: unos segundos sin sonido (≈170 KB) que se ven de fondo en la historia.
   const TUTOS = [
-    { id: 'plan-ia', title: 'Tu plan del entrenador con una IA', sub: 'Del PDF a tu semana en 3 pasos', dur: '1:27', src: 'tutoriales/plan-ia.mp4', poster: 'tutoriales/plan-ia.jpg', try: 'planAI' },
+    { id: 'plan-ia', title: 'Tu plan del entrenador con una IA', sub: 'Del PDF a tu semana en 3 pasos', dur: '1:27', src: 'tutoriales/plan-ia.mp4', poster: 'tutoriales/plan-ia.jpg', teaser: 'tutoriales/plan-ia-teaser.mp4', try: 'planAI' },
   ];
   // Color por tipo: Nuevo, morado; Mejora, verde azulado.
   const TAGS = { nuevo: { txt: 'Nuevo', bg: '#4f46e5', dk: '#312e81' }, mejora: { txt: 'Mejora', bg: '#0f766e', dk: '#134e4a' } };
@@ -30,6 +31,10 @@ const VNews = (() => {
   const seen = () => { try { return JSON.parse(ls(SEEN_KEY) || '[]'); } catch (e) { return []; } };
   const markSeen = (id) => { const s = seen(); if (!s.includes(id)) { s.push(id); ls(SEEN_KEY, JSON.stringify(s)); } };
   const tuto = (id) => TUTOS.find(t => t.id === id);
+  // La barra del sistema (theme-color) toma el color de lo que está a pantalla completa.
+  let _tinted = null;
+  const tint = (c) => { const m = document.querySelector('meta[name="theme-color"]'); if (!m) return; if (_tinted === null) _tinted = m.content; m.content = c; };
+  const untint = () => { const m = document.querySelector('meta[name="theme-color"]'); if (m && _tinted !== null) m.content = _tinted; _tinted = null; };
   const fecha = (iso) => new Date(iso + 'T12:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
 
   // 5 toques en el pie de Más: activa o quita la vista previa.
@@ -77,14 +82,18 @@ const VNews = (() => {
     function show() {
       const s = list[i], tg = TAGS[s.tag] || TAGS.nuevo, tv = s.video && tuto(s.video);
       ov.style.setProperty('--nv-bg', tg.bg); ov.style.setProperty('--nv-dk', tg.dk);
-      ov.innerHTML = `<div class="nv-in">
+      tint(tv ? '#000' : tg.bg);
+      // Con vídeo: el avance se ve de fondo a pantalla completa y el texto va abajo. Solo
+      // el botón del centro abre el vídeo: tocar a los lados sigue pasando historias.
+      ov.classList.toggle('nv-media', !!tv);
+      const txt = `<div class="nv-tags"><span class="nv-tag">${tg.txt}</span>${tv ? `<span class="nv-tag2">Con vídeo</span>` : ''}</div>
+        <h2 class="nv-title">${esc(s.title)}</h2>
+        <p class="nv-text">${esc(s.text)}</p>`;
+      ov.innerHTML = `${tv ? `<video class="nv-bgv" src="${tv.teaser}" poster="${tv.poster}" muted autoplay loop playsinline></video><div class="nv-shade"></div>` : ''}<div class="nv-in">
         <div class="nv-bars">${list.map((_, k) => `<span><i style="width:${k < i ? 100 : 0}%"></i></span>`).join('')}</div>
         <div class="nv-head"><span class="nv-logo">T</span>Novedades<span class="nv-sp"></span><button class="nv-x" aria-label="Cerrar">${UI.icon('x', 22)}</button></div>
-        <div class="nv-tags"><span class="nv-tag">${tg.txt}</span>${tv ? `<span class="nv-tag2">Con vídeo</span>` : ''}</div>
-        <h2 class="nv-title">${esc(s.title)}</h2>
-        <p class="nv-text">${esc(s.text)}</p>
-        ${tv ? `<button class="nv-poster" data-video><img src="${tv.poster}" alt=""><span class="nv-play">${UI.icon('play', 26)}</span><span class="nv-pl">Ver el vídeo<small>${tv.dur} · se entiende sin sonido</small></span></button>` : visual(s.visual)}
-        <div class="nv-sp"></div>
+        ${tv ? `<div class="nv-sp"></div><button class="nv-watch" data-video><span class="nv-play">${UI.icon('play', 30)}</span><span class="nv-watch-l">Ver el vídeo · ${tv.dur}</span></button><div class="nv-sp"></div>${txt}`
+          : `${txt}${visual(s.visual)}<div class="nv-sp"></div>`}
         <button class="nv-cta" data-cta>${s.try ? `Pruébalo ${UI.icon('chevronRight', 16)}` : (i < list.length - 1 ? 'Siguiente' : 'Listo')}</button>
         <p class="nv-foot">${i + 1} de ${list.length} · luego las tienes en Más → Novedades</p></div>`;
       ov.querySelector('.nv-x').onclick = (e) => { e.stopPropagation(); fin(); };
@@ -114,44 +123,63 @@ const VNews = (() => {
     show();
   }
   function close() {
-    document.querySelectorAll('.nv').forEach(o => { const v = o.querySelector('video'); if (v) v.pause(); o.remove(); });
+    document.querySelectorAll('.nv').forEach(o => { o.querySelectorAll('video').forEach(v => v.pause()); o.remove(); });
+    untint();
     if (!document.querySelector('.modal-overlay')) document.body.classList.remove('modal-open');
   }
 
   // ---- Vídeo a pantalla completa (dentro de la historia o desde Tutoriales) ----
+  // Como en WhatsApp: el vídeo ocupa toda la pantalla; un toque enseña los controles
+  // (cerrar, sonido, pausa, barra para avanzar) y se esconden solos si sigue en marcha.
   // back: al cerrar o «Seguir»; onTry: «Pruébalo ahora» al terminar (si el vídeo lo tiene).
   function video(app, t, back, onTry) {
     close();
     markSeen(t.id);
     const ov = document.createElement('div');
-    ov.className = 'nv nv-video';
+    ov.className = 'nv nv-video paused';
     document.body.appendChild(ov);
     document.body.classList.add('modal-open');
-    ov.innerHTML = `<div class="nv-in">
-      <div class="nv-bars"><span><i></i></span></div>
-      <div class="nv-head"><span class="nv-time">0:00 / ${t.dur}</span><span class="nv-sp"></span>
-        <button class="nv-snd" aria-label="Sonido">${UI.icon('volume', 18)}${UI.icon('volumeOff', 18)}</button>
-        <button class="nv-x" aria-label="Cerrar vídeo">${UI.icon('x', 22)}</button></div>
-      <video class="nv-v" src="${t.src}" poster="${t.poster}" playsinline preload="metadata"></video>
+    tint('#000');
+    ov.innerHTML = `<video class="nv-v" src="${t.src}" poster="${t.poster}" playsinline preload="metadata"></video>
+      <div class="nv-ui on">
+        <div class="nv-top"><button class="nv-x" aria-label="Cerrar vídeo">${UI.icon('x', 24)}</button><span class="nv-sp"></span>
+          <button class="nv-snd" aria-label="Sonido">${UI.icon('volume', 22)}${UI.icon('volumeOff', 22)}</button></div>
+        <button class="nv-big" aria-label="Reproducir o pausar">${UI.icon('play', 30)}${UI.icon('pause', 30)}</button>
+        <div class="nv-bot"><span class="nv-cur">0:00</span><input class="nv-seek" type="range" min="0" max="1000" value="0" aria-label="Avanzar o retroceder"><span class="nv-dur">${t.dur}</span></div>
+      </div>
       <div class="nv-end" hidden>
         ${onTry ? `<button class="nv-cta" data-try>Pruébalo ahora</button>` : ''}
-        <button class="nv-cta nv-ghost" data-back>${onTry ? 'Seguir' : 'Cerrar'}</button></div></div>`;
-    const v = ov.querySelector('video'), bar = ov.querySelector('.nv-bars i'), tm = ov.querySelector('.nv-time');
-    const snd = ov.querySelector('.nv-snd');
+        <button class="nv-cta nv-ghost" data-again>${UI.icon('refresh', 16)} Volver a verlo</button>
+        <button class="nv-cta nv-ghost" data-back>${onTry ? 'Seguir' : 'Cerrar'}</button></div>`;
+    const q = (c) => ov.querySelector(c);
+    const v = q('video'), ui = q('.nv-ui'), seek = q('.nv-seek'), end = q('.nv-end'), snd = q('.nv-snd');
     const mmss = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+    let hideT = 0, dragging = false;
+    const showUI = () => { ui.classList.add('on'); clearTimeout(hideT); if (!v.paused && !dragging) hideT = setTimeout(() => ui.classList.remove('on'), 2500); };
+    const hideUI = () => { clearTimeout(hideT); ui.classList.remove('on'); };
     const salir = () => { v.pause(); close(); if (back) back(); };
-    v.addEventListener('timeupdate', () => {
-      if (v.duration) bar.style.width = (v.currentTime / v.duration * 100) + '%';
-      tm.textContent = `${mmss(v.currentTime)} / ${v.duration ? mmss(v.duration) : t.dur}`;
+
+    ov.addEventListener('click', (e) => {
+      if (e.target.closest('button, input') || !end.hidden) return;
+      ui.classList.contains('on') ? hideUI() : showUI();
     });
-    v.addEventListener('ended', () => { ov.querySelector('.nv-end').hidden = false; });
-    v.addEventListener('play', () => { ov.querySelector('.nv-end').hidden = true; });
-    v.addEventListener('click', () => { v.paused ? v.play() : v.pause(); });
+    v.addEventListener('play', () => { ov.classList.remove('paused'); end.hidden = true; showUI(); });
+    v.addEventListener('pause', () => { ov.classList.add('paused'); clearTimeout(hideT); ui.classList.add('on'); });
+    v.addEventListener('loadedmetadata', () => { q('.nv-dur').textContent = mmss(v.duration); });
+    v.addEventListener('timeupdate', () => {
+      q('.nv-cur').textContent = mmss(v.currentTime);
+      if (v.duration && !dragging) seek.value = Math.round(v.currentTime / v.duration * 1000);
+    });
+    v.addEventListener('ended', () => { hideUI(); end.hidden = false; });
     v.addEventListener('error', () => { UI.toast('No se pudo cargar el vídeo. Mira tu conexión', 'err'); });
-    snd.onclick = () => { v.muted = !v.muted; snd.classList.toggle('off', v.muted); };
-    ov.querySelector('.nv-x').onclick = salir;
-    ov.querySelector('[data-back]').onclick = salir;
-    const tb = ov.querySelector('[data-try]');
+    seek.addEventListener('input', () => { dragging = true; clearTimeout(hideT); if (v.duration) v.currentTime = seek.value / 1000 * v.duration; });
+    seek.addEventListener('change', () => { dragging = false; showUI(); });
+    q('.nv-big').onclick = () => { v.paused ? v.play() : v.pause(); };
+    snd.onclick = () => { v.muted = !v.muted; snd.classList.toggle('off', v.muted); showUI(); };
+    q('.nv-x').onclick = salir;
+    q('[data-back]').onclick = salir;
+    q('[data-again]').onclick = () => { v.currentTime = 0; v.play(); };
+    const tb = q('[data-try]');
     if (tb) tb.onclick = () => { v.pause(); close(); onTry(); };
     // Se ha llegado aquí con un toque: se puede arrancar con sonido.
     v.play().catch(() => { v.muted = true; snd.classList.add('off'); v.play().catch(() => {}); });
