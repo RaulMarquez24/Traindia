@@ -1588,10 +1588,10 @@ body.has-active-bar .dv-start { bottom: calc(var(--nav-h) + var(--safe-bottom) +
 /* Historia sin vídeo: capturas de la app dentro de un móvil (dos se van turnando). */
 .nv-stage { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 18px 0; }
 .nv-phone { height: 100%; max-height: 560px; aspect-ratio: 390 / 844; position: relative; border: 7px solid #0b0b0f; border-radius: 34px; overflow: hidden; background: #0b0b0f; box-shadow: 0 18px 40px rgba(0,0,0,.35); animation: nvUp .5s ease-out; }
-.nv-phone img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: top; animation: nvZoom 8s ease-out forwards; }
+/* contain y no cover: la captura entera, sin comerse los bordes (el marco ya ocupa su sitio). */
+.nv-phone img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
 .nv-phone.nv-two img:nth-child(2) { opacity: 0; animation: nvSwap 5.6s ease-in-out infinite; }
 @keyframes nvUp { from { transform: translateY(24px); opacity: 0; } to { transform: none; opacity: 1; } }
-@keyframes nvZoom { from { transform: scale(1); } to { transform: scale(1.05); } }
 @keyframes nvSwap { 0%, 40% { opacity: 0; } 50%, 90% { opacity: 1; } 100% { opacity: 0; } }
 /* Reproductor tipo WhatsApp: un toque enseña los controles, se esconden solos. */
 .nv-video { background: #000; }
@@ -1626,7 +1626,7 @@ body.has-active-bar .dv-start { bottom: calc(var(--nav-h) + var(--safe-bottom) +
 .lr-tags b { background: #fff; color: var(--d); padding: 2px 8px; border-radius: 999px; }
 .lr-tags i { font-style: normal; background: rgba(0,0,0,.3); padding: 2px 8px; border-radius: 999px; display: inline-flex; align-items: center; gap: 3px; }
 .lr-ph { flex: 1; min-height: 0; align-self: center; aspect-ratio: 390 / 844; border: 4px solid #0b0b0f; border-radius: 16px; overflow: hidden; background: #0b0b0f; }
-.lr-ph img { width: 100%; height: 100%; object-fit: cover; object-position: top; display: block; }
+.lr-ph img { width: 100%; height: 100%; object-fit: contain; display: block; }
 .lr-new-c strong { font-size: 15px; line-height: 1.2; }
 .lr-tuto { flex: none; width: 132px; aspect-ratio: 9 / 16; border: 0; border-radius: 16px; position: relative; overflow: hidden; padding: 0; background: #111; cursor: pointer; scroll-snap-align: start; text-align: left; }
 .lr-tuto img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
@@ -1647,7 +1647,7 @@ body.has-active-bar .dv-start { bottom: calc(var(--nav-h) + var(--safe-bottom) +
 .lr-tips { display: flex; flex-direction: column; gap: 8px; }
 .lr-tip { display: flex; gap: 12px; align-items: center; background: var(--bg-card); border: 1px solid var(--line); border-radius: 14px; padding: 8px 12px 8px 8px; text-align: left; color: var(--ink); cursor: pointer; width: 100%; }
 .lr-mini { width: 46px; aspect-ratio: 390 / 844; border: 3px solid #0b0b0f; border-radius: 9px; overflow: hidden; flex: none; position: relative; background: #0b0b0f; }
-.lr-mini img { width: 100%; height: 100%; object-fit: cover; object-position: top; display: block; }
+.lr-mini img { width: 100%; height: 100%; object-fit: contain; display: block; }
 .lr-mini i { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: #fff; background: rgba(0,0,0,.35); }
 .lr-tip-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 .lr-tip-txt strong { font-size: 15px; line-height: 1.25; }
