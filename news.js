@@ -3,7 +3,10 @@
 // entrar, una vez, y solo en reposo (maybeShow).
 // Regla: con un entreno en marcha no se saca nada de esto solo (ver app.isIdle).
 const VNews = (() => {
-  const NEWS_SEEN_KEY = 'traindia.newsSeen';
+  // Clave nueva desde v2.64.2: la v2.64.0 marcaba las novedades como vistas solo con
+  // aparecer, así que se empieza de cero para todos (y se borra la vieja).
+  const NEWS_SEEN_KEY = 'traindia.newsVisto';
+  try { localStorage.removeItem('traindia.newsSeen'); } catch (e) {}
   const SEEN_KEY = 'traindia.tutosSeen';
   const TIPS_SEEN_KEY = 'traindia.tipsSeen';
   const { cats: CATS, tips: TIPS } = typeof TIPS_DATA !== 'undefined' ? TIPS_DATA : { cats: [], tips: [] };
