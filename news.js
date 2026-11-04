@@ -68,9 +68,10 @@ const VNews = (() => {
   const autoplay = () => (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) ? '' : 'autoplay';
   const fecha = (iso) => new Date(iso + 'T12:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
 
-  // Al entrar: el último anuncio, una sola vez, y solo si estás en reposo en Semana (sin
-  // entreno en marcha ni a medias, sin ventanas abiertas, sin nada escrito). Si no se
-  // puede ese día, no se insiste: queda en Aprende → Lo nuevo.
+  // Al entrar: el último anuncio, y solo si estás en reposo en Semana (sin entreno en
+  // marcha ni a medias, sin ventanas abiertas, sin nada escrito). Cuenta como visto cuando
+  // lo cierras, llegas al final, tocas «Pruébalo» o abres el vídeo: si desaparece porque la
+  // app se recargó o la cerraste, vuelve a salir la próxima vez.
   function maybeShow(app) {
     const n = NEWS[0];
     if (!n || ls(NEWS_SEEN_KEY) === n.id) return;
@@ -78,22 +79,23 @@ const VNews = (() => {
     const alta = app.mainUser && app.mainUser.createdAt;
     if (alta && alta > new Date(n.date + 'T00:00:00').getTime()) { ls(NEWS_SEEN_KEY, n.id); return; }
     setTimeout(() => {
-      if (app._live || app.currentView !== 'week' || document.visibilityState !== 'visible' || !app.isIdle()) return;
-      ls(NEWS_SEEN_KEY, n.id);
-      play(app, n.stories, 0);
+      if (app._live || app._updReady || app.currentView !== 'week' || document.visibilityState !== 'visible' || !app.isIdle()) return;
+      play(app, n.stories, 0, null, () => ls(NEWS_SEEN_KEY, n.id));
     }, 1200);
   }
 
   // ---- Reproductor de historias ----
   // list: historias; start: índice; onEnd: al cerrar. Va encima de todo (no es un modal).
-  function play(app, list, start = 0, onEnd) {
+  // onSeen: se llama cuando de verdad se ha visto (cerrar, terminar, «Pruébalo» o el vídeo).
+  function play(app, list, start = 0, onEnd, onSeen) {
     close();
     let i = start, t0 = 0, el = 0, paused = false, raf = 0, holdT = 0, held = false;
     const ov = document.createElement('div');
     ov.className = 'nv';
     document.body.appendChild(ov);
     document.body.classList.add('modal-open');
-    const fin = () => { cancelAnimationFrame(raf); close(); if (onEnd) onEnd(); };
+    const visto = () => { if (onSeen) onSeen(); };
+    const fin = () => { cancelAnimationFrame(raf); visto(); close(); if (onEnd) onEnd(); };
     const next = () => { if (i < list.length - 1) { i++; show(); } else fin(); };
     const prev = () => { if (i > 0) i--; show(); };
 
@@ -116,9 +118,9 @@ const VNews = (() => {
         <button class="nv-cta" data-cta>${s.try ? `Pruébalo ${UI.icon('chevronRight', 16)}` : (i < list.length - 1 ? 'Siguiente' : 'Listo')}</button>
         <p class="nv-foot">${i + 1} de ${list.length}${s.tipId ? '' : ' · luego las tienes en Más → Aprende'}</p></div>`;
       ov.querySelector('.nv-x').onclick = (e) => { e.stopPropagation(); fin(); };
-      ov.querySelector('[data-cta]').onclick = (e) => { e.stopPropagation(); if (s.try) { cancelAnimationFrame(raf); tryIt(app, s.try, () => play(app, list, i + 1 < list.length ? i + 1 : i, onEnd), i + 1 < list.length); } else next(); };
+      ov.querySelector('[data-cta]').onclick = (e) => { e.stopPropagation(); if (s.try) { cancelAnimationFrame(raf); visto(); tryIt(app, s.try, () => play(app, list, i + 1 < list.length ? i + 1 : i, onEnd, onSeen), i + 1 < list.length); } else next(); };
       const pv = ov.querySelector('[data-video]');
-      if (pv) pv.onclick = (e) => { e.stopPropagation(); cancelAnimationFrame(raf); video(app, tv, () => play(app, list, i, onEnd), s.try ? () => { fin(); tryIt(app, s.try); } : null); };
+      if (pv) pv.onclick = (e) => { e.stopPropagation(); cancelAnimationFrame(raf); visto(); video(app, tv, () => play(app, list, i, onEnd, onSeen), s.try ? () => { fin(); tryIt(app, s.try); } : null); };
       el = 0; t0 = performance.now(); cancelAnimationFrame(raf); tick();
     }
     function tick() {
