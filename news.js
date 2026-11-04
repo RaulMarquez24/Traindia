@@ -235,11 +235,14 @@ const VNews = (() => {
       <div id="lrRes" hidden></div>
       <div id="lrHome">
         ${n ? `<div class="lr-h"><span>Lo nuevo · ${fecha(n.date)}</span></div>
-        <div class="lr-row">${n.stories.map((st, k) => { const tg = TAGS[st.tag] || TAGS.nuevo, img = st.video ? (tuto(st.video) || {}).poster : (st.shots || [])[0];
-          return `<button class="lr-new-c" data-story="${k}" style="--c:${tg.bg};--d:${tg.dk}">
-            <span class="lr-tags"><b>${tg.txt}</b>${st.video ? `<i>${UI.icon('play', 11)} vídeo</i>` : ''}</span>
-            <span class="lr-ph">${img ? `<img src="${img}" alt="" loading="lazy">` : ''}</span>
-            <strong>${esc(st.title)}</strong></button>`; }).join('')}</div>` : ''}
+        <div class="lr-row">${n.stories.map((st, k) => { const tg = TAGS[st.tag] || TAGS.nuevo, tv = st.video && tuto(st.video), img = (st.shots || [])[0];
+          // Con vídeo: el avance en bucle a toda la tarjeta. Sin vídeo: el móvil grande e inclinado, asomando.
+          return `<button class="lr-new-c${tv ? ' lr-v' : ''}" data-story="${k}" style="--c:${tg.bg};--d:${tg.dk}">
+            ${tv ? `<video class="lr-bgv" src="${tv.teaser}" poster="${tv.poster}" muted autoplay loop playsinline></video><span class="lr-shade"></span>`
+              : `<span class="lr-ph">${img ? `<img src="${img}" alt="" loading="lazy">` : ''}</span>`}
+            <span class="lr-tags"><b>${tg.txt}</b>${tv ? `<i>${UI.icon('play', 11)} vídeo</i>` : ''}</span>
+            <strong>${esc(st.title)}</strong>
+            ${tv ? `<span class="lr-vplay">${UI.icon('play', 20)}</span>` : ''}</button>`; }).join('')}</div>` : ''}
         ${TUTOS.length ? `<div class="lr-h"><span>Tutoriales</span>${TUTOS.length > 2 ? '<button class="link-btn" data-go="tutorials">Ver todos</button>' : ''}</div>
         <div class="lr-row">${TUTOS.map(t => tutoCard(t, vistos)).join('')}</div>` : ''}
         <div class="lr-h"><span>Por temas</span><small>${TIPS.length} trucos</small></div>
