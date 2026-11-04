@@ -17,7 +17,8 @@ const VNews = (() => {
   ];
   // Color por tipo: Nuevo, morado; Mejora, verde azulado.
   const TAGS = { nuevo: { txt: 'Nuevo', bg: '#4f46e5', dk: '#312e81' }, mejora: { txt: 'Mejora', bg: '#0f766e', dk: '#134e4a' } };
-  // Cada anuncio, máximo 4 historias; el resto, solo en la lista. Sin vídeo, capturas
+  // Cada anuncio, máximo 4 historias. En Aprende solo sale el último: lo anterior queda
+  // como truco en su tema (cada novedad tiene su truco en tips.js). Sin vídeo, capturas
   // de la app (con datos de ejemplo, en novedades/) dentro de un móvil.
   const NEWS = [
     { id: '2026-11-04', date: '2026-11-04', stories: [
@@ -204,23 +205,6 @@ const VNews = (() => {
     });
   }
 
-  // ---- Más → Novedades ----
-  function listView() {
-    return `<div class="section">
-      <p class="nv-prev">Vista previa: solo la ves tú (5 toques al pie de Más para quitarla).</p>
-      ${NEWS.map(n => `<div class="more-sec">${fecha(n.date)}</div>
-        <div class="more-group">${n.stories.map((s, k) => `<button class="more-row" data-news="${n.id}" data-k="${k}">
-          <span class="more-ic" style="background:${(TAGS[s.tag] || TAGS.nuevo).bg}">${UI.icon(s.video ? 'play' : 'star', 18)}</span>
-          <span class="more-txt"><strong>${esc(s.title)}</strong><span>${(TAGS[s.tag] || TAGS.nuevo).txt}${s.video ? ' · con vídeo' : ''}</span></span><span class="chev">›</span></button>`).join('')}</div>`).join('')}
-    </div>`;
-  }
-  function listBind(app, root) {
-    root.querySelectorAll('[data-news]').forEach(b => b.addEventListener('click', () => {
-      const n = NEWS.find(x => x.id === b.dataset.news);
-      if (n) play(app, n.stories, +b.dataset.k);
-    }));
-  }
-
   // ---- Más → Tutoriales ----
   function tutosView() {
     const vistos = seen();
@@ -250,7 +234,7 @@ const VNews = (() => {
       <label class="lr-search">${UI.icon('search', 18)}<input id="lrQ" type="search" placeholder="Busca: descanso, copia, IA…" autocomplete="off" enterkeyhint="search"></label>
       <div id="lrRes" hidden></div>
       <div id="lrHome">
-        ${n ? `<div class="lr-h"><span>Lo nuevo · ${fecha(n.date)}</span><button class="link-btn" data-all-news>Ver todo</button></div>
+        ${n ? `<div class="lr-h"><span>Lo nuevo · ${fecha(n.date)}</span></div>
         <div class="lr-row">${n.stories.map((st, k) => { const tg = TAGS[st.tag] || TAGS.nuevo, img = st.video ? (tuto(st.video) || {}).poster : (st.shots || [])[0];
           return `<button class="lr-new-c" data-story="${k}" style="--c:${tg.bg};--d:${tg.dk}">
             <span class="lr-tags"><b>${tg.txt}</b>${st.video ? `<i>${UI.icon('play', 11)} vídeo</i>` : ''}</span>
@@ -280,8 +264,6 @@ const VNews = (() => {
   function learnBind(app, root) {
     const n = NEWS[0];
     root.querySelectorAll('[data-story]').forEach(b => b.addEventListener('click', () => play(app, n.stories, +b.dataset.story)));
-    const all = root.querySelector('[data-all-news]');
-    if (all) all.addEventListener('click', () => app.go('news'));
     root.querySelectorAll('[data-go]').forEach(b => b.addEventListener('click', () => app.go(b.dataset.go)));
     root.querySelectorAll('[data-cat]').forEach(b => b.addEventListener('click', () => app.go('learnCat', { cat: b.dataset.cat })));
     bindTutos(app, root);
@@ -330,5 +312,5 @@ const VNews = (() => {
     ] };
   }
 
-  return { tapFoot, moreGroup, learnView, learnBind, catView, catBind, listView, listBind, tutosView, tutosBind, play, video, close, preview };
+  return { tapFoot, moreGroup, learnView, learnBind, catView, catBind, tutosView, tutosBind, play, video, close, preview };
 })();
