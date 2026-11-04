@@ -45,6 +45,8 @@ const VNews = (() => {
   let _tinted = null;
   const tint = (c) => { const m = document.querySelector('meta[name="theme-color"]'); if (!m) return; if (_tinted === null) _tinted = m.content; m.content = c; };
   const untint = () => { const m = document.querySelector('meta[name="theme-color"]'); if (m && _tinted !== null) m.content = _tinted; _tinted = null; };
+  // Con «reducir movimiento» activado en el móvil, los avances de vídeo no arrancan solos.
+  const autoplay = () => (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) ? '' : 'autoplay';
   const fecha = (iso) => new Date(iso + 'T12:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
 
   // 5 toques en el pie de Más: activa o quita la vista previa.
@@ -84,7 +86,7 @@ const VNews = (() => {
       const txt = `<div class="nv-tags"><span class="nv-tag">${tg.txt}</span>${tv ? `<span class="nv-tag2">Con vídeo</span>` : ''}</div>
         <h2 class="nv-title">${esc(s.title)}</h2>
         <p class="nv-text">${esc(s.text)}</p>`;
-      ov.innerHTML = `${tv ? `<video class="nv-bgv" src="${tv.teaser}" poster="${tv.poster}" muted autoplay loop playsinline></video><div class="nv-shade"></div>` : ''}<div class="nv-in">
+      ov.innerHTML = `${tv ? `<video class="nv-bgv" src="${tv.teaser}" poster="${tv.poster}" muted ${autoplay()} loop playsinline></video><div class="nv-shade"></div>` : ''}<div class="nv-in">
         <div class="nv-bars">${list.map((_, k) => `<span><i style="width:${k < i ? 100 : 0}%"></i></span>`).join('')}</div>
         <div class="nv-head"><span class="nv-logo">T</span>${s.head || 'Novedades'}<span class="nv-sp"></span><button class="nv-x" aria-label="Cerrar">${UI.icon('x', 22)}</button></div>
         ${tv ? `<div class="nv-sp"></div><button class="nv-watch" data-video><span class="nv-play">${UI.icon('play', 30)}</span><span class="nv-watch-l">Ver el vídeo · ${tv.dur}</span></button><div class="nv-sp"></div>${txt}`
@@ -238,7 +240,7 @@ const VNews = (() => {
         <div class="lr-row">${n.stories.map((st, k) => { const tg = TAGS[st.tag] || TAGS.nuevo, tv = st.video && tuto(st.video), img = (st.shots || [])[0];
           // Con vídeo: el avance en bucle a toda la tarjeta. Sin vídeo: el móvil grande e inclinado, asomando.
           return `<button class="lr-new-c${tv ? ' lr-v' : ''}" data-story="${k}" style="--c:${tg.bg};--d:${tg.dk}">
-            ${tv ? `<video class="lr-bgv" src="${tv.teaser}" poster="${tv.poster}" muted autoplay loop playsinline></video><span class="lr-shade"></span>`
+            ${tv ? `<video class="lr-bgv" src="${tv.teaser}" poster="${tv.poster}" muted ${autoplay()} loop playsinline></video><span class="lr-shade"></span>`
               : `<span class="lr-ph">${img ? `<img src="${img}" alt="" loading="lazy">` : ''}</span>`}
             <span class="lr-tags"><b>${tg.txt}</b>${tv ? `<i>${UI.icon('play', 11)} vídeo</i>` : ''}</span>
             <strong>${esc(st.title)}</strong>
