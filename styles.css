@@ -1567,7 +1567,6 @@ body.has-active-bar .dv-start { bottom: calc(var(--nav-h) + var(--safe-bottom) +
 .nv-x, .nv-snd { background: none; border: 0; color: #fff; padding: 6px; display: flex; cursor: pointer; }
 .nv-snd svg:last-child, .nv-snd.off svg:first-child { display: none; }
 .nv-snd.off svg:last-child { display: block; }
-.nv-time { font-family: 'IBM Plex Mono', monospace; font-size: 13px; }
 .nv-tags { display: flex; gap: 6px; margin-top: clamp(16px, 5vh, 36px); }
 .nv-tag { background: #fff; color: var(--nv-dk, #312e81); font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 999px; }
 .nv-tag2 { background: rgba(255,255,255,.2); font-size: 12px; padding: 3px 10px; border-radius: 999px; }
@@ -1576,13 +1575,31 @@ body.has-active-bar .dv-start { bottom: calc(var(--nav-h) + var(--safe-bottom) +
 .nv-cta { background: #fff; color: var(--nv-dk, #312e81); border: 0; border-radius: 14px; padding: 14px; font-size: 16px; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 4px; width: 100%; cursor: pointer; }
 .nv-cta.nv-ghost { background: transparent; color: #fff; border: 1px solid rgba(255,255,255,.5); font-weight: 600; }
 .nv-foot { text-align: center; font-size: 12px; color: rgba(255,255,255,.75); margin: 8px 0 0; }
-.nv-poster { margin: 20px auto 0; display: flex; align-items: center; gap: 16px; background: none; border: 0; color: #fff; cursor: pointer; text-align: left; }
-.nv-poster img { width: min(34vw, 150px); aspect-ratio: 9 / 16; object-fit: cover; border-radius: 14px; border: 2px solid rgba(255,255,255,.6); }
-.nv-play { width: 60px; height: 60px; border-radius: 50%; background: #fff; color: var(--nv-dk, #312e81); display: flex; align-items: center; justify-content: center; flex: none; }
-.nv-pl { display: flex; flex-direction: column; font-size: 16px; font-weight: 700; }
-.nv-pl small { font-size: 12px; font-weight: 400; color: rgba(255,255,255,.75); margin-top: 2px; }
-.nv-v { flex: 1; min-height: 0; width: 100%; object-fit: contain; margin-top: 10px; border-radius: 12px; background: #000; }
-.nv-end { display: flex; gap: 8px; margin-top: 12px; }
+/* Historia con vídeo: el avance de fondo a pantalla completa, el texto abajo. */
+.nv-media { background: #000; }
+.nv-bgv { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.nv-shade { position: absolute; inset: 0; background: linear-gradient(rgba(0,0,0,.55), rgba(0,0,0,.25) 20%, rgba(0,0,0,.25) 45%, var(--nv-dk) 80%); }
+.nv-media .nv-in { position: relative; }
+.nv-media .nv-tags { margin-top: 0; }
+.nv-media .nv-tag2 { background: rgba(0,0,0,.5); }
+.nv-watch { align-self: center; display: flex; flex-direction: column; align-items: center; gap: 10px; background: none; border: 0; color: #fff; cursor: pointer; }
+.nv-watch-l { background: rgba(0,0,0,.6); border-radius: 999px; padding: 6px 14px; font-size: 15px; font-weight: 700; }
+.nv-play { width: 76px; height: 76px; border-radius: 50%; background: rgba(255,255,255,.94); color: var(--nv-dk, #312e81); display: flex; align-items: center; justify-content: center; padding-left: 4px; box-sizing: border-box; }
+.nv-media .nv-text { margin-bottom: 18px; }
+/* Reproductor tipo WhatsApp: un toque enseña los controles, se esconden solos. */
+.nv-video { background: #000; }
+.nv-v { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; }
+.nv-ui { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: space-between; opacity: 0; pointer-events: none; transition: opacity .25s; }
+.nv-ui.on { opacity: 1; pointer-events: auto; }
+.nv-top { display: flex; align-items: center; padding: calc(var(--safe-top) + 8px) 10px 40px; background: linear-gradient(rgba(0,0,0,.6), transparent); }
+.nv-big { align-self: center; width: 72px; height: 72px; border-radius: 50%; background: rgba(0,0,0,.5); border: 0; color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.nv-big svg:first-child { display: none; }
+.nv-video.paused .nv-big svg:first-child { display: block; margin-left: 4px; }
+.nv-video.paused .nv-big svg:last-child { display: none; }
+.nv-bot { display: flex; align-items: center; gap: 12px; padding: 40px 16px calc(var(--safe-bottom) + 18px); background: linear-gradient(transparent, rgba(0,0,0,.65)); font-family: 'IBM Plex Mono', monospace; font-size: 13px; }
+.nv-seek { flex: 1; accent-color: #fff; height: 28px; margin: 0; }
+.nv-end { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: flex-end; gap: 8px; padding: 0 18px calc(var(--safe-bottom) + 24px); background: rgba(0,0,0,.7); }
+.nv-end > * { max-width: 480px; margin: 0 auto; }
 .nv-end[hidden] { display: none; }
 .nv-vis { margin-top: 22px; height: 170px; display: flex; align-items: center; justify-content: center; position: relative; }
 .nv-amigo .nv-ph { position: absolute; left: 4%; top: 15px; width: 74px; height: 130px; border-radius: 14px; background: rgba(255,255,255,.16); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; font-size: 12px; }
