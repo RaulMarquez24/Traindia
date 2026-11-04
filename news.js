@@ -1,10 +1,9 @@
-// «Aprende»: novedades (historias a pantalla completa), tutoriales (vídeos) y trucos
-// por temas (tips.js), con buscador. De momento en VISTA PREVIA: no le salta a nadie al
-// entrar. Solo se ve si activas la vista previa tocando 5 veces «Traindía · vX» al pie
-// de Más; entonces aparece «Aprende» en Más (solo en ese móvil).
+// «Aprende» (Más → Aprende): novedades (historias a pantalla completa), tutoriales
+// (vídeos) y trucos por temas (tips.js), con buscador. El último anuncio sale solo al
+// entrar, una vez, y solo en reposo (maybeShow).
 // Regla: con un entreno en marcha no se saca nada de esto solo (ver app.isIdle).
 const VNews = (() => {
-  const PREVIEW_KEY = 'traindia.newsPreview';
+  const NEWS_SEEN_KEY = 'traindia.newsSeen';
   const SEEN_KEY = 'traindia.tutosSeen';
   const TIPS_SEEN_KEY = 'traindia.tipsSeen';
   const { cats: CATS, tips: TIPS } = typeof TIPS_DATA !== 'undefined' ? TIPS_DATA : { cats: [], tips: [] };
@@ -52,7 +51,6 @@ const VNews = (() => {
 
   const esc = (s) => UI.esc(s == null ? '' : String(s));
   const ls = (k, v) => { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; } };
-  const preview = () => ls(PREVIEW_KEY) === '1';
   const seen = () => { try { return JSON.parse(ls(SEEN_KEY) || '[]'); } catch (e) { return []; } };
   const markSeen = (id) => { const s = seen(); if (!s.includes(id)) { s.push(id); ls(SEEN_KEY, JSON.stringify(s)); } };
   const tuto = (id) => TUTOS.find(t => t.id === id);
@@ -70,17 +68,20 @@ const VNews = (() => {
   const autoplay = () => (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) ? '' : 'autoplay';
   const fecha = (iso) => new Date(iso + 'T12:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
 
-  // 5 toques en el pie de Más: activa o quita la vista previa.
-  let taps = 0, tapT = 0;
-  function tapFoot(app) {
-    const now = Date.now();
-    taps = now - tapT < 800 ? taps + 1 : 1; tapT = now;
-    if (taps < 5) return;
-    taps = 0;
-    const on = !preview();
-    ls(PREVIEW_KEY, on ? '1' : '0');
-    UI.toast(on ? 'Vista previa de novedades activada' : 'Vista previa de novedades quitada');
-    app.render();
+  // Al entrar: el último anuncio, una sola vez, y solo si estás en reposo en Semana (sin
+  // entreno en marcha ni a medias, sin ventanas abiertas, sin nada escrito). Si no se
+  // puede ese día, no se insiste: queda en Aprende → Lo nuevo.
+  function maybeShow(app) {
+    const n = NEWS[0];
+    if (!n || ls(NEWS_SEEN_KEY) === n.id) return;
+    // Quien se acaba de dar de alta no necesita «novedades»: para él todo es nuevo.
+    const alta = app.mainUser && app.mainUser.createdAt;
+    if (alta && alta > new Date(n.date + 'T00:00:00').getTime()) { ls(NEWS_SEEN_KEY, n.id); return; }
+    setTimeout(() => {
+      if (app._live || app.currentView !== 'week' || document.visibilityState !== 'visible' || !app.isIdle()) return;
+      ls(NEWS_SEEN_KEY, n.id);
+      play(app, n.stories, 0);
+    }, 1200);
   }
 
   // ---- Reproductor de historias ----
@@ -236,7 +237,6 @@ const VNews = (() => {
         <span class="nv-thumb"><img src="${t.poster}" alt="" loading="lazy"><em>${t.dur}</em><i>${UI.icon('play', 18)}</i></span>
         <span class="nv-tu-txt"><strong>${esc(t.title)}</strong><span>${esc(t.sub)}</span>
           ${vistos.includes(t.id) ? `<small class="ok">${UI.icon('check', 13)} Visto</small>` : '<small class="new">Nuevo</small>'}</span></button>`).join('')}</div>
-      <p class="nv-prev">Vista previa: solo la ves tú.</p>
     </div>`;
   }
   function tutosBind(app, root) { bindTutos(app, root); }
@@ -287,7 +287,6 @@ const VNews = (() => {
         <div class="lr-cats">${CATS.map(c => { const ts = TIPS.filter(t => t.cat === c.id), nuevos = ts.filter(t => !seenIds.includes(t.id)).length;
           return `<button class="lr-cat" data-cat="${c.id}"><span class="lr-cat-ic" style="background:${c.bg}">${UI.icon(c.icon, 18)}</span>
             <strong>${esc(c.name)}</strong><small>${ts.length} trucos${nuevos && nuevos < ts.length ? ` · ${nuevos} sin ver` : ''}</small></button>`; }).join('')}</div>
-        <p class="nv-prev">Vista previa: solo la ves tú (5 toques al pie de Más para quitarla).</p>
       </div>
     </div>`;
   }
@@ -351,14 +350,13 @@ const VNews = (() => {
     bindTips(app, root, () => TIPS.filter(t => t.cat === c.id));
   }
 
-  // Fila «Aprende» para Más (solo con la vista previa activa).
+  // Fila «Aprende» para Más.
   function moreGroup() {
-    if (!preview()) return null;
     const sinVer = TIPS.filter(t => !tipsSeen().includes(t.id)).length + TUTOS.filter(t => !seen().includes(t.id)).length;
     return { title: 'Aprende', color: 'var(--strong)', rows: [
       { v: 'learn', icon: 'star', label: 'Aprende', sub: `Novedades, tutoriales y ${TIPS.length} trucos${sinVer ? ` · ${sinVer} sin ver` : ''}` },
     ] };
   }
 
-  return { tapFoot, moreGroup, learnView, learnBind, catView, catBind, tutosView, tutosBind, play, video, close, preview };
+  return { maybeShow, moreGroup, learnView, learnBind, catView, catBind, tutosView, tutosBind, play, video, close };
 })();
