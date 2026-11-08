@@ -1,5 +1,5 @@
 // ============================================================
-// VISTAS: Progreso — corporal, por ejercicio, comparativa
+// VISTAS: Progreso — resumen, corporal, por ejercicio, récords y comparativa
 // ============================================================
 
 const VProgress = (() => {
@@ -291,48 +291,252 @@ const VProgress = (() => {
     return out;
   }
 
+  // ---------- utilidades de fechas ----------
+  const DAY = 86400000;
+  const isoMs = (iso) => new Date(iso + 'T00:00:00').getTime();
+  const isoOf = (ms) => { const d = new Date(ms); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+  const diasEntre = (a, b) => Math.round((isoMs(b) - isoMs(a)) / DAY);
+  const fmt1 = (v) => (Math.round(v * 10) / 10).toLocaleString('es-ES', { maximumFractionDigits: 1 });
+  const signo = (v, dec = 1) => { const r = Math.round(v * 10 ** dec) / 10 ** dec; return (r > 0 ? '+' : r < 0 ? '−' : '±') + Math.abs(r).toLocaleString('es-ES', { maximumFractionDigits: dec }); };
+  const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+
+  // ---------- PESO: objetivo, «el más bajo desde», tendencia ----------
+  const GOALS = [{ value: 'bajar', label: 'Bajar' }, { value: 'subir', label: 'Subir' }, { value: 'mantener', label: 'Mantener' }, { value: '', label: 'Sin objetivo' }];
+  const NOTABLE_DIAS = 21; // «desde» solo cuenta si hace al menos 3 semanas que no estabas así
+
+  async function pesosDe(userId) {
+    return (await DB.progressOf(userId))
+      .filter(e => e.date && e.weight != null && e.weight !== '' && !isNaN(parseFloat(e.weight)))
+      .map(e => ({ date: e.date, kg: parseFloat(e.weight) }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+  }
+  // Qué tiene de especial tu último peso: el más bajo / alto desde cuándo, o estable desde cuándo.
+  function weightInsight(ws) {
+    if (!ws.length) return null;
+    const last = ws[ws.length - 1], prev = ws.slice(0, -1).reverse();
+    const lower = prev.find(e => e.kg <= last.kg), higher = prev.find(e => e.kg >= last.kg);
+    const low = !prev.length ? null : lower ? (diasEntre(lower.date, last.date) >= NOTABLE_DIAS ? { since: lower.date, ref: lower } : null) : (ws.length >= 3 ? { ever: true } : null);
+    const high = !prev.length ? null : higher ? (diasEntre(higher.date, last.date) >= NOTABLE_DIAS ? { since: higher.date, ref: higher } : null) : (ws.length >= 3 ? { ever: true } : null);
+    let stableFrom = null;
+    let mn = last.kg, mx = last.kg;
+    for (let i = ws.length - 1; i >= 0; i--) { mn = Math.min(mn, ws[i].kg); mx = Math.max(mx, ws[i].kg); if (mx - mn > 1.5) break; stableFrom = ws[i].date; }
+    const desde180 = ws.filter(e => diasEntre(e.date, last.date) <= 180);
+    const max = desde180.reduce((m, e) => (e.kg > m.kg ? e : m), last), min = desde180.reduce((m, e) => (e.kg < m.kg ? e : m), last);
+    return { last, low, high, stableFrom, max, min };
+  }
+  // Frase según tu objetivo (null si no hay nada que contar).
+  function weightPhrase(ins, goal) {
+    if (!ins) return null;
+    const d = (x) => UI.fmtDateShort(x);
+    const lowTxt = ins.low && (ins.low.ever ? 'Tu peso más bajo registrado' : `El más bajo desde el ${d(ins.low.since)}`);
+    const highTxt = ins.high && (ins.high.ever ? 'Tu peso más alto registrado' : `El más alto desde el ${d(ins.high.since)}`);
+    const sem = ins.stableFrom ? Math.floor(diasEntre(ins.stableFrom, ins.last.date) / 7) : 0;
+    if (goal === 'bajar') return lowTxt ? { txt: lowTxt, sub: ins.max.kg - ins.last.kg >= 1 ? `${signo(ins.last.kg - ins.max.kg)} kg desde tu máximo (${fmt1(ins.max.kg)} · ${d(ins.max.date)})` : '' } : null;
+    if (goal === 'subir') return highTxt ? { txt: highTxt, sub: ins.last.kg - ins.min.kg >= 1 ? `${signo(ins.last.kg - ins.min.kg)} kg desde tu mínimo (${fmt1(ins.min.kg)} · ${d(ins.min.date)})` : '' } : null;
+    if (goal === 'mantener') return sem >= 2 ? { txt: `Estable desde hace ${sem} semanas`, sub: 'Sin moverte más de 1,5 kg' } : null;
+    return lowTxt ? { txt: lowTxt, sub: '' } : highTxt ? { txt: highTxt, sub: '' } : null;
+  }
+  // Tendencia suavizada (media exponencial con constante de 7 días, según el hueco entre pesajes).
+  function trendOf(ws) {
+    let t = null, prev = null;
+    return ws.map(e => {
+      if (t == null) t = e.kg;
+      else { const a = 1 - Math.exp(-Math.max(1, diasEntre(prev, e.date)) / 7); t = t + a * (e.kg - t); }
+      prev = e.date;
+      return { x: e.date, y: Math.round(t * 100) / 100 };
+    });
+  }
+  // kg por semana: pendiente de la tendencia en las últimas 6 semanas (null si no hay datos para decirlo).
+  function weeklyRate(trend) {
+    if (trend.length < 3) return null;
+    const last = trend[trend.length - 1].x;
+    const pts = trend.filter(p => diasEntre(p.x, last) <= 42);
+    if (pts.length < 3 || diasEntre(pts[0].x, last) < 10) return null;
+    const xs = pts.map(p => diasEntre(pts[0].x, p.x)), ys = pts.map(p => p.y);
+    const mx = xs.reduce((a, b) => a + b, 0) / xs.length, my = ys.reduce((a, b) => a + b, 0) / ys.length;
+    const num = xs.reduce((a, x, i) => a + (x - mx) * (ys[i] - my), 0), den = xs.reduce((a, x) => a + (x - mx) ** 2, 0);
+    return den ? (num / den) * 7 : null;
+  }
+  const rateTxt = (r) => r == null ? '' : Math.abs(r) < 0.1 ? 'estable' : `${signo(r)} kg/semana`;
+
+  // ---------- RESUMEN ----------
+  const MAIN_METRICS = ['maxWeight', 'maxLoad', 'maxReps', 'distance', 'pace', 'maxTime', 'bestSet'];
+  const NO_MUSCULO = new Set(['calentamiento', 'movilidad', 'cardio', 'carrera', 'estiramientos', 'general']);
+  const RECIENTE_DIAS = 14;
+
+  // Logros de las últimas 2 semanas: peso, récords y «lo mejor desde».
+  async function logrosRecientes(app, uid) {
+    const hoy = DB.todayISO();
+    const out = [];
+    // Peso
+    const ws = await pesosDe(uid);
+    const ins = weightInsight(ws);
+    const goal = app.activeUser.weightGoal || '';
+    const ph = weightPhrase(ins, goal);
+    if (ph && diasEntre(ins.last.date, hoy) <= RECIENTE_DIAS) out.push({ kind: 'peso', date: ins.last.date, tag: `Peso · ${UI.fmtDateShort(ins.last.date)}`, big: `${fmt1(ins.last.kg)} kg`, txt: ph.txt, sub: ph.sub });
+    // Récords recientes (una tarjeta por ejercicio, con su marca principal)
+    const records = await computeRecords(app, uid);
+    const porEj = new Map();
+    const SIN_LOGRO = new Set(['calentamiento', 'movilidad', 'estiramientos']);
+    const CORRER = new Set(['carrera', 'cardio']);
+    records.forEach(r => {
+      if (!MAIN_METRICS.includes(r.metric)) return;
+      const g = UI.norm(r.ex.muscleGroup || '');
+      const cardio = ['distance', 'pace', 'bestSet'].includes(r.metric);
+      if (SIN_LOGRO.has(g) && !cardio) return;                          // calentar no es una marca (correr más km sí, esté donde esté)
+      if (r.metric === 'maxTime' && CORRER.has(g)) return;             // en carrera, la serie más larga es la más lenta
+      const cur = porEj.get(r.ex.name);
+      if (!cur || MAIN_METRICS.indexOf(r.metric) < MAIN_METRICS.indexOf(cur.metric)) porEj.set(r.ex.name, r);
+    });
+    const conRecord = new Set();
+    [...porEj.values()].filter(r => diasEntre(r.point.x, hoy) <= RECIENTE_DIAS).forEach(r => {
+      conRecord.add(r.ex.name);
+      out.push({ kind: 'record', date: r.point.x, tag: `Récord · ${UI.fmtDateShort(r.point.x)}`, big: fmtMetricValue(r.metric, r.point.y), txt: r.ex.name, sub: subDe(r.metric, r.point) });
+    });
+    // «Lo mejor desde»: lo último que hiciste no es récord, pero no lo igualabas desde hace un mes o más
+    const bodyWeights = await loadBodyWeights(uid);
+    for (const r of porEj.values()) {
+      if (conRecord.has(r.ex.name)) continue;
+      const pts = await exerciseSeries(uid, r.ex.name, r.metric, { bodyWeights });
+      const last = pts[pts.length - 1];
+      if (!last || diasEntre(last.x, hoy) > RECIENTE_DIAS) continue;
+      const antes = pts.slice(0, -1).reverse();
+      const igual = antes.find(p => !better(last, p, r.metric)); // la última vez que hiciste lo mismo o más
+      if (!igual || diasEntre(igual.x, last.x) < 28) continue;
+      out.push({ kind: 'desde', date: last.x, tag: `Lo mejor desde el ${UI.fmtDateShort(igual.x)}`, big: fmtMetricValue(r.metric, last.y), txt: r.ex.name, sub: subDe(r.metric, last) });
+    }
+    // el peso primero; luego lo más reciente
+    out.sort((a, b) => (a.kind === 'peso' ? -1 : b.kind === 'peso' ? 1 : (b.date || '').localeCompare(a.date || '')));
+    return out;
+  }
+  // Subtítulo corto de una marca: «12 repeticiones», «en 42:30», «a 4:51 /km»…
+  function subDe(metric, p) {
+    const d = (p.detail || '').trim();
+    if (metric === 'maxWeight' || metric === 'maxLoad') { const m = d.match(/^× (\d+)(.*)$/); return m ? `${m[1]} repeticiones${m[2]}` : d; }
+    if (metric === 'maxReps') return d ? `seguidas ${d}` : 'seguidas';
+    if (metric === 'distance') return d;
+    if (metric === 'pace') return `ritmo medio ${d}`.trim();
+    if (metric === 'bestSet') return `tu serie más rápida ${d}`.trim();
+    return d;
+  }
+
+  // Números de un periodo: entrenos, volumen (kg levantados), tiempo y km.
+  function statsDe(sessions, desde, hasta) {
+    let n = 0, vol = 0, secs = 0, km = 0;
+    sessions.forEach(s => {
+      if (s.date < desde || s.date > hasta) return;
+      n++; secs += s.durationSec || 0;
+      (s.entries || []).forEach(e => {
+        const tot = e.totals && parseFloat(e.totals.distance);
+        if (tot) km += tot;
+        (e.sets || []).forEach(st => {
+          if (st.done === false) return;
+          if (e.type === 'weight') vol += (parseFloat(st.weight) || 0) * (parseFloat(st.reps) || 0);
+          if (!tot) km += parseFloat(st.distance) || 0;
+        });
+      });
+    });
+    return { n, vol, secs, km };
+  }
+
+  async function renderResumen(app, host) {
+    const uid = app.activeUser.id;
+    const sessions = (await DB.sessionsOf(uid)).filter(s => !s.draft && s.date);
+    const hoy = DB.todayISO(), now = new Date();
+    if (!sessions.length && !(await pesosDe(uid)).length) {
+      host.innerHTML = `<div class="empty-state"><p><strong>Aquí verás cómo vas.</strong></p><p class="dim">Tus logros, el mes comparado con el anterior, tu constancia y qué músculos has trabajado. Aparece en cuanto guardes tu primer entreno o apuntes tu peso.</p></div>`;
+      return;
+    }
+
+    // 1) Logros recientes
+    const logros = await logrosRecientes(app, uid);
+    const logroHTML = (l) => `<div class="pg-logro ${l.kind}"><span class="pg-tag">${UI.esc(l.tag)}</span><span class="pg-big">${UI.esc(l.big)}</span><span class="pg-txt">${UI.esc(l.txt)}</span>${l.sub ? `<span class="pg-sub">${UI.esc(l.sub)}</span>` : ''}</div>`;
+    const logrosHTML = logros.length
+      ? `<div class="pg-logros">${logros.slice(0, 8).map(logroHTML).join('')}</div>`
+      : `<div class="card pg-vacio"><span class="dim">Sin logros en las últimas 2 semanas. Cuando batas una marca, o hagas lo mejor en mucho tiempo, saldrá aquí.</span></div>`;
+
+    // 2) Este mes frente al anterior, hasta el mismo día
+    const y = now.getFullYear(), m = now.getMonth(), dia = now.getDate();
+    const iniEste = isoOf(new Date(y, m, 1).getTime());
+    const pm = new Date(y, m - 1, 1), finPrev = new Date(pm.getFullYear(), pm.getMonth(), Math.min(dia, new Date(pm.getFullYear(), pm.getMonth() + 1, 0).getDate()));
+    const este = statsDe(sessions, iniEste, hoy), prev = statsDe(sessions, isoOf(pm.getTime()), isoOf(finPrev.getTime()));
+    const mesPrev = MESES[pm.getMonth()];
+    const delta = (a, b, fmt) => {
+      if (!b && !a) return '';
+      if (!b) return '<span class="pg-d up">nuevo</span>';
+      const pct = Math.round((a - b) / b * 100);
+      if (Math.abs(pct) < 5) return `<span class="pg-d eq">como en ${mesPrev}</span>`;
+      return `<span class="pg-d ${pct > 0 ? 'up' : 'down'}">${pct > 0 ? '↑' : '↓'} ${Math.abs(pct)} %</span>`;
+    };
+    const dN = este.n - prev.n;
+    const tiles = [
+      { v: String(este.n), l: este.n === 1 ? 'entreno' : 'entrenos', d: !prev.n && !este.n ? '' : dN === 0 ? `<span class="pg-d eq">al ritmo de ${mesPrev}</span>` : `<span class="pg-d ${dN > 0 ? 'up' : 'down'}">${dN > 0 ? '+' : '−'}${Math.abs(dN)} vs ${mesPrev}</span>` },
+      este.vol || prev.vol ? { v: este.vol >= 1000 ? `${fmt1(este.vol / 1000)} t` : `${Math.round(este.vol)} kg`, l: 'levantado', d: delta(este.vol, prev.vol) } : null,
+      este.secs || prev.secs ? { v: este.secs >= 3600 ? `${fmt1(este.secs / 3600)} h` : `${Math.round(este.secs / 60)} min`, l: 'entrenando', d: delta(este.secs, prev.secs) } : null,
+      este.km || prev.km ? { v: `${fmt1(este.km)} km`, l: 'de cardio', d: delta(este.km, prev.km) } : null,
+    ].filter(Boolean);
+    const mesHTML = `<div class="card pg-mes">
+      <div class="pg-h"><strong>${MESES[m].charAt(0).toUpperCase() + MESES[m].slice(1)}</strong><span class="dim">frente a ${mesPrev}, hasta el día ${dia}</span></div>
+      <div class="pg-tiles">${tiles.map(t => `<div class="pg-tile"><span class="pg-tv">${t.v}</span><span class="pg-tl">${t.l}</span>${t.d}</div>`).join('')}</div>
+    </div>`;
+
+    // 3) Constancia: últimas 20 semanas, un cuadro por día
+    const porDia = new Map();
+    sessions.forEach(s => porDia.set(s.date, (porDia.get(s.date) || 0) + 1));
+    const curWk = weekIndex(now);
+    const lunes = new Date(now.getFullYear(), now.getMonth(), now.getDate() - ((now.getDay() + 6) % 7));
+    const inicio = new Date(lunes.getFullYear(), lunes.getMonth(), lunes.getDate() - 19 * 7);
+    let celdas = '';
+    for (let w = 0; w < 20; w++) for (let d = 0; d < 7; d++) {
+      const f = new Date(inicio.getFullYear(), inicio.getMonth(), inicio.getDate() + w * 7 + d);
+      const iso = isoOf(f.getTime());
+      const n = porDia.get(iso) || 0;
+      const fut = iso > hoy;
+      celdas += `<i class="pg-c${fut ? ' fut' : n >= 2 ? ' l2' : n ? ' l1' : ''}${iso === hoy ? ' hoy' : ''}" style="grid-column:${w + 1};grid-row:${d + 1}" title="${UI.fmtDateShort(iso)}${n ? ` · ${n} entreno${n > 1 ? 's' : ''}` : ''}"></i>`;
+    }
+    const semanas = new Set(sessions.map(s => weekIndex(new Date(s.date + 'T00:00:00'))));
+    let racha = 0, anchor = semanas.has(curWk) ? curWk : (semanas.has(curWk - 1) ? curWk - 1 : null);
+    if (anchor != null) { let w = anchor; while (semanas.has(w)) { racha++; w--; } }
+    let mejor = 0, run = 0, prevW = null;
+    [...semanas].sort((a, b) => a - b).forEach(w => { run = prevW != null && w === prevW + 1 ? run + 1 : 1; mejor = Math.max(mejor, run); prevW = w; });
+    const constHTML = `<div class="card pg-const">
+      <div class="pg-h"><strong>Constancia</strong><span class="dim">últimas 20 semanas</span></div>
+      <div class="pg-cal">${celdas}</div>
+      <div class="pg-rachas"><span><strong>${racha}</strong> ${racha === 1 ? 'semana seguida' : 'semanas seguidas'} ahora</span><span class="dim">Tu mejor racha: ${mejor} ${mejor === 1 ? 'semana' : 'semanas'}</span></div>
+    </div>`;
+
+    // 4) Series por músculo esta semana (y lo que sueles entrenar y aún no has tocado)
+    const catalog = await DB.exercisesOf(uid);
+    const byId = new Map(catalog.map(e => [e.id, e])), byName = new Map(catalog.map(e => [UI.norm(e.name), e]));
+    const grupoDe = (e) => { const ex = (e.exerciseId && byId.get(e.exerciseId)) || byName.get(UI.norm(e.name || '')); return (ex && ex.muscleGroup) || ''; };
+    const iniSem = isoOf(lunes.getTime()), hace4 = isoOf(lunes.getTime() - 28 * DAY);
+    const series = new Map(), habituales = new Set();
+    sessions.forEach(s => (s.entries || []).forEach(e => {
+      const g = grupoDe(e); if (!g || NO_MUSCULO.has(UI.norm(g))) return;
+      const hechas = (e.sets || []).filter(st => st.done !== false && (parseFloat(st.reps) || parseFloat(st.weight) || parseFloat(st.time))).length;
+      if (!hechas) return;
+      if (s.date >= iniSem && s.date <= hoy) series.set(g, (series.get(g) || 0) + hechas);
+      else if (s.date >= hace4 && s.date < iniSem) habituales.add(g);
+    }));
+    const sinTocar = [...habituales].filter(g => !series.has(g));
+    const filas = [...series.entries()].sort((a, b) => b[1] - a[1]);
+    const maxS = Math.max(10, ...filas.map(f => f[1]));
+    const musHTML = (filas.length || sinTocar.length) ? `<div class="card pg-mus">
+      <div class="pg-h"><strong>Series por músculo</strong><span class="dim">esta semana</span></div>
+      ${filas.map(([g, n]) => `<div class="pg-bar"><span class="pg-bn">${UI.esc(g)}</span><span class="pg-bt"><i style="width:${Math.max(4, n / maxS * 100)}%"></i></span><span class="pg-bv">${n}</span></div>`).join('')}
+      ${sinTocar.map(g => `<div class="pg-bar off"><span class="pg-bn">${UI.esc(g)}</span><span class="pg-bt"></span><span class="pg-bv">0</span></div>`).join('')}
+      ${sinTocar.length ? `<p class="pg-aviso">${UI.icon('info', 14)} ${UI.esc(lista(sinTocar))} ${sinTocar.length === 1 ? 'lo sueles entrenar y aún no lo has tocado' : 'los sueles entrenar y aún no los has tocado'} esta semana.</p>` : ''}
+    </div>` : '';
+
+    host.innerHTML = `<div class="card-label pg-sec">Tus logros recientes</div>${logrosHTML}${mesHTML}${constHTML}${musHTML}`;
+  }
+  const lista = (arr) => arr.length <= 1 ? (arr[0] || '') : `${arr.slice(0, -1).join(', ')} y ${arr[arr.length - 1]}`;
+
   // Lunes de la semana de una fecha, como índice entero de semanas (Mon=inicio).
   function weekIndex(d) {
     const dt = new Date(d.getFullYear(), d.getMonth(), d.getDate());
     dt.setDate(dt.getDate() - ((dt.getDay() + 6) % 7));
     return Math.floor(dt.getTime() / (7 * 86400000));
-  }
-
-  // ---------- PANEL "TUS NÚMEROS" ----------
-  async function renderSummary(app, host) {
-    const uid = app.activeUser.id;
-    const sessions = (await DB.sessionsOf(uid)).filter(s => !s.draft && s.date);
-    const now = new Date();
-    const curWk = weekIndex(now);
-    const monthPrefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-    let thisWeek = 0, thisMonth = 0;
-    const weeks = new Set();
-    sessions.forEach(s => {
-      const wk = weekIndex(new Date(s.date));
-      weeks.add(wk);
-      if (wk === curWk) thisWeek++;
-      if ((s.date || '').startsWith(monthPrefix)) thisMonth++;
-    });
-    // racha = semanas consecutivas con ≥1 entreno, ancladas a la semana actual o la anterior
-    let streak = 0, anchor = weeks.has(curWk) ? curWk : (weeks.has(curWk - 1) ? curWk - 1 : null);
-    if (anchor != null) { let w = anchor; while (weeks.has(w)) { streak++; w--; } }
-
-    const records = await computeRecords(app, uid);
-    const last = records[0]; // ya ordenado por fecha desc
-
-    const tiles = [
-      [thisWeek, 'esta semana'],
-      [thisMonth, 'este mes'],
-      [streak, streak === 1 ? 'sem. racha' : 'sem. racha'],
-      [sessions.length, 'entrenos'],
-    ];
-    host.innerHTML = `
-      <div class="card summary-card">
-        <div class="stat-grid">
-          ${tiles.map(([n, cap]) => `<div class="stat-tile"><span class="stat-num">${n}</span><span class="stat-cap">${cap}</span></div>`).join('')}
-        </div>
-        ${last ? `<div class="summary-pr">${UI.icon('star', 15)}<span>Última marca · <strong>${UI.esc(last.ex.name)}</strong> ${UI.esc(fmtMetricPoint(last.metric, last.point))} <span class="dim">· ${UI.fmtDateShort(last.point.x)}</span></span></div>` : ''}
-      </div>`;
   }
 
   // ---------- LISTA "TUS RÉCORDS" ----------
@@ -403,52 +607,74 @@ const VProgress = (() => {
 
   // ====================================================
   async function render(app, params) {
-    // Sin pestaña elegida: «Corporal» si hay medidas; si no, «Por ejercicio» (donde
-    // están los datos de quien solo entrena). Se guarda en params para bind().
-    if (!params.tab) {
-      let body = [];
-      try { body = await DB.progressOf(app.activeUser.id); } catch (e) {}
-      params.tab = body.length ? 'body' : 'exercise';
-    }
+    params.tab = params.tab || 'summary';
     const tab = params.tab;
     const tabs = [
+      { id: 'summary', label: 'Resumen' },
       { id: 'body', label: 'Corporal' },
-      { id: 'exercise', label: 'Por ejercicio' },
+      { id: 'exercise', label: 'Ejercicios' },
       { id: 'records', label: 'Récords' },
-      { id: 'compare', label: 'Comparativa' },
+      { id: 'compare', label: 'Comparar' },
     ];
-    const tabBar = `<div class="tabs">${tabs.map(t => `<button class="tab${tab === t.id ? ' on' : ''}" data-tab="${t.id}">${t.label}</button>`).join('')}</div>`;
-    const summary = `<div id="progSummary"></div>`;
-
-    if (tab === 'body') return summary + tabBar + `<div id="tabBody">${'<div class="loading">Cargando…</div>'}</div>`;
-    if (tab === 'exercise') return summary + tabBar + `<div id="tabEx"><div class="loading">Cargando…</div></div>`;
-    if (tab === 'records') return summary + tabBar + `<div id="tabRecords"><div class="loading">Cargando…</div></div>`;
-    return summary + tabBar + `<div id="tabCompare"><div class="loading">Cargando…</div></div>`;
+    const tabBar = `<div class="tabs pg-tabs">${tabs.map(t => `<button class="tab${tab === t.id ? ' on' : ''}" data-tab="${t.id}">${t.label}</button>`).join('')}</div>`;
+    const host = { summary: 'tabSummary', body: 'tabBody', exercise: 'tabEx', records: 'tabRecords', compare: 'tabCompare' }[tab] || 'tabSummary';
+    return tabBar + `<div id="${host}"><div class="loading">Cargando…</div></div>`;
   }
 
   function bind(app, root, params) {
-    const tab = params.tab || 'body';
-    renderSummary(app, root.querySelector('#progSummary'));
+    const tab = params.tab || 'summary';
     root.querySelectorAll('[data-tab]').forEach(b => b.addEventListener('click', () => app.go('progress', { tab: b.dataset.tab }, true)));
-    if (tab === 'body') renderBody(app, root.querySelector('#tabBody'));
+    if (tab === 'summary') renderResumen(app, root.querySelector('#tabSummary'));
+    else if (tab === 'body') renderBody(app, root.querySelector('#tabBody'));
     else if (tab === 'exercise') renderExercise(app, root.querySelector('#tabEx'), params);
     else if (tab === 'records') renderRecords(app, root.querySelector('#tabRecords'));
     else renderCompare(app, root.querySelector('#tabCompare'), params);
   }
 
   // ---------- CORPORAL ----------
+  const RANGES = [{ id: '1m', label: '1 mes', days: 31 }, { id: '6m', label: '6 meses', days: 183 }, { id: 'all', label: 'Todo', days: 0 }];
   async function renderBody(app, host) {
-    const entries = (await DB.progressOf(app.activeUser.id)).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-    const metric = host._metric || 'weight';
-    const available = MEASURES.filter(m => entries.some(e => e[m.key] != null && e[m.key] !== ''));
-    const chartPoints = entries
-      .filter(e => e[metric] != null && e[metric] !== '')
-      .map(e => ({ x: e.date, y: parseFloat(e[metric]) }))
-      .filter(p => !isNaN(p.y));
+    const u = app.activeUser;
+    const entries = (await DB.progressOf(u.id)).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    const goal = u.weightGoal || '';
+    const range = host._range || '6m';
+    const rDays = (RANGES.find(r => r.id === range) || RANGES[1]).days;
+    const hoy = DB.todayISO();
+    const enRango = (p) => !rDays || diasEntre(p.x, hoy) <= rDays;
 
-    const metricUnit = (MEASURES.find(m => m.key === metric) || {}).unit || '';
-    const metricChips = (available.length ? available : [MEASURES[0]])
-      .map(m => `<button class="chip${m.key === metric ? ' on' : ''}" data-metric="${m.key}">${m.label}</button>`).join('');
+    // --- Peso: el número de hoy, qué tiene de especial, el ritmo y la tendencia
+    const ws = await pesosDe(u.id);
+    const ins = weightInsight(ws);
+    const ph = weightPhrase(ins, goal);
+    const trend = trendOf(ws);
+    const rate = weeklyRate(trend);
+    const raw = ws.map(e => ({ x: e.date, y: e.kg })).filter(enRango);
+    const tr = trend.filter(enRango);
+    const goalLbl = (GOALS.find(g => g.value === goal) || GOALS[3]).label;
+    const linea = [ph && ph.txt, rateTxt(rate)].filter(Boolean).join(' · ');
+    const pesoHTML = `<div class="card pw-card">
+      <div class="pw-head"><span class="pw-title">Peso corporal</span><button type="button" class="pw-goal" id="pwGoal">Objetivo: <strong>${UI.esc(goalLbl.toLowerCase())}</strong> ▾</button></div>
+      ${ins ? `<div class="pw-now"><span class="pw-num">${fmt1(ins.last.kg)}</span><span class="pw-unit">kg</span><span class="dim">· ${diasEntre(ins.last.date, hoy) === 0 ? 'hoy' : UI.fmtDateShort(ins.last.date)}</span></div>
+        ${linea ? `<div class="pw-line">${UI.esc(linea)}</div>` : ''}
+        ${ph && ph.sub ? `<div class="pw-sub dim">${UI.esc(ph.sub)}</div>` : ''}
+        ${raw.length ? UI.lineChart([
+          { label: 'Pesajes', color: u.color, points: raw, width: 1.5, opacity: 0.35, noLegend: true },
+          { label: 'Tendencia', color: u.color, points: tr, width: 3, noDots: true, noLegend: true },
+        ], { width: 320, height: 150, noLegend: true, fmtPoint: (p) => `${fmt1(p.y)} kg` }) : '<div class="chart-empty">Sin pesajes en este periodo.</div>'}
+        <div class="pw-foot"><div class="chips-row small">${RANGES.map(r => `<button class="chip${r.id === range ? ' on' : ''}" data-range="${r.id}">${r.label}</button>`).join('')}</div><span class="pw-key"><i></i>tendencia</span></div>`
+      : '<p class="dim" style="margin:6px 0 0">Aún no has apuntado tu peso. Apúntalo de vez en cuando y aquí verás tu tendencia.</p>'}
+    </div>`;
+
+    // --- Medidas (cintura, cadera…): solo si hay alguna
+    const OTRAS = MEASURES.filter(m => m.key !== 'weight' && entries.some(e => e[m.key] != null && e[m.key] !== ''));
+    const mKey = (host._metric && OTRAS.some(m => m.key === host._metric)) ? host._metric : (OTRAS[0] && OTRAS[0].key);
+    const mDef = OTRAS.find(m => m.key === mKey);
+    const mPts = mDef ? entries.filter(e => e[mKey] != null && e[mKey] !== '').map(e => ({ x: e.date, y: parseFloat(e[mKey]) })).filter(p => !isNaN(p.y) && enRango(p)) : [];
+    const medidasHTML = mDef ? `<div class="card">
+      <div class="pw-head"><span class="pw-title">Medidas</span></div>
+      <div class="chips-row small">${OTRAS.map(m => `<button class="chip${m.key === mKey ? ' on' : ''}" data-metric="${m.key}">${m.label}</button>`).join('')}</div>
+      ${UI.lineChart([{ label: mDef.label, color: u.color, points: mPts }], { width: 320, height: 130, fmtPoint: (p) => `${p.y} ${mDef.unit}` })}
+    </div>` : '';
 
     const rows = entries.map(e => {
       const vals = MEASURES.filter(m => e[m.key]).map(m => `${m.label} ${e[m.key]}${m.unit}`).join(' · ');
@@ -459,15 +685,25 @@ const VProgress = (() => {
       </div>`;
     }).join('');
 
-    host.innerHTML = `
-      <div class="card">
-        <div class="chips-row small">${metricChips}</div>
-        ${UI.lineChart([{ label: app.activeUser.name, color: app.activeUser.color, points: chartPoints }], { width: 320, height: 150, fmtPoint: (p) => `${p.y}${metricUnit}` })}
-      </div>
-      <button class="btn primary block" id="addProg">+ Registrar medida</button>
-      ${rows || '<div class="empty-state"><p>Sin registros de progreso.</p></div>'}`;
+    host.innerHTML = `${pesoHTML}
+      <button class="btn primary block" id="addProg">+ Apuntar peso o medidas</button>
+      ${medidasHTML}
+      ${rows ? `<div class="card-label pg-sec">Registros</div>${rows}` : ''}`;
 
+    host.querySelectorAll('[data-range]').forEach(c => c.addEventListener('click', () => { host._range = c.dataset.range; renderBody(app, host); }));
     host.querySelectorAll('[data-metric]').forEach(c => c.addEventListener('click', () => { host._metric = c.dataset.metric; renderBody(app, host); }));
+    const gb = host.querySelector('#pwGoal');
+    if (gb) gb.addEventListener('click', () => UI.pickFromList({
+      title: 'Tu objetivo de peso',
+      options: GOALS,
+      value: goal,
+      onPick: async (val) => {
+        await DB.put('users', { ...app.activeUser, weightGoal: val });
+        app.activeUser.weightGoal = val; // sin recargar perfiles: así no cambia el perfil activo
+        renderBody(app, host);
+        UI.toast(val ? `Objetivo: ${GOALS.find(g => g.value === val).label.toLowerCase()}` : 'Sin objetivo de peso');
+      },
+    }));
     host.querySelector('#addProg').addEventListener('click', () => editProgress(app, null, () => renderBody(app, host)));
     host.querySelectorAll('[data-share]').forEach(b => b.addEventListener('click', () => VData.exportProgressEntry(app, b.dataset.share)));
     host.querySelectorAll('[data-edit]').forEach(b => b.addEventListener('click', async () => editProgress(app, await DB.get('progress', b.dataset.edit), () => renderBody(app, host))));

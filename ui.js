@@ -414,7 +414,7 @@ const UI = (() => {
       grid += `<text x="2" y="${(yy + 3).toFixed(1)}" class="chart-axis">${esc(String(fmtY(yVal)))}</text>`;
     }
 
-    const multi = series.length > 1;
+    const multi = series.filter(s => !s.noLegend).length > 1;
     const pointInfo = (p, s) => {
       const valTxt = opts.fmtPoint ? opts.fmtPoint(p) : (p.detail ? `${fmtY(p.y)} ${p.detail}` : String(fmtY(p.y)));
       const pre = multi ? `${s.label}: ` : '';
@@ -424,17 +424,19 @@ const UI = (() => {
       const pts = [...s.points].sort((a, b) => +new Date(a.x) - +new Date(b.x));
       if (pts.length === 0) return '';
       const d = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${sx(p.x).toFixed(1)},${sy(p.y).toFixed(1)}`).join(' ');
-      const dots = pts.map(p => {
+      const dots = s.noDots ? '' : pts.map(p => {
         const cx = sx(p.x).toFixed(1), cy = sy(p.y).toFixed(1);
         // círculo visible + área de toque invisible (r grande) con la info del punto
         return `<circle cx="${cx}" cy="${cy}" r="2.5" fill="${s.color}"/>`
           + `<circle class="chart-hit" cx="${cx}" cy="${cy}" r="9" fill="transparent" data-cx="${cx}" data-cy="${cy}" data-color="${s.color}" data-info="${esc(pointInfo(p, s))}"/>`;
       }).join('');
-      return `<path d="${d}" fill="none" stroke="${s.color}" stroke-width="2" stroke-linejoin="round"/>${dots}`;
+      // por serie: grosor, opacidad y trazo (la tendencia va gruesa y sin puntos; los datos, tenues)
+      const extra = `${s.opacity != null ? ` stroke-opacity="${s.opacity}"` : ''}${s.dash ? ` stroke-dasharray="${s.dash}"` : ''}`;
+      return `<path d="${d}" fill="none" stroke="${s.color}" stroke-width="${s.width || 2}" stroke-linejoin="round" stroke-linecap="round"${extra}/>${dots}`;
     }).join('');
 
-    const legend = multi
-      ? `<div class="chart-legend">${series.map(s => `<span><i style="background:${s.color}"></i>${esc(s.label)}</span>`).join('')}</div>`
+    const legend = multi && !opts.noLegend
+      ? `<div class="chart-legend">${series.filter(s => !s.noLegend).map(s => `<span><i style="background:${s.color}"></i>${esc(s.label)}</span>`).join('')}</div>`
       : '';
 
     return `<div class="chart-wrap"><svg data-w="${W}" data-h="${H}" viewBox="0 0 ${W} ${H}" class="chart-svg" preserveAspectRatio="none">${grid}${paths}</svg><div class="chart-tip" hidden></div>${legend}</div>`;
