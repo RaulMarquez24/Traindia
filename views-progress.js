@@ -298,7 +298,6 @@ const VProgress = (() => {
   const diasEntre = (a, b) => Math.round((isoMs(b) - isoMs(a)) / DAY);
   const fmt1 = (v) => (Math.round(v * 10) / 10).toLocaleString('es-ES', { maximumFractionDigits: 1 });
   const signo = (v, dec = 1) => { const r = Math.round(v * 10 ** dec) / 10 ** dec; return (r > 0 ? '+' : r < 0 ? '−' : '±') + Math.abs(r).toLocaleString('es-ES', { maximumFractionDigits: dec }); };
-  const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 
   // ---------- PESO: objetivo, «el más bajo desde», tendencia ----------
   const GOALS = [{ value: 'bajar', label: 'Bajar' }, { value: 'subir', label: 'Subir' }, { value: 'mantener', label: 'Mantener' }, { value: '', label: 'Sin objetivo' }];
@@ -487,13 +486,13 @@ const VProgress = (() => {
       ? `<div class="pg-logros">${logros.slice(0, 8).map(logroHTML).join('')}</div>`
       : `<div class="card pg-vacio"><span class="dim">Sin logros en las últimas 2 semanas. Cuando batas una marca, o hagas lo mejor en mucho tiempo, saldrá aquí.</span></div>`;
 
-    // 2) Este mes frente al anterior, hasta el mismo día
+    // 2) Esta semana (de lunes a hoy) frente a lo mismo de la semana pasada
     const y = now.getFullYear(), m = now.getMonth(), dia = now.getDate();
-    const iniEste = isoOf(new Date(y, m, 1).getTime());
-    const pm = new Date(y, m - 1, 1), finPrev = new Date(pm.getFullYear(), pm.getMonth(), Math.min(dia, new Date(pm.getFullYear(), pm.getMonth() + 1, 0).getDate()));
-    const este = statsDe(sessions, iniEste, hoy), prev = statsDe(sessions, isoOf(pm.getTime()), isoOf(finPrev.getTime()));
-    const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
-    const mesEste = cap(MESES[m]), mesPrev = cap(MESES[pm.getMonth()]);
+    const nDia = (now.getDay() + 6) % 7; // 0 = lunes … 6 = domingo
+    const lun = new Date(y, m, dia - nDia), lunPrev = new Date(y, m, dia - nDia - 7), mismoPrev = new Date(y, m, dia - 7);
+    const este = statsDe(sessions, isoOf(lun.getTime()), hoy), prev = statsDe(sessions, isoOf(lunPrev.getTime()), isoOf(mismoPrev.getTime()));
+    const DIAS = ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo'];
+    const subSem = nDia === 6 ? 'de lunes a domingo' : nDia === 0 ? 'solo los lunes' : `las dos, de lunes a ${DIAS[nDia]}`;
     const kg = (v) => v >= 1000 ? `${fmt1(v / 1000)} t` : `${Math.round(v)} kg`;
     const hm = (s) => s >= 3600 ? `${fmt1(s / 3600)} h` : `${Math.round(s / 60)} min`;
     const flecha = (a, b) => { if (!a && !b) return ''; const r = b ? (a - b) / b : 1; return Math.abs(r) < 0.05 ? '<i class="pg-eq">=</i>' : r > 0 ? '<i class="pg-up">▲</i>' : '<i class="pg-dn">▼</i>'; };
@@ -504,8 +503,8 @@ const VProgress = (() => {
       este.km || prev.km ? ['Cardio', `${fmt1(este.km)} km`, `${fmt1(prev.km)} km`, este.km, prev.km] : null,
     ].filter(Boolean);
     const mesHTML = `<div class="card pg-mes">
-      <div class="pg-h"><strong>Este mes</strong><span class="dim">del 1 al ${dia}, frente a lo mismo del mes pasado</span></div>
-      <div class="pg-mt"><span></span><span class="pg-mth on">${mesEste}</span><span class="pg-mth">${mesPrev}</span><span></span></div>
+      <div class="pg-h"><strong>Esta semana</strong><span class="dim">${subSem}</span></div>
+      <div class="pg-mt"><span></span><span class="pg-mth on">Esta</span><span class="pg-mth">Pasada</span><span></span></div>
       ${filasMes.map(([l, a, b, va, vb]) => `<div class="pg-mt"><span class="pg-ml">${l}</span><span class="pg-mv on">${a}</span><span class="pg-mv">${b}</span>${flecha(va, vb)}</div>`).join('')}
     </div>`;
 
