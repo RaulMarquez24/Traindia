@@ -497,7 +497,7 @@ const app = {
             ${UI.field('Tu nombre', UI.input('name', '', { placeholder: 'Ej: Raúl' }))}
             ${UI.field('Color', UI.colorPicker('color', UI.COLORS[0]))}
           </div>
-          <span class="field-label">Tu plan</span>
+          <span class="field-label">¿Cómo quieres empezar tu plan?</span>
           <div class="plan-choices" id="planChoices">${VPlan.planChoicesHTML(planType)}</div>
           <button class="btn primary block" id="onbStart">Empezar</button>
         </div>
@@ -524,8 +524,7 @@ const app = {
       // «Plan de tu entrenador»: se empieza con uno en blanco y se abre el importador.
       await DB.createPlan(user.id, tplId ? 'template' : 'custom', { activate: true, templateId: tplId });
       await this.finishOnboarding(host, user);
-      if (planType === 'ai' || planType === 'ai-doc') setTimeout(() => VPlanAI.open(this, { mode: planType === 'ai' ? 'ia' : 'doc' }), 400);
-      else if (planType === 'import') setTimeout(() => VData.startImport(this), 400);
+      if (planType === 'ai') setTimeout(() => VPlanAI.open(this), 400);
       else setTimeout(() => VShare.checkPending(this), 500); // llegó por el enlace de un amigo antes de tener perfil
     });
   },

@@ -81,6 +81,16 @@ const VMerge = (() => {
       dias.forEach(d => (d.blocks || []).forEach(b => (b.exercises || []).forEach(e => add(e.exerciseId))));
       exList = allTheirEx.filter(e => ids.has(e.id));
     }
+    // Ejercicios «de serie»: los que la app pone al darte de alta. Si sigue tal cual vino
+    // (misma técnica, grupo y tipo) y nunca lo has usado en una sesión, no es algo tuyo:
+    // se queda la versión del archivo sin preguntarte (se enseña en el resumen).
+    const defs = new Map(Object.entries((typeof TEMPLATES !== 'undefined' && TEMPLATES.EXERCISES) || {}).map(([k, v]) => [norm(k), v]));
+    const usadosEx = new Set(mine.sessions.flatMap(s => (s.entries || []).map(e => e.exerciseId)).filter(Boolean));
+    const deSerie = (m) => {
+      const d = defs.get(norm(m.name));
+      if (!d || usadosEx.has(m.id)) return false;
+      return stable(m.howto || '') === stable(d.howto || '') && (!d.group || norm(d.group) === norm(m.muscleGroup)) && (!d.type || d.type === m.type);
+    };
     for (const t of exList) {
       const key = norm(t.name); if (!key) continue;
       const m = myByName.get(key);
@@ -100,6 +110,7 @@ const VMerge = (() => {
       const mySubs = new Set((m.substitutes || []).map(id => norm(myName(id))));
       const ns = (t.substitutes || []).map(id => norm(theirName(id))).filter(n => n && n !== key && !mySubs.has(n)).length;
       if (ns) adds.push(plural(ns, 'suplente', 'suplentes'));
+      if (diffs.length && deSerie(m)) { A.ex.push({ status: 'alDia', theirs: t, mine: m, diffs, adds, choice: 'theirs' }); continue; }
       A.ex.push({ status: diffs.length ? 'distinto' : adds.length ? 'completar' : 'igual', theirs: t, mine: m, diffs, adds, choice: 'mine', kind: 'Ejercicio', title: m.name, sub: m.muscleGroup || '' });
     }
 
@@ -271,7 +282,7 @@ const VMerge = (() => {
   }
   const conflictos = (A) => [...A.plans, ...(A.days ? A.days.items : []), ...A.sessions, ...A.progress, ...A.nutrition, ...A.files, ...A.ex].filter(x => x.status === 'distinto');
   function hayAlgo(A) {
-    return !!(A.swap || (A.days && A.days.blank) || cuenta(A, 'nuevo').length || cuenta(A, 'completar').length || conflictos(A).length);
+    return !!(A.swap || (A.days && A.days.blank) || cuenta(A, 'nuevo').length || cuenta(A, 'completar').length || cuenta(A, 'alDia').length || conflictos(A).length);
   }
 
   // ---------- PANTALLA DE REVISIÓN ----------
@@ -288,6 +299,7 @@ const VMerge = (() => {
       }
       const nuevos = cuenta(A, 'nuevo'), completar = cuenta(A, 'completar'), iguales = cuenta(A, 'igual');
       const fills = A.ex.filter(x => x.status === 'completar');
+      const alDia = A.ex.filter(x => x.status === 'alDia');
       const swapHTML = A.swap ? `<div class="mg-row swap"><span class="mg-ic">${UI.icon('swap', 16)}</span><div><strong>Tu plan «${UI.esc(A.swap.mine.name || 'Mi plan')}» está vacío</strong><span>Pasa a ser «${UI.esc(A.swap.theirs.name || 'Plan')}», con sus ${(A.swap.theirs.days || []).length} días, y queda como tu plan activo.</span></div></div>` : '';
       const blankHTML = (A.days && A.days.blank) ? `<div class="mg-row swap"><span class="mg-ic">${UI.icon('swap', 16)}</span><div><strong>Tu plan «${UI.esc(A.days.target.name || 'Mi plan')}» está vacío</strong><span>Se queda con los ${A.days.items.length} días del archivo, en su orden.</span></div></div>` : '';
       const grupos = [['plans', 'Planes'], ['days', 'Días de tu plan'], ['sessions', 'Sesiones'], ['progress', 'Progreso'], ['nutrition', 'Nutrición'], ['files', 'Documentos'], ['ex', 'Ejercicios']];
@@ -331,6 +343,8 @@ const VMerge = (() => {
             ${nuevos.length ? `<div class="mg-row add"><span class="mg-ic">${UI.icon('plus', 16)}</span><div><strong>Se añade</strong><span>${UI.esc(nuevos.join(' · '))}</span></div></div>` : ''}
             ${completar.length ? `<div class="mg-row fill"><span class="mg-ic">${UI.icon('edit', 16)}</span><div><strong>Se completa, sin borrar nada</strong><span>${UI.esc(completar.join(' · '))}: lo que les faltaba (vídeos, técnica, suplentes…)</span>
               ${fills.length ? `<button type="button" class="imp-toggle mg-ver" data-ver>ver</button><div class="mg-fills" hidden>${fills.map(f => `<div><strong>${UI.esc(f.mine.name)}</strong> <span class="dim">+ ${UI.esc(f.adds.join(', '))}</span></div>`).join('')}</div>` : ''}</div></div>` : ''}
+            ${alDia.length ? `<div class="mg-row fill"><span class="mg-ic">${UI.icon('swap', 16)}</span><div><strong>Se ponen al día</strong><span>${plural(alDia.length, 'ejercicio', 'ejercicios')} de ejemplo de la app, que no habías tocado ni usado: se quedan como vienen en el archivo.</span>
+              <button type="button" class="imp-toggle mg-ver" data-ver2>ver</button><div class="mg-fills" hidden data-box2>${alDia.map(f => `<div><strong>${UI.esc(f.mine.name)}</strong> <span class="dim">· ${UI.esc(f.diffs.map(d => d.label.toLowerCase()).join(', '))}</span></div>`).join('')}</div></div></div>` : ''}
             ${iguales.length ? `<div class="mg-row same"><span class="mg-ic">${UI.icon('check', 16)}</span><div><strong>Ya lo tienes igual</strong><span>${UI.esc(iguales.join(' · '))} · no se toca</span></div></div>` : ''}
           </div>
           ${confHTML}`,
@@ -366,6 +380,8 @@ const VMerge = (() => {
             if (!b.dataset.txt) b.dataset.txt = b.textContent;
             b.textContent = box.hidden ? b.dataset.txt : 'Ocultar';
           }));
+          const ver2 = root.querySelector('[data-ver2]');
+          if (ver2) ver2.addEventListener('click', () => { const box = root.querySelector('[data-box2]'); box.hidden = !box.hidden; ver2.textContent = box.hidden ? 'ver' : 'ocultar'; });
           const ver = root.querySelector('[data-ver]');
           if (ver) ver.addEventListener('click', () => { const box = root.querySelector('.mg-fills'); box.hidden = !box.hidden; ver.textContent = box.hidden ? 'ver' : 'ocultar'; });
         },
@@ -400,7 +416,7 @@ const VMerge = (() => {
       if (it.status === 'igual') continue;
       const antes = stable(m);
       let ex = { ...m };
-      if (it.status === 'distinto' && it.choice === 'theirs') {
+      if ((it.status === 'distinto' || it.status === 'alDia') && it.choice === 'theirs') {
         Object.assign(ex, payloadOf(t), { name: m.name });
         if (!Array.isArray(t.metrics) && t.type && t.type !== 'time' && t.type !== 'check') delete ex.metrics;
       }

@@ -676,11 +676,6 @@ const VData = (() => {
       <label class="check-row imp-sec-head"><input type="checkbox" data-sec="plans" checked><span>Planes <span class="dim">(${filePlans.length})</span></span>${filePlans.length > 1 ? '<button type="button" class="imp-toggle" data-toggle="plans">editar</button>' : ''}</label>
       ${filePlans.length > 1 ? `<div class="imp-items" data-items="plans" style="display:none">${filePlans.map(r => `<label class="check-row sub"><input type="checkbox" data-item="plans" data-id="${UI.esc(String(r.id))}" checked><span>${UI.esc(r.name || 'Plan')} <span class="dim">· ${(r.days || []).length} días${r === planRoutine ? ' · el activo' : ''}</span></span></label>`).join('')}</div>` : ''}
     </div>` : '';
-    // «Días sueltos»: meter algunos días del plan activo del archivo en TU plan activo.
-    const daysSection = hasPlan ? `<div class="imp-sec">
-      <label class="check-row imp-sec-head"><input type="checkbox" data-sec="days"><span>Días sueltos a tu plan activo <span class="dim">(${(planRoutine.days || []).length})</span></span><button type="button" class="imp-toggle" data-toggle="days">editar</button></label>
-      <div class="imp-items" data-items="days" style="display:none">${dayChecksHTML(planRoutine.days)}</div>
-    </div>` : '';
 
     UI.modal({
       title: 'Importar', size: 'wide',
@@ -700,7 +695,7 @@ const VData = (() => {
           <span class="field-label">Qué importar</span>
           <p class="field-hint" style="margin-top:0;margin-bottom:8px">Marca lo que quieras. Antes de importar verás qué se añade, qué ya tienes y qué es distinto. Nada se duplica y nada tuyo cambia sin que lo elijas.</p>
           <div style="margin-bottom:4px">
-            ${plansSection}${daysSection}${DATA_SECTIONS.map(sectionHTML).join('')}
+            ${plansSection}${DATA_SECTIONS.map(sectionHTML).join('')}
             ${(!hasPlan && !hasData) ? '<p class="dim" style="padding:2px">El archivo no tiene datos.</p>' : ''}
           </div>
         </div>`,
@@ -719,14 +714,7 @@ const VData = (() => {
             if (box) { const ids = new Set([...root.querySelectorAll('[data-item="plans"]:checked')].map(c => c.dataset.id)); plans = filePlans.filter(r => ids.has(String(r.id))); }
             else plans = filePlans;
           }
-          // Días sueltos
-          let days = null;
-          const daysChk = root.querySelector('[data-sec="days"]');
-          if (hasPlan && daysChk && daysChk.checked) {
-            const dayIds = new Set([...root.querySelectorAll('[data-day]:checked')].map(c => c.dataset.day));
-            if (!dayIds.size) { UI.toast('Marca al menos un día', 'err'); return false; }
-            days = { routine: planRoutine, dayIds };
-          }
+          const days = null; // (los días sueltos se pasan con «Exportar un día»)
           // Datos
           const chosen = new Set();
           const filtered = {};
@@ -787,7 +775,6 @@ const VData = (() => {
           const open = items.style.display === 'none';
           items.style.display = open ? '' : 'none';
           b.textContent = open ? 'ocultar' : 'editar';
-          if (open && b.dataset.toggle === 'days') { const c = root.querySelector('[data-sec="days"]'); if (c && !c.checked) c.checked = true; } // al editar días, activarlos
         }));
         root.querySelectorAll('[data-sec]').forEach(sc => sc.addEventListener('change', () => {
           root.querySelectorAll(`[data-item="${sc.dataset.sec}"]`).forEach(ic => { ic.checked = sc.checked; });

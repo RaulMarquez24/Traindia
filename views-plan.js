@@ -1086,34 +1086,47 @@ const VPlan = (() => {
 `;
   }
 
-  // Tarjetas para elegir con qué empezar un plan (alta y «Crear plan»), por situación:
-  // ya tienes uno (de tu entrenador → IA; por Traindía → importar) o empiezas uno nuevo.
-  // Valor: 'ai-doc' | 'import' | 'tpl:<id>' | 'ai' | 'custom'.
+  // Tarjetas para elegir con qué empezar un plan (alta y «Crear plan»): tres caminos claros.
+  //  - Plantillas de Traindía (al elegirla se despliegan las plantillas)
+  //  - Que me lo prepare una IA (también pasa a Traindía el plan de tu entrenador)
+  //  - Totalmente en blanco
+  // Valor: 'tpl:<id>' | 'ai' | 'custom'.
   function planChoicesHTML(selected) {
     const tpls = typeof TEMPLATES !== 'undefined' ? TEMPLATES.list : [];
-    const card = (value, title, sub, meta, badge) => `
-      <button type="button" class="plan-choice${value === selected ? ' sel' : ''}" data-plan="${value}">
-        <strong>${title}${badge ? ` <span class="badge">${badge}</span>` : ''}</strong>
-        <span class="dim">${sub}</span>
-        ${meta ? `<span class="plan-choice-meta">${meta}</span>` : ''}
+    const esTpl = String(selected || '').startsWith('tpl:');
+    const tplSel = esTpl ? selected.slice(4) : (tpls[0] && tpls[0].id);
+    const card = (value, icon, title, sub, badge, on) => `
+      <button type="button" class="plan-choice pc3${on ? ' sel' : ''}" data-plan="${value}">
+        <span class="pc3-ic">${UI.icon(icon, 20)}</span>
+        <span class="pc3-txt"><strong>${title}${badge ? ` <span class="badge">${badge}</span>` : ''}</strong><span class="dim">${sub}</span></span>
       </button>`;
-    return '<div class="plan-choice-group">Ya tengo un plan</div>'
-      + card('ai-doc', 'De mi entrenador', 'En PDF, fotos o texto. Una IA lo pasa a Traindía con sus series y cargas.', '', 'Beta')
-      + card('import', 'Me lo han pasado por Traindía', 'Un archivo o un enlace de un amigo o de tu entrenador.', '', '')
-      + '<div class="plan-choice-group">Empezar uno nuevo</div>'
-      + tpls.map((t, i) => card(`tpl:${t.id}`, UI.esc(t.name), UI.esc(t.tagline),
-        `<span>${UI.esc(t.frequency)} · ${UI.esc(t.sessionTime)} · ${UI.esc(t.level)}</span><span class="plan-choice-more" data-preview="${t.id}">Ver qué incluye ›</span>`, i === 0 ? 'Recomendada' : ''))
-      .join('')
-      + card('ai', 'Que me lo prepare una IA', 'Le cuentas tu objetivo, tus días y tu material, y te propone uno.', '', 'Beta')
-      + card('custom', 'En blanco', '7 días vacíos que montas a tu medida: tus ejercicios, tus días.', '', '')
-      + '<p class="field-hint plan-choice-soon">Más plantillas en camino.</p>';
+    const lista = tpls.length ? `<div class="pc-tpls"${esTpl ? '' : ' hidden'}>
+      ${tpls.map((t, i) => `<button type="button" class="pc-tpl${t.id === tplSel ? ' sel' : ''}" data-tpl="${t.id}">
+        <strong>${UI.esc(t.name)}${i === 0 ? ' <span class="badge">Recomendada</span>' : ''}</strong>
+        <span class="dim">${UI.esc(t.tagline)}</span>
+        <span class="plan-choice-meta"><span>${UI.esc(t.frequency)} · ${UI.esc(t.sessionTime)} · ${UI.esc(t.level)}</span><span class="plan-choice-more" data-preview="${t.id}">Ver qué incluye ›</span></span>
+      </button>`).join('')}
+      <p class="field-hint plan-choice-soon">Más plantillas en camino.</p>
+    </div>` : '';
+    return (tpls.length ? card(`tpl:${tplSel}`, 'book', 'Plantillas de Traindía', 'Planes ya montados, listos para empezar hoy.', '', esTpl) + lista : '')
+      + card('ai', 'chat', 'Que me lo prepare una IA', 'Cuéntale qué quieres, o pásale el PDF o las fotos del plan de tu entrenador.', 'Beta', selected === 'ai')
+      + card('custom', 'edit', 'Totalmente en blanco', '7 días vacíos para montarlo a tu medida.', '', selected === 'custom');
   }
   function bindPlanChoices(root, onChange) {
-    root.querySelectorAll('.plan-choice[data-plan]').forEach(b => b.addEventListener('click', (e) => {
+    const lista = root.querySelector('.pc-tpls');
+    const tplCard = root.querySelector('.plan-choice[data-plan^="tpl:"]');
+    const marcar = (b) => {
+      root.querySelectorAll('.plan-choice').forEach(x => x.classList.toggle('sel', x === b));
+      if (lista) lista.hidden = b !== tplCard;
+      onChange(b.dataset.plan);
+    };
+    root.querySelectorAll('.plan-choice[data-plan]').forEach(b => b.addEventListener('click', () => marcar(b)));
+    root.querySelectorAll('.pc-tpl[data-tpl]').forEach(b => b.addEventListener('click', (e) => {
       const pv = e.target.closest('[data-preview]');
       if (pv) { e.stopPropagation(); templatePreview(pv.dataset.preview); return; }
-      root.querySelectorAll('.plan-choice').forEach(x => x.classList.remove('sel'));
-      b.classList.add('sel'); onChange(b.dataset.plan);
+      root.querySelectorAll('.pc-tpl').forEach(x => x.classList.toggle('sel', x === b));
+      tplCard.dataset.plan = `tpl:${b.dataset.tpl}`;
+      marcar(tplCard);
     }));
   }
   // Vista previa de una plantilla: sus días y ejercicios, antes de elegirla.
@@ -1290,7 +1303,7 @@ const VPlan = (() => {
     UI.modal({
       title: 'Crear plan', size: 'wide',
       bodyHTML: `<div id="newPlanForm">
-        <span class="field-label">Tu plan</span>
+        <span class="field-label">¿Cómo quieres empezar?</span>
         <div class="plan-choices" id="planChoices">${planChoicesHTML(type)}</div>
         <div id="npName">${UI.field('Nombre (opcional)', UI.input('name', '', { placeholder: 'Si lo dejas vacío, el de la plantilla' }))}</div>
         <p class="field-hint" id="npAiHint" hidden>El nombre lo pones al final, cuando veas el plan que te ha hecho la IA.</p>
@@ -1299,8 +1312,7 @@ const VPlan = (() => {
         { label: 'Cancelar', kind: 'ghost' },
         { label: 'Crear y activar', kind: 'primary', onClick: async (rootEl) => {
           const d = UI.readForm(rootEl.querySelector('#newPlanForm'));
-          if (type === 'ai' || type === 'ai-doc') { setTimeout(() => VPlanAI.open(app, { mode: type === 'ai' ? 'ia' : 'doc' }), 50); return; } // el plan lo crea el importador
-          if (type === 'import') { setTimeout(() => VData.startImport(app), 50); return; }
+          if (type === 'ai') { setTimeout(() => VPlanAI.open(app), 50); return; } // el plan lo crea el importador
           const tplId = type.startsWith('tpl:') ? type.slice(4) : null;
           await DB.createPlan(app.activeUser.id, tplId ? 'template' : 'custom', { name: d.name.trim() || undefined, activate: true, templateId: tplId });
           await app.refreshRoutine();
@@ -1311,10 +1323,10 @@ const VPlan = (() => {
       onMount: (rootEl) => {
         // Con IA aquí no se crea nada todavía: se abre el asistente (el nombre va al final)
         const sync = () => {
-          const ai = type === 'ai' || type === 'ai-doc', fuera = ai || type === 'import';
-          rootEl.querySelector('#npName').hidden = fuera;
+          const ai = type === 'ai';
+          rootEl.querySelector('#npName').hidden = ai;
           rootEl.querySelector('#npAiHint').hidden = !ai;
-          rootEl.querySelector('.modal-actions .btn.primary').textContent = fuera ? 'Continuar ›' : 'Crear y activar';
+          rootEl.querySelector('.modal-actions .btn.primary').textContent = ai ? 'Continuar ›' : 'Crear y activar';
         };
         bindPlanChoices(rootEl, (v) => { type = v; sync(); });
         sync();

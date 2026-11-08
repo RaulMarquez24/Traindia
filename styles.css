@@ -400,6 +400,17 @@ body.has-active-bar .pl-new-wrap { bottom: calc(var(--nav-h) + var(--safe-bottom
 .plan-choice-meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-top: 4px; font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; letter-spacing: .02em; color: var(--ink-soft); }
 .plan-choice-more { font-family: 'Inter Tight', sans-serif; font-size: 13px; font-weight: 700; color: var(--strong); padding: 4px 0; }
 .plan-choice-soon { margin: 0; text-align: center; }
+.plan-choice.pc3 { flex-direction: row; align-items: center; gap: 12px; padding: 14px; }
+.pc3-ic { width: 40px; height: 40px; border-radius: 11px; display: grid; place-items: center; flex-shrink: 0; background: var(--line-soft); color: var(--ink-soft); }
+.plan-choice.pc3.sel .pc3-ic { background: var(--strong); color: #fff; }
+.pc3-txt { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.pc-tpls { display: flex; flex-direction: column; gap: 8px; margin: -2px 0 4px 18px; padding-left: 12px; border-left: 2px solid var(--strong); }
+.pc-tpls[hidden] { display: none; }
+.pc-tpl { display: flex; flex-direction: column; gap: 3px; width: 100%; text-align: left; background: var(--bg-card); border: 1.5px solid var(--line); border-radius: 12px; padding: 11px 13px; cursor: pointer; font-family: inherit; color: var(--ink); }
+.pc-tpl strong { font-size: 14px; }
+.pc-tpl strong .badge { vertical-align: 2px; margin-left: 4px; }
+.pc-tpl .dim { font-size: 12px; line-height: 1.35; }
+.pc-tpl.sel { border-color: var(--strong); }
 .plan-choice-group { font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-dim); margin: 8px 2px 0; }
 .plan-choice-group:first-child { margin-top: 0; }
 .onb-restore { display: flex; align-items: center; gap: 12px; width: 100%; margin: 0 0 22px; padding: 14px; text-align: left; background: transparent; border: 1.5px dashed var(--line); border-radius: 12px; color: var(--ink-soft); cursor: pointer; font-family: inherit; }
