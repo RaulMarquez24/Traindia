@@ -404,7 +404,7 @@ const UI = (() => {
     let ticks = null;
     if (opts.niceY) {
       const span = maxY - minY;
-      const step = [0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500].find(s => span / s <= 4) || 1000;
+      const step = [0.5, 1, 2, 5, 10, 15, 20, 30, 50, 60, 100, 200, 500, 1000, 2000, 5000].filter(s => s >= (opts.minStep || 0)).find(s => span / s <= 4) || 10000;
       minY = Math.floor(minY / step) * step; maxY = Math.ceil(maxY / step) * step;
       if (maxY - minY < step * 2) maxY = minY + step * 2;
       ticks = [];
@@ -445,7 +445,8 @@ const UI = (() => {
       const dots = s.noDots ? '' : pts.map(p => {
         const cx = sx(p.x).toFixed(1), cy = sy(p.y).toFixed(1);
         // círculo visible + área de toque invisible (r grande) con la info del punto
-        return `<circle cx="${cx}" cy="${cy}" r="${s.r || 2.5}" fill="${s.color}"${dotOp}/>`
+        return (p.mark ? `<circle cx="${cx}" cy="${cy}" r="${(s.r || 2.5) + 4}" fill="none" stroke="${s.color}" stroke-width="1.8"/>` : '')
+          + `<circle cx="${cx}" cy="${cy}" r="${s.r || 2.5}" fill="${s.color}"${dotOp}/>`
           + `<circle class="chart-hit" cx="${cx}" cy="${cy}" r="9" fill="transparent" data-cx="${cx}" data-cy="${cy}" data-color="${s.color}" data-info="${esc(pointInfo(p, s))}"/>`;
       }).join('');
       // por serie: grosor, opacidad y trazo (la tendencia va gruesa y sin puntos; los datos, tenues)
@@ -618,8 +619,8 @@ const UI = (() => {
         const listEl = root.querySelector('#listResults');
         const draw = (q) => {
           const ql = norm(q || '');
-          const items = opts.filter(o => !ql || norm(o.label).includes(ql));
-          listEl.innerHTML = items.map(o => `<button class="picker-row${String(o.value) === String(value) ? ' sel' : ''}" data-val="${esc(o.value)}"><span class="picker-name">${esc(o.label)}</span></button>`).join('') || '<div class="empty-state"><p class="dim">Sin resultados.</p></div>';
+          const items = opts.filter(o => !ql || norm(o.label + ' ' + (o.hint || '')).includes(ql));
+          listEl.innerHTML = items.map(o => `<button class="picker-row${String(o.value) === String(value) ? ' sel' : ''}" data-val="${esc(o.value)}"><span class="picker-name">${esc(o.label)}</span>${o.hint ? `<span class="picker-tag">${esc(o.hint)}</span>` : ''}</button>`).join('') || '<div class="empty-state"><p class="dim">Sin resultados.</p></div>';
           listEl.querySelectorAll('[data-val]').forEach(b => b.addEventListener('click', () => { closeModal(); onPick(b.dataset.val, opts.find(o => String(o.value) === b.dataset.val)); }));
         };
         const search = root.querySelector('#listSearch');

@@ -53,6 +53,24 @@ const VProgress = (() => {
   METRIC_LABEL.maxLoad = 'Peso máx levantado'; // récord: mayor (corporal+lastre) en una serie
   // Orden de las marcas dentro de la tarjeta de cada ejercicio en "Récords".
   const METRIC_ORDER = ['maxWeight', 'e1rm', 'maxReps', 'maxLoad', 'volume', 'distance', 'pace', 'bestSet', 'totalTime', 'kcal', 'maxTime'];
+  // Nombres cortos (para botones) y qué mide cada una, en cristiano.
+  const METRIC_SHORT = { maxWeight: 'Peso máx', e1rm: '1RM', volume: 'Volumen', maxReps: 'Reps', maxLoad: 'Peso máx', distance: 'Distancia', totalTime: 'Tiempo', pace: 'Ritmo', bestSet: 'Mejor serie', kcal: 'Kcal', maxTime: 'Tiempo máx' };
+  const METRIC_HINT = {
+    maxWeight: 'El peso más alto que moviste en una serie.',
+    e1rm: 'Cuánto levantarías a una sola repetición, estimado con tus series.',
+    volume: 'Todo el peso que moviste en el entreno: kilos × repeticiones.',
+    maxReps: 'Las repeticiones de tu mejor serie.',
+    maxLoad: 'Tu peso ± el lastre o la asistencia, en tu mejor serie.',
+    distance: 'Los kilómetros de cada salida.',
+    totalTime: 'El tiempo total de cada salida.',
+    pace: 'Ritmo medio de las salidas de 1 km o más. Cuanto más bajo, mejor.',
+    bestSet: 'Tu serie más rápida de cada entreno. Cuanto más bajo, mejor.',
+    kcal: 'Las calorías de cada salida.',
+    maxTime: 'Tu serie más larga.',
+  };
+  // Números en español (coma decimal), con el formateador reutilizado.
+  const _nf = new Map();
+  const nf = (v, dec = 1) => { let f = _nf.get(dec); if (!f) { f = new Intl.NumberFormat('es-ES', { maximumFractionDigits: dec }); _nf.set(dec, f); } return f.format(v); };
 
   // Peso corporal registrado (Progreso → Corporal), ascendente por fecha, para
   // cruzarlo con las sesiones y estimar el "peso levantado" a peso corporal.
@@ -82,7 +100,7 @@ const VProgress = (() => {
   function fmtMetricValue(metric, y) {
     if (LOWER_BETTER.has(metric)) return `${fmtPaceV(y)} /km`;
     if (metric === 'maxTime' || metric === 'totalTime') return fmtSecs(y);
-    return `${y}${METRIC_UNIT[metric] || ''}`;
+    return `${nf(y, metric === 'distance' ? 2 : 1)}${METRIC_UNIT[metric] || ''}`;
   }
   // valor formateado de un punto con su unidad + condiciones (ej. "90 kg × 3")
   function fmtMetricPoint(metric, p) {
@@ -96,27 +114,17 @@ const VProgress = (() => {
   // Serie del 1RM respetando "solo esfuerzo"; si no hay ninguna serie con
   // esfuerzo marcado, cae a usar todas (y avisa con fellBack). Para el resto de
   // métricas devuelve la serie normal.
-  async function metricSeries(userId, name, metric, effortOnly, formula, label) {
+  async function metricSeries(userId, name, metric, effortOnly, formula, label, pre = {}) {
     if (metric !== 'e1rm' || !effortOnly) {
-      return { points: await exerciseSeries(userId, name, metric, { effortOnly: false, formula, label }), noEffort: false };
+      return { points: await exerciseSeries(userId, name, metric, { ...pre, effortOnly: false, formula, label }), noEffort: false };
     }
     // tick activo: solo series con esfuerzo. Si no hay ninguna pero sí hay datos,
     // se deja la gráfica vacía y se marca noEffort para avisar (no se usan todas).
-    const pts = await exerciseSeries(userId, name, metric, { effortOnly: true, formula, label });
+    const pts = await exerciseSeries(userId, name, metric, { ...pre, effortOnly: true, formula, label });
     if (pts.length) return { points: pts, noEffort: false };
-    const all = await exerciseSeries(userId, name, metric, { effortOnly: false, formula, label });
+    const all = await exerciseSeries(userId, name, metric, { ...pre, effortOnly: false, formula, label });
     return { points: [], noEffort: all.length > 0 };
   }
-  // Etiquetas/variantes usadas por un ejercicio en las sesiones (para el filtro de cardio).
-  async function exerciseLabels(userId, exName) {
-    const lname = exName.toLowerCase();
-    const set = new Set();
-    (await DB.sessionsOf(userId)).filter(s => !s.draft).forEach(s => (s.entries || []).forEach(e => {
-      if ((e.name || '').toLowerCase() === lname) (e.sets || []).forEach(st => { if (st.label) set.add(st.label.trim()); });
-    }));
-    return [...set].sort((a, b) => a.localeCompare(b));
-  }
-
   // Formatea segundos: <60s → "45s"; <60min → "m:ss"; ≥60min → "h:mm:ss".
   function fmtSecs(v) {
     v = Math.max(0, Math.round(v || 0));
@@ -232,23 +240,23 @@ const VProgress = (() => {
       // condiciones de la marca + desempate. La "tie" mayor = mejor marca a igual valor.
       let detail = '', tie = 0;
       if (metric === 'maxWeight' && bestW) { detail = bestW.r ? `× ${bestW.r}` : ''; tie = bestW.r; }            // + reps a igual peso
-      else if (metric === 'e1rm' && best1rmSet) { detail = `de ${best1rmSet.w} kg × ${best1rmSet.r}${best1rmSet.eff ? ` · ${best1rmSet.eff}` : ''}`; tie = best1rmSet.w; } // serie origen del 1RM
+      else if (metric === 'e1rm' && best1rmSet) { detail = `de ${nf(best1rmSet.w)} kg × ${best1rmSet.r}${best1rmSet.eff ? ` · ${best1rmSet.eff}` : ''}`; tie = best1rmSet.w; } // serie origen del 1RM
       else if (metric === 'maxReps' && bestR) { // con tu peso: si llevabas lastre o asistencia; con barra: el peso
-        detail = e_isReps ? (bestR.mode && bestR.load ? (bestR.mode === 'asist' ? `con asistencia (−${bestR.load} kg)` : `con +${bestR.load} kg`) : '') : (bestR.w ? `@ ${bestR.w} kg` : '');
+        detail = e_isReps ? (bestR.mode && bestR.load ? (bestR.mode === 'asist' ? `con asistencia (−${nf(bestR.load)} kg)` : `con +${nf(bestR.load)} kg`) : '') : (bestR.w ? `@ ${nf(bestR.w)} kg` : '');
         tie = bestR.w; }
       else if (metric === 'distance' && distance > 0) { detail = totalTime ? `en ${fmtSecs(totalTime)}` : ''; tie = -totalTime; } // − tiempo a igual distancia
       else if (metric === 'kcal' && kcal > 0) { detail = totalTime ? `en ${fmtSecs(totalTime)}` : ''; }
-      else if (metric === 'maxTime' && distR > 0) { detail = `· ${distR} km`; tie = distR; }                      // + distancia a igual tiempo
-      else if (metric === 'totalTime' && distR > 0) { detail = `· ${distR} km`; tie = distR; }                    // tiempo total (cardio) + distancia
-      else if (metric === 'pace') { detail = `· ${distR} km en ${fmtSecs(totalTime)}`; tie = distR; }            // a igual ritmo, gana la más larga
+      else if (metric === 'maxTime' && distR > 0) { detail = `· ${nf(distR, 2)} km`; tie = distR; }                      // + distancia a igual tiempo
+      else if (metric === 'totalTime' && distR > 0) { detail = `· ${nf(distR, 2)} km`; tie = distR; }                    // tiempo total (cardio) + distancia
+      else if (metric === 'pace') { detail = `· ${nf(distR, 2)} km en ${fmtSecs(totalTime)}`; tie = distR; }            // a igual ritmo, gana la más larga
       else if (metric === 'bestSet' && bestSetInfo) { detail = `· ${bestSetInfo.m} m en ${fmtSecs(bestSetInfo.t)}`; tie = bestSetInfo.m; }
       else if (metric === 'maxLoad' && bestLoad) { // peso máx levantado: reps de la serie + lastre/asistencia
-        const extra = bestLoad.mode && bestLoad.load ? ` (${bestLoad.mode === 'asist' ? '−' : '+'}${bestLoad.load} kg)` : '';
+        const extra = bestLoad.mode && bestLoad.load ? ` (${bestLoad.mode === 'asist' ? '−' : '+'}${nf(bestLoad.load)} kg)` : '';
         detail = `${bestLoad.r ? `× ${bestLoad.r}` : ''}${extra}`.trim();
         tie = bestLoad.r;
       }
       if (!(y > 0)) return; // un 0 no es una marca (p. ej. peso de la serie en ejercicios con tu peso)
-      points.push({ x: s.date, y, detail, tie });
+      points.push({ x: s.date, y, detail, tie, sid: s.id });
     });
     return points;
   }
@@ -284,7 +292,7 @@ const VProgress = (() => {
       for (const metric of recordMetrics(ex)) {
         const pts = await exerciseSeries(userId, ex.name, metric, { bodyWeights, sessions });
         const best = bestPoint(pts, metric);
-        if (best && best.y > 0) out.push({ ex, metric, point: best });
+        if (best && best.y > 0) out.push({ ex, metric, point: best, pts });
       }
     }
     out.sort((a, b) => (b.point.x || '').localeCompare(a.point.x || '')); // marca más reciente primero
@@ -447,7 +455,7 @@ const VProgress = (() => {
   // Subtítulo corto de una marca: «12 repeticiones», «en 42:30», «a 4:51 /km»…
   function subDe(metric, p) {
     const d = (p.detail || '').trim();
-    if (metric === 'maxWeight' || metric === 'maxLoad') { const m = d.match(/^× (\d+)(.*)$/); return m ? `${m[1]} repeticiones${m[2]}` : d; }
+    if (metric === 'maxWeight' || metric === 'maxLoad') { const m = d.match(/^× (\d+)(.*)$/); return m ? `${m[1]} ${m[1] === '1' ? 'repetición' : 'repeticiones'}${m[2]}` : d; }
     if (metric === 'maxReps') return d ? `seguidas ${d}` : 'seguidas';
     if (metric === 'distance') return d;
     if (metric === 'pace') return `ritmo medio ${d}`.trim();
@@ -652,68 +660,131 @@ const VProgress = (() => {
     return Math.floor(dt.getTime() / (7 * 86400000));
   }
 
-  // ---------- LISTA "TUS RÉCORDS" ----------
+  // ---------- utilidades de Ejercicios, Récords y Comparar ----------
+  function haceTxt(iso) {
+    const d = diasEntre(iso, DB.todayISO());
+    if (d <= 0) return 'hoy';
+    if (d === 1) return 'ayer';
+    if (d < 14) return `hace ${d} días`;
+    if (d < 60) return `hace ${Math.round(d / 7)} semanas`;
+    if (d < 365) { const m = Math.round(d / 30); return m <= 1 ? 'hace un mes' : `hace ${m} meses`; }
+    return 'hace más de un año';
+  }
+  // Diferencia entre dos valores de una métrica, con su unidad («10 kg», «0:20 /km»…)
+  function difTxt(metric, a, b) {
+    const d = Math.abs(a - b);
+    if (LOWER_BETTER.has(metric)) return `${fmtPaceV(d)} /km`;
+    if (metric === 'maxTime' || metric === 'totalTime') return fmtSecs(d);
+    return `${nf(d, metric === 'distance' ? 2 : 1)}${METRIC_UNIT[metric] || ''}`;
+  }
+  const mejorQue = (metric, a, b) => (LOWER_BETTER.has(metric) ? a < b : a > b);
+  // Qué puntos fueron récord en su momento (superaron todo lo anterior; el primero no cuenta)
+  function marcarRecords(points, metric) {
+    let best = null;
+    return points.map((p, i) => { const r = !best || better(p, best, metric); if (r) best = p; return { ...p, rec: r && i > 0 }; });
+  }
+  // La marca principal de un ejercicio entre las que tiene (peso máx, distancia…)
+  const principal = (marks) => marks.slice().sort((a, b) => {
+    const ia = MAIN_METRICS.indexOf(a.metric), ib = MAIN_METRICS.indexOf(b.metric);
+    return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib) || METRIC_ORDER.indexOf(a.metric) - METRIC_ORDER.indexOf(b.metric);
+  })[0];
+  // Mini gráfica de una tarjeta de récord (en el color de la app)
+  function sparkMini(pts, invert) {
+    if (!pts || pts.length < 2) return '';
+    const W = 96, H = 34;
+    const xs = pts.map(p => isoMs(p.x)), ys = pts.map(p => p.y);
+    const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+    const X = (iso) => 3 + (x1 === x0 ? 0.5 : (isoMs(iso) - x0) / (x1 - x0)) * (W - 6);
+    const Y = (v) => { const k = y1 === y0 ? 0.5 : (v - y0) / (y1 - y0); return 3 + (invert ? k : 1 - k) * (H - 6); };
+    const d = pts.map((p, i) => `${i ? 'L' : 'M'}${X(p.x).toFixed(1)},${Y(p.y).toFixed(1)}`).join(' ');
+    const l = pts[pts.length - 1];
+    return `<svg class="rc-spark" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" aria-hidden="true"><path d="${d}"/><circle cx="${X(l.x).toFixed(1)}" cy="${Y(l.y).toFixed(1)}" r="3"/></svg>`;
+  }
+
+  // ---------- RÉCORDS ----------
+  // Una tarjeta por ejercicio con su marca principal y su mini gráfica; el resto de marcas, plegadas.
   async function renderRecords(app, host) {
-    const records = await computeRecords(app, app.activeUser.id);
-    if (!records.length) { host.innerHTML = `<div class="empty-state"><p class="dim">Aún no hay récords. Registra sesiones para verlos aquí.</p></div>`; return; }
+    const uid = app.activeUser.id;
     const sort = host._recSort || 'recent';
-    const cat = host._recCat || '__all__';
-    const search = host._recSearch || '';
-    const cats = [...new Set(records.map(r => r.ex.muscleGroup || 'General'))].sort((a, b) => a.localeCompare(b));
-    // Agrupar por ejercicio: cada uno con TODAS sus marcas (records ya viene por fecha desc).
+    const SORTS = [{ id: 'recent', l: 'Recientes' }, { id: 'old', l: 'Hace tiempo' }, { id: 'name', l: 'A-Z' }];
+    const cabecera = (cats) => `
+      <input class="inp" id="recSearch" type="search" placeholder="Buscar ejercicio…" autocomplete="off" value="${UI.esc(host._recSearch || '')}">
+      <div class="pg-seg rc-sort">${SORTS.map(s => `<button type="button" data-sort="${s.id}" class="${s.id === sort ? 'on' : ''}">${s.l}</button>`).join('')}</div>
+      ${cats}
+      ${sort === 'old' ? '<p class="rc-hint dim">Primero las marcas que llevas más tiempo sin superar. ¿Toca intentarlo?</p>' : ''}`;
+    if (!host._pintado) {
+      host.innerHTML = cabecera(`<div class="rc-cats">${UI.sk('100%', 30, 'border-radius:99px')}</div>`)
+        + `<div id="recList">${[0, 1, 2].map(() => `<div class="rc-card">${UI.sk('55%', 16)}${UI.sk('30%', 11, 'margin-top:6px')}${UI.sk('40%', 26, 'margin-top:14px')}${UI.sk('35%', 11, 'margin-top:8px')}</div>`).join('')}</div>`;
+    }
+    const records = await computeRecords(app, uid);
+    if (!host.isConnected) return;
+    host._pintado = true;
+    if (!records.length) { host.innerHTML = `<div class="empty-state"><p><strong>Aquí irán tus récords.</strong></p><p class="dim">Cada vez que superes una marca en un ejercicio (más peso, más reps, más km o mejor ritmo) quedará guardada aquí.</p></div>`; return; }
+
+    // Agrupar por ejercicio con todas sus marcas
     const byEx = new Map();
     records.forEach(r => {
       const k = r.ex.name;
-      if (!byEx.has(k)) byEx.set(k, { ex: r.ex, marks: [], recent: '' });
-      const g = byEx.get(k);
-      g.marks.push(r);
-      if ((r.point.x || '') > g.recent) g.recent = r.point.x || '';
+      if (!byEx.has(k)) byEx.set(k, { ex: r.ex, marks: [] });
+      byEx.get(k).marks.push(r);
     });
-    const groups = [...byEx.values()];
+    const groups = [...byEx.values()].map(g => {
+      const main = principal(g.marks);
+      const recent = g.marks.reduce((m, r) => ((r.point.x || '') > m ? r.point.x : m), '');
+      return { ...g, main, recent, grp: g.ex.muscleGroup || 'General' };
+    });
     if (sort === 'name') groups.sort((a, b) => a.ex.name.localeCompare(b.ex.name));
-    else groups.sort((a, b) => (b.recent || '').localeCompare(a.recent || '')); // por marca más reciente
-    const rows = groups.map(g => {
-      const grp = g.ex.muscleGroup || 'General';
-      g.marks.sort((a, b) => METRIC_ORDER.indexOf(a.metric) - METRIC_ORDER.indexOf(b.metric));
-      const marks = g.marks.map(r => `<div class="rec-mark">
-          <span class="rm-label">${UI.esc(METRIC_LABEL[r.metric] || r.metric)}</span>
-          <span class="rm-val">${UI.esc(fmtMetricPoint(r.metric, r.point))}<span class="rm-date">${UI.fmtDateShort(r.point.x)}</span></span>
-        </div>`).join('');
-      return `<div class="rec-group" data-search="${UI.esc(UI.norm(g.ex.name + ' ' + grp))}" data-cat="${UI.esc(grp)}">
-        <div class="rec-group-head"><span class="rec-medal">🏆</span><div class="rec-main"><div class="rec-name">${UI.esc(g.ex.name)}</div><div class="rec-meta">${UI.esc(grp)}</div></div></div>
-        <div class="rec-marks">${marks}</div>
+    else if (sort === 'old') groups.sort((a, b) => (a.main.point.x || '').localeCompare(b.main.point.x || ''));
+    else groups.sort((a, b) => (b.recent || '').localeCompare(a.recent || ''));
+
+    const cats = [...new Set(groups.map(g => g.grp))].sort((a, b) => a.localeCompare(b));
+    const cat = cats.includes(host._recCat) ? host._recCat : '';
+    const catsHTML = cats.length > 1
+      ? `<div class="chips-row small rc-cats"><button class="chip${!cat ? ' on' : ''}" data-cat="">Todas</button>${cats.map(c => `<button class="chip${c === cat ? ' on' : ''}" data-cat="${UI.esc(c)}">${UI.esc(c)}</button>`).join('')}</div>`
+      : '';
+
+    const card = (g) => {
+      const m = g.main;
+      const sub = subDe(m.metric, m.point);
+      const otras = g.marks.filter(r => r !== m).sort((a, b) => METRIC_ORDER.indexOf(a.metric) - METRIC_ORDER.indexOf(b.metric));
+      return `<div class="rc-card" role="button" tabindex="0" data-ex="${UI.esc(g.ex.id)}" data-exname="${UI.esc(g.ex.name)}" data-search="${UI.esc(UI.norm(g.ex.name + ' ' + g.grp))}" data-cat="${UI.esc(g.grp)}">
+        <div class="rc-top">
+          <div class="rc-tit"><strong>${UI.esc(g.ex.name)}</strong><span>${UI.esc(g.grp)}</span></div>
+          ${sparkMini((m.pts || []).slice(-14), LOWER_BETTER.has(m.metric))}
+        </div>
+        <div class="rc-main"><span class="rc-big">${UI.icon('trophy', 15)}${UI.esc(fmtMetricValue(m.metric, m.point.y))}</span><span class="rc-lbl">${UI.esc(METRIC_SHORT[m.metric] || '')}${sub ? ` · ${UI.esc(sub)}` : ''}</span></div>
+        <div class="rc-when"><span>${UI.fmtDateShort(m.point.x)} · ${haceTxt(m.point.x)}</span><span class="rc-go">Ver progreso ›</span></div>
+        ${otras.length ? `<details class="rc-more"><summary>${otras.length === 1 ? 'Su otra marca' : `Sus otras ${otras.length} marcas`}</summary>
+          ${otras.map(r => `<div class="rc-row"><span>${UI.esc(METRIC_LABEL[r.metric] || r.metric)}</span><strong>${UI.esc(fmtMetricPoint(r.metric, r.point))}</strong><small>${UI.fmtDateShort(r.point.x)}</small></div>`).join('')}
+        </details>` : ''}
       </div>`;
-    }).join('');
-    host.innerHTML = `
-      <input class="inp" id="recSearch" placeholder="Buscar ejercicio…" autocomplete="off" value="${UI.esc(search)}" style="margin-bottom:10px">
-      <div class="chips-row small" style="margin-bottom:8px">
-        <button class="chip${sort === 'recent' ? ' on' : ''}" data-sort="recent">Recientes</button>
-        <button class="chip${sort === 'name' ? ' on' : ''}" data-sort="name">A-Z</button>
-      </div>
-      ${cats.length > 1 ? `<div class="rec-catsel">${UI.field('Categoría', UI.selectButton('recCatBtn', cat === '__all__' ? 'Todas' : cat))}</div>` : ''}
-      <div id="recList">${rows}</div>
+    };
+    host.innerHTML = cabecera(catsHTML)
+      + `<div id="recList">${groups.map(card).join('')}</div>
       <p class="dim" id="recNoRes" style="display:none;padding:12px 2px">Sin resultados.</p>`;
 
     const applyFilter = () => {
       const q = UI.norm(host._recSearch || '');
-      const c = host._recCat || '__all__';
+      const c = cats.includes(host._recCat) ? host._recCat : '';
       let any = false;
-      host.querySelectorAll('.rec-group').forEach(row => {
-        const vis = (!q || row.dataset.search.includes(q)) && (c === '__all__' || row.dataset.cat === c);
+      host.querySelectorAll('.rc-card').forEach(row => {
+        const vis = (!q || row.dataset.search.includes(q)) && (!c || row.dataset.cat === c);
         row.style.display = vis ? '' : 'none';
         if (vis) any = true;
       });
       host.querySelector('#recNoRes').style.display = any ? 'none' : '';
     };
     const si = host.querySelector('#recSearch');
-    si.addEventListener('input', () => { host._recSearch = si.value; applyFilter(); }); // filtra sin re-render (mantiene foco)
-    host.querySelectorAll('[data-sort]').forEach(b => b.addEventListener('click', () => { host._recSort = b.dataset.sort; renderRecords(app, host); }));
-    const catBtn = host.querySelector('#recCatBtn');
-    if (catBtn) catBtn.addEventListener('click', () => UI.pickFromList({
-      title: 'Filtrar por categoría',
-      options: [{ value: '__all__', label: 'Todas' }].concat(cats.map(c => ({ value: c, label: c }))),
-      value: cat,
-      onPick: (val) => { host._recCat = val; renderRecords(app, host); },
+    si.addEventListener('input', () => { host._recSearch = si.value; applyFilter(); }); // filtra sin repintar (mantiene el foco)
+    host.querySelectorAll('[data-sort]').forEach(b => b.addEventListener('click', () => { if (b.dataset.sort === sort) return; host._recSort = b.dataset.sort; renderRecords(app, host); }));
+    host.querySelectorAll('[data-cat]').forEach(b => b.addEventListener('click', () => {
+      host._recCat = b.dataset.cat;
+      host.querySelectorAll('[data-cat]').forEach(x => x.classList.toggle('on', x === b));
+      applyFilter();
+    }));
+    host.querySelectorAll('.rc-card').forEach(c => c.addEventListener('click', (ev) => {
+      if (ev.target.closest('.rc-more')) return; // abrir o cerrar sus otras marcas no navega
+      app.go('progress', { tab: 'exercise', exId: c.dataset.ex, exName: c.dataset.exname });
     }));
     applyFilter();
   }
@@ -942,48 +1013,89 @@ const VProgress = (() => {
     });
   }
 
-  // Ejercicios que REALMENTE tienen algo registrado. El catálogo tiene más de cien y
-  // la mayoría nunca se han hecho: no tiene sentido ofrecer su "progreso".
-  async function exercisesWithData(userId, catalog) {
-    const ses = (await DB.sessionsOf(userId)).filter(s => !s.draft);
-    const ids = new Set(), names = new Set();
-    ses.forEach(s => (s.entries || []).forEach(e => {
-      if (!(e.sets || []).length) return;
-      if (e.exerciseId) ids.add(e.exerciseId);
-      if (e.name) names.add(e.name.trim().toLowerCase());
-    }));
-    const conDatos = catalog.filter(c => ids.has(c.id) || names.has((c.name || '').trim().toLowerCase()));
-    return conDatos.length ? conDatos : catalog; // si aún no hay nada, no dejamos la vista vacía
-  }
-
   // ---------- POR EJERCICIO ----------
+  // Arriba el ejercicio (el último que hiciste) y qué medir; luego tu récord frente a la última vez,
+  // la gráfica con cada nuevo récord marcado y el historial, que abre cada entreno.
   async function renderExercise(app, host, params) {
-    const todos = (await DB.exercisesOf(app.activeUser.id)).sort((a, b) => a.name.localeCompare(b.name));
-    if (todos.length === 0) { host.innerHTML = `<div class="empty-state"><p>No hay ejercicios en el catálogo.</p></div>`; return; }
-    const catalog = await exercisesWithData(app.activeUser.id, todos);
-    const exId = host._exId || params.exId || catalog[0].id;
-    const ex = catalog.find(e => e.id === exId) || catalog[0];
+    const uid = app.activeUser.id;
+    if (!host._pintado) {
+      host.innerHTML = `<div class="card ex-card">
+          ${UI.sk('65%', 22)}${UI.sk('45%', 12, 'margin-top:8px')}
+          ${UI.sk('100%', 34, 'margin-top:16px;border-radius:99px')}
+          <div class="pw-datos">${UI.sk('100%', 70, 'border-radius:12px')}${UI.sk('100%', 70, 'border-radius:12px')}</div>
+          ${UI.sk('100%', 170, 'margin-top:16px;border-radius:12px')}
+        </div>
+        <div class="card-label pg-sec">Historial</div>
+        <div class="card pr-list">${UI.skRows(4)}</div>`;
+    }
+    const [todos, sesAll, bws] = await Promise.all([DB.exercisesOf(uid), DB.sessionsOf(uid), loadBodyWeights(uid)]);
+    if (!host.isConnected) return;
+    host._pintado = true;
+    const sessions = sesAll.filter(s => !s.draft);
+
+    // Cuántas veces has hecho cada ejercicio y cuándo fue la última
+    const uso = new Map();
+    sessions.forEach(s => (s.entries || []).forEach(e => {
+      if (!(e.sets || []).length || !e.name) return;
+      const k = e.name.trim().toLowerCase();
+      const u = uso.get(k) || { n: 0, last: '' };
+      u.n++; if ((s.date || '') > u.last) u.last = s.date || '';
+      uso.set(k, u);
+    }));
+    const usoDe = (c) => uso.get((c.name || '').trim().toLowerCase());
+    const vistos = new Set();
+    const catalog = todos.filter(c => {
+      const k = (c.name || '').trim().toLowerCase();
+      if (!usoDe(c) || vistos.has(k) || c.type === 'check') return false;
+      vistos.add(k); return true;
+    }).sort((a, b) => usoDe(b).last.localeCompare(usoDe(a).last) || a.name.localeCompare(b.name));
+    if (!catalog.length) {
+      host.innerHTML = `<div class="empty-state"><p><strong>Aquí verás cómo progresa cada ejercicio.</strong></p><p class="dim">En cuanto guardes un entreno, cada ejercicio que hagas tendrá su gráfica, su récord y su historial.</p></div>`;
+      return;
+    }
+    const pedido = host._exId || (params && params.exId);
+    const pedidoNombre = !host._exId && params && params.exName ? params.exName.trim().toLowerCase() : '';
+    const ex = catalog.find(e => e.id === pedido) || (pedidoNombre && catalog.find(e => e.name.trim().toLowerCase() === pedidoNombre)) || catalog[0];
+    const u = usoDe(ex);
     const metrics = metricsFor(ex);
     const metric = (host._metric && metrics.some(m => m.key === host._metric)) ? host._metric : metrics[0].key;
 
-    // Filtro por etiqueta/variante (solo cardio con etiquetas registradas)
-    const cardioLabels = isCardioEx(ex) ? await exerciseLabels(app.activeUser.id, ex.name) : [];
+    // Filtro por variante (solo cardio con etiquetas apuntadas)
+    const lname = ex.name.toLowerCase();
+    const etiquetas = new Set();
+    if (isCardioEx(ex)) sessions.forEach(s => (s.entries || []).forEach(e => { if ((e.name || '').toLowerCase() === lname) (e.sets || []).forEach(st => { if (st.label) etiquetas.add(st.label.trim()); }); }));
+    const cardioLabels = [...etiquetas].sort((a, b) => a.localeCompare(b));
     const labelF = (host._exLabel && cardioLabels.includes(host._exLabel)) ? host._exLabel : '';
 
-    const sinPeso = ex.type === 'reps' && ['maxLoad', 'e1rm', 'volume'].includes(metric) && !(await loadBodyWeights(app.activeUser.id)).length;
+    const sinPeso = ex.type === 'reps' && ['maxLoad', 'e1rm', 'volume'].includes(metric) && !bws.length;
     const isE1 = metric === 'e1rm';
     const effortOnly = isE1 ? (host._effortOnly !== false) : false; // por defecto activado
     const formula = app._e1Formula || 'epley';
-    const { points, noEffort } = await metricSeries(app.activeUser.id, ex.name, metric, effortOnly, formula, labelF);
-
-    const isTime = metric === 'maxTime' || metric === 'totalTime';
-    const prPoint = bestPoint(points, metric);
+    const { points: crudos, noEffort } = await metricSeries(uid, ex.name, metric, effortOnly, formula, labelF, { sessions, bodyWeights: bws });
+    if (!host.isConnected) return;
+    const points = marcarRecords(crudos, metric);
+    const hoy = DB.todayISO();
+    const range = host._exRange || 'all';
+    const rDays = (RANGES.find(r => r.id === range) || RANGES[RANGES.length - 1]).days;
+    const vis = points.filter(p => !rDays || diasEntre(p.x, hoy) <= rDays);
+    const pr = bestPoint(points, metric);
+    const last = points[points.length - 1];
     const fmtPoint = (p) => fmtMetricPoint(metric, p);
-    const metricLabel = (metrics.find(m => m.key === metric) || {}).label || '';
-    const isPR = (p) => p === prPoint; // solo la marca: la primera vez que la lograste
-    const recent = points.slice(-8).reverse().map(p => `<li><span>${UI.fmtDateShort(p.x)}</span><strong>${fmtPoint(p)}${isPR(p) ? ' 🏆' : ''}</strong></li>`).join('');
 
-    const helpOpen = host._e1Help === true;        // explicación plegada por defecto
+    // Récord frente a la última vez
+    let datosHTML = '';
+    if (pr) {
+      const subPr = [subDe(metric, pr), UI.fmtDateShort(pr.x)].filter(Boolean).join(' · ');
+      const subLast = [subDe(metric, last), UI.fmtDateShort(last.x)].filter(Boolean).join(' · ');
+      const esRecord = last === pr || (last.y === pr.y && !mejorQue(metric, pr.y, last.y));
+      datosHTML = `<div class="pw-datos ex-datos">
+          <div class="ex-pr"><span class="ex-dl">${UI.icon('trophy', 13)} Récord</span><strong>${UI.esc(fmtMetricValue(metric, pr.y))}</strong><span>${UI.esc(subPr)}</span></div>
+          <div><span class="ex-dl">Última vez</span><strong>${UI.esc(fmtMetricValue(metric, last.y))}</strong><span>${UI.esc(subLast)}</span></div>
+        </div>
+        ${points.length > 1 ? `<div class="pw-pill${esRecord ? '' : ' ex-gap'}">${esRecord ? `${UI.icon('trophy', 14)}<span>La última vez fue tu récord</span>` : `<span>A ${UI.esc(difTxt(metric, pr.y, last.y))} de tu récord</span>`}</div>` : ''}`;
+    }
+
+    const helpOpen = host._e1Help === true; // explicación plegada por defecto
     const e1Panel = isE1 ? `
       <div class="e1-bar">
         <label class="check-row e1-toggle"><input type="checkbox" id="effOnly"${effortOnly ? ' checked' : ''}><span>Usar solo series con esfuerzo marcado</span></label>
@@ -1004,98 +1116,207 @@ const VProgress = (() => {
         </ul>
       </div>` : ''}` : '';
 
+    const enteros = ['maxReps', 'kcal', 'volume'].includes(metric);
+    const esTiempo = metric === 'maxTime' || metric === 'totalTime' || LOWER_BETTER.has(metric);
+    const chart = vis.length
+      ? UI.lineChart([{ label: ex.name, color: app.activeUser.color, points: vis.map(p => ({ ...p, mark: p.rec })), width: 2.5, r: 3.5, noLegend: true }],
+        { width: 320, height: 170, noLegend: true, niceY: true, minStep: enteros ? 1 : esTiempo ? 5 : 0, ...(esTiempo ? chartOpts(metric) : { fmtY: (v) => nf(v) }), fmtPoint })
+      : `<div class="chart-empty">${points.length ? 'Sin registros en este periodo.' : 'Aún no hay datos para esta métrica.'}</div>`;
+
+    // Historial: lo último arriba, con lo que cambió respecto a la vez anterior
+    const VISIBLES = 8;
+    const desc = points.map((p, i) => ({ p, prev: points[i - 1] })).reverse();
+    const fila = ({ p, prev }) => {
+      let dif = '<span></span>';
+      if (p.rec) dif = `<span class="pr-dif good">${UI.icon('trophy', 11)} Récord</span>`;
+      else if (prev) {
+        const d = p.y - prev.y;
+        // en las marcas de fuerza o ritmo, verde si mejoras; en km, tiempo, kcal o volumen no hay «peor», solo el cambio
+        const colorea = !['distance', 'totalTime', 'kcal', 'volume'].includes(metric);
+        dif = Math.abs(d) < 1e-9 ? '<span class="pr-dif">=</span>' : `<span class="pr-dif${colorea ? (mejorQue(metric, p.y, prev.y) ? ' good' : ' bad') : ''}">${d > 0 ? '+' : '−'}${UI.esc(difTxt(metric, p.y, prev.y))}</span>`;
+      }
+      return `<button type="button" class="pr-row eh-row"${p.sid ? ` data-ses="${UI.esc(p.sid)}"` : ''}>
+        <span class="pr-date">${UI.fmtDateShort(p.x)}</span>
+        <span class="pr-main"><strong>${UI.esc(fmtMetricValue(metric, p.y))}</strong>${p.detail ? `<span>${UI.esc(p.detail)}</span>` : ''}</span>
+        ${dif}<span class="chev">${p.sid ? '›' : ''}</span>
+      </button>`;
+    };
+    const lista = (host._exTodos ? desc : desc.slice(0, VISIBLES)).map(fila).join('');
+
     host.innerHTML = `
-      <div class="card">
-        ${UI.field('Ejercicio', UI.selectButton('exSelBtn', ex.name))}
+      <div class="card ex-card">
+        <button type="button" class="ex-pick" id="exSelBtn">
+          <span class="ex-name">${UI.esc(ex.name)}</span><span class="select-caret">▾</span>
+          <span class="ex-meta">${UI.esc(ex.muscleGroup || 'General')} · ${u.n} ${u.n === 1 ? 'entreno' : 'entrenos'} · último ${haceTxt(u.last)}</span>
+        </button>
         ${cardioLabels.length ? `<div class="chips-row small ex-label-row"><button class="chip${labelF === '' ? ' on' : ''}" data-exlabel="">Todas</button>${cardioLabels.map(l => `<button class="chip${labelF === l ? ' on' : ''}" data-exlabel="${UI.esc(l)}">${UI.esc(l)}</button>`).join('')}</div>` : ''}
-        <div class="chips-row small">${metrics.map(m => `<button class="chip${m.key === metric ? ' on' : ''}" data-metric="${m.key}">${m.label}</button>`).join('')}</div>
+        <div class="pg-seg ex-metrics">${metrics.map(m => `<button type="button" data-metric="${m.key}" class="${m.key === metric ? 'on' : ''}">${METRIC_SHORT[m.key] || m.label}</button>`).join('')}</div>
+        <p class="ex-hint dim">${UI.esc(METRIC_HINT[metric] || '')}</p>
         ${e1Panel}
         ${sinPeso ? `<div class="e1-alert">${UI.icon('star', 15)}<span>Para el peso de los ejercicios con tu propio peso hace falta tu <strong>peso corporal</strong>: apúntalo en <strong>Progreso → Corporal</strong> y se calcula solo (corporal ± lastre o asistencia).</span></div>` : ''}
-        ${prPoint ? `<div class="pr-stat">${UI.icon('star', 16)}<div class="pr-stat-text"><span class="pr-stat-label">Récord · ${UI.esc(metricLabel)}</span><span class="pr-stat-date">${UI.fmtDateShort(prPoint.x)}</span></div><span class="pr-stat-val">${fmtMetricValue(metric, prPoint.y)}${prPoint.detail ? `<span class="pr-stat-cond">${UI.esc(prPoint.detail)}</span>` : ''}</span></div>` : ''}
-        ${UI.lineChart([{ label: ex.name, color: app.activeUser.color, points }], { width: 320, height: 150, ...chartOpts(metric), fmtPoint })}
-        ${LOWER_BETTER.has(metric) ? `<p class="field-hint" style="margin:6px 0 0">${metric === 'pace' ? 'Ritmo medio de cada salida de <strong>1 km o más</strong>.' : 'Ritmo de tu serie más rápida en cada entreno.'} Cuanto más bajo, mejor (en la gráfica, más arriba).</p>` : ''}
+        ${datosHTML}
+        ${vis.some(p => p.rec) ? '<div class="pw-key ex-key"><u></u>nuevo récord</div>' : ''}
+        ${chart}
+        ${points.length ? `<div class="pg-seg pw-rangos">${RANGES.map(r => `<button type="button" class="${r.id === range ? 'on' : ''}" data-range="${r.id}">${r.label}</button>`).join('')}</div>` : ''}
       </div>
-      ${points.length ? `<div class="block"><div class="block-label">Últimos registros</div><ul class="kv-list">${recent}</ul></div>` : (noEffort ? '' : '<div class="empty-state"><p class="dim">Aún no has registrado este ejercicio en ninguna sesión.</p></div>')}`;
+      ${points.length ? `<div class="card-label pg-sec">Historial <span class="dim">(${points.length})</span></div>
+        <div class="card pr-list">${lista}</div>
+        ${points.length > VISIBLES ? `<button class="btn ghost block" id="exTodos">${host._exTodos ? 'Ver menos' : `Ver los ${points.length}`}</button>` : ''}` : ''}`;
 
+    const re = () => { host._exId = ex.id; renderExercise(app, host, params); };
     host.querySelector('#exSelBtn').addEventListener('click', () => UI.pickFromList({
       title: 'Elegir ejercicio',
-      options: catalog.map(c => ({ value: c.id, label: c.name })),
+      options: catalog.map(c => ({ value: c.id, label: c.name, hint: `${c.muscleGroup || 'General'} · ${haceTxt(usoDe(c).last)}` })),
       value: ex.id,
-      onPick: (val) => { host._exId = val; host._metric = null; renderExercise(app, host, params); },
+      onPick: (val) => { host._exId = val; host._metric = null; host._exLabel = ''; host._exTodos = false; renderExercise(app, host, params); },
     }));
-    host.querySelectorAll('[data-metric]').forEach(c => c.addEventListener('click', () => { host._metric = c.dataset.metric; host._exId = ex.id; renderExercise(app, host, params); }));
-    host.querySelectorAll('[data-exlabel]').forEach(c => c.addEventListener('click', () => { host._exLabel = c.dataset.exlabel; host._exId = ex.id; renderExercise(app, host, params); }));
+    host.querySelectorAll('[data-metric]').forEach(c => c.addEventListener('click', () => { host._metric = c.dataset.metric; re(); }));
+    host.querySelectorAll('[data-exlabel]').forEach(c => c.addEventListener('click', () => { host._exLabel = c.dataset.exlabel; re(); }));
+    host.querySelectorAll('[data-range]').forEach(c => c.addEventListener('click', () => { host._exRange = c.dataset.range; re(); }));
     const effChk = host.querySelector('#effOnly');
-    if (effChk) effChk.addEventListener('change', () => { host._effortOnly = effChk.checked; host._exId = ex.id; renderExercise(app, host, params); });
+    if (effChk) effChk.addEventListener('change', () => { host._effortOnly = effChk.checked; re(); });
     const helpBtn = host.querySelector('#e1Help');
-    if (helpBtn) helpBtn.addEventListener('click', () => { host._e1Help = !host._e1Help; host._exId = ex.id; renderExercise(app, host, params); });
-    host.querySelectorAll('[data-formula]').forEach(b => b.addEventListener('click', () => { app._e1Formula = b.dataset.formula; host._exId = ex.id; renderExercise(app, host, params); }));
+    if (helpBtn) helpBtn.addEventListener('click', () => { host._e1Help = !host._e1Help; re(); });
+    host.querySelectorAll('[data-formula]').forEach(b => b.addEventListener('click', () => { app._e1Formula = b.dataset.formula; re(); }));
+    const todosBtn = host.querySelector('#exTodos');
+    if (todosBtn) todosBtn.addEventListener('click', () => { host._exTodos = !host._exTodos; re(); });
+    host.querySelectorAll('[data-ses]').forEach(b => b.addEventListener('click', () => app.go('session', { sessionId: b.dataset.ses, ownerId: uid })));
   }
 
-  // ---------- COMPARATIVA ----------
+  // ---------- COMPARAR ----------
+  // Tú y un amigo (su perfil llega con su enlace de «Compartir mi progreso»): vuestro mes,
+  // los ejercicios que hacéis los dos y una gráfica con los dos.
   async function renderCompare(app, host, params) {
+    if (!host._pintado) {
+      host.innerHTML = `<div class="card">${UI.sk('50%', 16)}${UI.sk('100%', 120, 'margin-top:14px;border-radius:12px')}</div>
+        <div class="card">${UI.sk('60%', 16)}${UI.skRows(3)}</div>`;
+    }
     const users = await DB.getUsers();
+    if (!host.isConnected) return;
+    host._pintado = true;
+    const me = app.mainUser;
     const guests = users.filter(u => !u.isMain);
-    if (guests.length === 0) {
-      host.innerHTML = `<div class="empty-state"><p>No hay perfiles invitados para comparar.</p><p class="dim">Crea un invitado e importa sus datos desde Perfiles o Datos.</p><button class="btn ghost" data-link="profiles">Ir a Perfiles</button></div>`;
-      app.bindLinks(host);
+    if (!guests.length) {
+      host.innerHTML = `<div class="empty-state"><p><strong>Compárate con un amigo</strong></p><p class="dim">Cuando un amigo te pase su enlace de «Compartir mi progreso» y lo abras, aparecerá aquí: veréis vuestro mes, vuestras marcas en los ejercicios que hacéis los dos y vuestras gráficas, lado a lado.</p></div>`;
       return;
     }
-    const guestId = host._guestId || (params && guests.some(g => g.id === params.guestId) ? params.guestId : guests[0].id);
-    const guest = users.find(u => u.id === guestId);
+    const guestId = guests.some(g => g.id === host._guestId) ? host._guestId : (params && guests.some(g => g.id === params.guestId) ? params.guestId : guests[0].id);
+    const guest = guests.find(g => g.id === guestId);
+    const [misS, susS, misR, susR, misW, susW] = await Promise.all([
+      DB.sessionsOf(me.id), DB.sessionsOf(guest.id), computeRecords(app, me.id), computeRecords(app, guest.id), loadBodyWeights(me.id), loadBodyWeights(guest.id),
+    ]);
+    if (!host.isConnected) return;
+    const mis = misS.filter(s => !s.draft && s.date), suyas = susS.filter(s => !s.draft && s.date);
+    const quien = (u, txt) => `<span class="cp-who"><i style="background:${u.color || '#4f46e5'}"></i>${UI.esc(txt)}</span>`;
 
-    // métricas: peso corporal + cada ejercicio del principal
-    const catalog = await exercisesWithData(app.mainUser.id,
-      (await DB.exercisesOf(app.mainUser.id)).sort((a, b) => a.name.localeCompare(b.name)));
-    const subjectKey = host._subject || 'body:weight';
+    // 1) Este mes, del 1 a hoy
+    const hoy = DB.todayISO(), now = new Date();
+    const ini = isoOf(new Date(now.getFullYear(), now.getMonth(), 1).getTime());
+    const a = statsDe(mis, ini, hoy), b = statsDe(suyas, ini, hoy);
+    const hace8 = isoOf(Date.now() - 56 * DAY);
+    const media = (ss) => ss.filter(s => s.date > hace8 && s.date <= hoy).length / 8;
+    const kg = (v) => v >= 1000 ? `${fmt1(v / 1000)} t` : `${Math.round(v)} kg`;
+    const hm = (s) => s >= 3600 ? `${fmt1(s / 3600)} h` : `${Math.round(s / 60)} min`;
+    const filas = [
+      ['Entrenos', String(a.n), String(b.n), a.n, b.n],
+      a.vol || b.vol ? ['Peso levantado', kg(a.vol), kg(b.vol), a.vol, b.vol] : null,
+      a.secs || b.secs ? ['Tiempo entrenando', hm(a.secs), hm(b.secs), a.secs, b.secs] : null,
+      a.km || b.km ? ['Cardio', `${fmt1(a.km)} km`, `${fmt1(b.km)} km`, a.km, b.km] : null,
+      ['Entrenos por semana', fmt1(media(mis)), fmt1(media(suyas)), media(mis), media(suyas)],
+    ].filter(Boolean);
+    const celda = (txt, gana) => `<span class="pg-mv${gana ? ' on' : ''}">${txt}</span>`;
+    const mesHTML = `<div class="card">
+      <div class="pg-h"><strong>Este mes</strong><span class="dim">del 1 a hoy · por semana, las últimas 8</span></div>
+      <div class="pg-mt pg-mthead cp-mt"><span></span><span class="pg-mth">${quien(me, 'Tú')}</span><span class="pg-mth">${quien(guest, guest.name)}</span></div>
+      ${filas.map(([l, va, vb, x, y]) => `<div class="pg-mt cp-mt"><span class="pg-ml">${l}</span>${celda(va, x > y)}${celda(vb, y > x)}</div>`).join('')}
+    </div>`;
 
-    let series = [], unit = '', exMetrics = EX_METRICS, exMetric = 'maxWeight';
+    // 2) Ejercicios que hacéis los dos: la marca principal de cada uno
+    const agrupa = (recs) => { const m = new Map(); recs.forEach(r => { const k = r.ex.name.trim().toLowerCase(); if (!m.has(k)) m.set(k, []); m.get(k).push(r); }); return m; };
+    const misM = agrupa(misR), susM = agrupa(susR);
+    const comunes = [];
+    misM.forEach((marks, k) => {
+      const suyos = susM.get(k);
+      if (!suyos) return;
+      const metr = MAIN_METRICS.find(mm => marks.some(r => r.metric === mm) && suyos.some(r => r.metric === mm));
+      if (!metr) return;
+      const mio = marks.find(r => r.metric === metr), suyo = suyos.find(r => r.metric === metr);
+      const reciente = marks.reduce((x, r) => ((r.point.x || '') > x ? r.point.x : x), '');
+      comunes.push({ name: mio.ex.name, metric: metr, mio, suyo, reciente });
+    });
+    comunes.sort((x, y) => y.reciente.localeCompare(x.reciente));
+    const VIS = 6;
+    const comHTML = comunes.length ? `<div class="card">
+      <div class="pg-h"><strong>Lo que hacéis los dos</strong><span class="dim">vuestra mejor marca</span></div>
+      <div class="cp-row cp-head"><span></span><span>${quien(me, 'Tú')}</span><span>${quien(guest, guest.name)}</span></div>
+      ${(host._cpTodos ? comunes : comunes.slice(0, VIS)).map(c => {
+        const ga = mejorQue(c.metric, c.mio.point.y, c.suyo.point.y), gb = mejorQue(c.metric, c.suyo.point.y, c.mio.point.y);
+        return `<button type="button" class="cp-row" data-subject="${UI.esc('ex:' + c.name)}" data-m="${c.metric}">
+          <span class="cp-ex"><strong>${UI.esc(c.name)}</strong><small>${UI.esc(METRIC_SHORT[c.metric] || '')}</small></span>
+          <span class="cp-v${ga ? ' on' : ''}">${UI.esc(fmtMetricValue(c.metric, c.mio.point.y))}</span>
+          <span class="cp-v${gb ? ' on' : ''}">${UI.esc(fmtMetricValue(c.metric, c.suyo.point.y))}</span>
+        </button>`;
+      }).join('')}
+      ${comunes.length > VIS ? `<button class="btn ghost block" id="cpTodos" style="margin-top:8px">${host._cpTodos ? 'Ver menos' : `Ver los ${comunes.length}`}</button>` : ''}
+    </div>` : `<div class="card"><div class="pg-h"><strong>Lo que hacéis los dos</strong></div><p class="dim" style="margin:0;font-size:13px">Aún no hay ningún ejercicio que hayáis apuntado los dos.</p></div>`;
+
+    // 3) La gráfica de los dos: peso corporal o un ejercicio
+    const subjectKey = host._subject || (comunes[0] ? 'ex:' + comunes[0].name : 'body:weight');
+    let series = [], exMetrics = [], exMetric = null, titulo = 'Peso corporal';
     if (subjectKey === 'body:weight') {
-      const mainPts = (await DB.progressOf(app.mainUser.id)).filter(e => e.weight != null && e.weight !== '').map(e => ({ x: e.date, y: parseFloat(e.weight) }));
-      const guestPts = (await DB.progressOf(guest.id)).filter(e => e.weight != null && e.weight !== '').map(e => ({ x: e.date, y: parseFloat(e.weight) }));
       series = [
-        { label: app.mainUser.name, color: app.mainUser.color, points: mainPts },
-        { label: guest.name, color: guest.color, points: guestPts },
+        { label: 'Tú', color: me.color, points: misW.map(e => ({ x: e.date, y: e.kg })), width: 2.5 },
+        { label: guest.name, color: guest.color, points: susW.map(e => ({ x: e.date, y: e.kg })), width: 2.5 },
       ];
-      unit = 'Peso corporal (kg)';
     } else {
       const exName = subjectKey.slice(3);
-      const subjEx = catalog.find(c => c.name === exName);
-      exMetrics = metricsFor(subjEx); // métricas según el tipo (barra, tu peso, cardio…)
-      exMetric = (host._exMetric && exMetrics.some(m => m.key === host._exMetric)) ? host._exMetric : exMetrics[0].key;
-      // el 1RM se compara solo con series de esfuerzo marcado (cae a todas si no hay)
+      const subj = misR.find(r => r.ex.name === exName);
+      exMetrics = metricsFor(subj && subj.ex);
+      exMetric = (host._exMetric && exMetrics.some(m => m.key === host._exMetric)) ? host._exMetric : (comunes.find(c => c.name === exName) || {}).metric || exMetrics[0].key;
+      if (!exMetrics.some(m => m.key === exMetric)) exMetric = exMetrics[0].key;
       const e1f = app._e1Formula || 'epley';
-      const mainPts = (await metricSeries(app.mainUser.id, exName, exMetric, exMetric === 'e1rm', e1f)).points;
-      const guestPts = (await metricSeries(guest.id, exName, exMetric, exMetric === 'e1rm', e1f)).points;
+      const [pa, pb] = await Promise.all([
+        metricSeries(me.id, exName, exMetric, exMetric === 'e1rm', e1f, '', { sessions: mis, bodyWeights: misW }),
+        metricSeries(guest.id, exName, exMetric, exMetric === 'e1rm', e1f, '', { sessions: suyas, bodyWeights: susW }),
+      ]);
+      if (!host.isConnected) return;
       series = [
-        { label: app.mainUser.name, color: app.mainUser.color, points: mainPts },
-        { label: guest.name, color: guest.color, points: guestPts },
+        { label: 'Tú', color: me.color, points: pa.points, width: 2.5 },
+        { label: guest.name, color: guest.color, points: pb.points, width: 2.5 },
       ];
-      unit = `${exName} — ${(exMetrics.find(m => m.key === exMetric) || {}).label || exMetric}`;
+      titulo = exName;
     }
-
     const subjectOptions = [{ value: 'body:weight', label: 'Peso corporal' }]
-      .concat(catalog.map(c => ({ value: 'ex:' + c.name, label: c.name })));
-    const showExMetric = subjectKey.startsWith('ex:');
+      .concat(comunes.map(c => ({ value: 'ex:' + c.name, label: c.name, hint: 'Lo hacéis los dos' })))
+      .concat([...misM.values()].map(ms => ms[0].ex.name).filter(n => !comunes.some(c => c.name === n)).sort((x, y) => x.localeCompare(y)).map(n => ({ value: 'ex:' + n, label: n, hint: `Solo tú` })));
+    const esTiempo = exMetric && (exMetric === 'maxTime' || exMetric === 'totalTime' || LOWER_BETTER.has(exMetric));
+    const chartHTML = `<div class="card" id="cpChart">
+      <div class="pg-h"><strong>Gráfica</strong></div>
+      ${UI.selectButton('subjectSelBtn', titulo)}
+      ${exMetrics.length > 1 ? `<div class="pg-seg ex-metrics" style="margin-top:10px">${exMetrics.map(m => `<button type="button" data-exmetric="${m.key}" class="${m.key === exMetric ? 'on' : ''}">${METRIC_SHORT[m.key] || m.label}</button>`).join('')}</div>` : ''}
+      <div class="cp-legend">${quien(me, 'Tú')}${quien(guest, guest.name)}</div>
+      ${UI.lineChart(series, { width: 320, height: 170, noLegend: true, niceY: true, ...(esTiempo ? chartOpts(exMetric) : { fmtY: (v) => nf(v) }), fmtPoint: subjectKey === 'body:weight' ? (p => `${fmt1(p.y)} kg`) : (p => fmtMetricPoint(exMetric, p)) })}
+    </div>`;
 
-    host.innerHTML = `
-      <div class="card">
-        ${UI.field('Comparar con', UI.select('guestSel', guests.map(g => ({ value: g.id, label: g.name })), guestId))}
-        ${UI.field('Métrica', UI.selectButton('subjectSelBtn', (subjectOptions.find(o => o.value === subjectKey) || subjectOptions[0]).label))}
-        ${showExMetric ? `<div class="chips-row small">${exMetrics.map(m => `<button class="chip${exMetric === m.key ? ' on' : ''}" data-exmetric="${m.key}">${m.label}</button>`).join('')}</div>` : ''}
-        <div class="chart-title">${UI.esc(unit)}</div>
-        ${UI.lineChart(series, { width: 320, height: 160, ...(subjectKey === 'body:weight' ? {} : chartOpts(exMetric)), fmtPoint: subjectKey === 'body:weight' ? (p => `${p.y} kg`) : (p => fmtMetricPoint(exMetric, p)) })}
-      </div>`;
+    host.innerHTML = `${guests.length > 1 ? `<div class="chips-row cp-guests">${guests.map(g => `<button class="chip${g.id === guest.id ? ' on' : ''}" data-guest="${g.id}">${UI.esc(g.name)}</button>`).join('')}</div>` : ''}
+      ${mesHTML}${comHTML}${chartHTML}`;
 
-    host.querySelector('select[name="guestSel"]').addEventListener('change', e => { host._guestId = e.target.value; renderCompare(app, host, params); });
+    host.querySelectorAll('[data-guest]').forEach(b => b.addEventListener('click', () => { host._guestId = b.dataset.guest; host._subject = null; host._exMetric = null; renderCompare(app, host, params); }));
     host.querySelector('#subjectSelBtn').addEventListener('click', () => UI.pickFromList({
-      title: 'Elegir métrica',
+      title: '¿Qué queréis comparar?',
       options: subjectOptions,
       value: subjectKey,
-      onPick: (val) => { host._subject = val; renderCompare(app, host, params); },
+      onPick: (val) => { host._subject = val; host._exMetric = null; renderCompare(app, host, params); },
     }));
     host.querySelectorAll('[data-exmetric]').forEach(c => c.addEventListener('click', () => { host._exMetric = c.dataset.exmetric; renderCompare(app, host, params); }));
-    app.bindLinks(host);
+    host.querySelectorAll('.cp-row[data-subject]').forEach(r => r.addEventListener('click', async () => {
+      host._subject = r.dataset.subject; host._exMetric = r.dataset.m;
+      await renderCompare(app, host, params);
+      const c = host.querySelector('#cpChart');
+      if (c) c.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }));
+    const t = host.querySelector('#cpTodos');
+    if (t) t.addEventListener('click', () => { host._cpTodos = !host._cpTodos; renderCompare(app, host, params); });
   }
 
   return { render, bind };
