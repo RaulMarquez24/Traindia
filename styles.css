@@ -1870,3 +1870,11 @@ body.has-active-bar .dv-start { bottom: calc(var(--nav-h) + var(--safe-bottom) +
 .pw-vista .pg-seg button { font-size: 12px; padding: 4px 11px; }
 .pw-rangos { display: flex; width: 100%; margin-top: 10px; }
 .pw-rangos button { flex: 1; padding: 6px 2px; font-size: 12px; white-space: nowrap; }
+/* Skeletons: cada bloque late mientras llega su dato */
+.sk { display: block; position: relative; overflow: hidden; border-radius: 6px; background: var(--line-soft); max-width: 100%; }
+.sk::after { content: ''; position: absolute; inset: 0; transform: translateX(-100%); background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--ink) 8%, transparent), transparent); animation: sk-brillo 1.3s ease-in-out infinite; }
+@keyframes sk-brillo { to { transform: translateX(100%); } }
+@media (prefers-reduced-motion: reduce) { .sk::after { animation: none; } }
+.pg-logro.sk-card { background: transparent; border: 1px solid var(--line-soft); }
+.pg-fallo { margin: 6px 0 0; font-size: 12.5px; }
+.pw-rangos button:disabled { cursor: default; }

@@ -152,7 +152,8 @@ const VProgress = (() => {
     // Peso corporal por fecha: para "peso levantado"/"peso máx levantado" a peso corporal.
     let bodyWeights = opts.bodyWeights;
     if (bodyWeights === undefined && (metric === 'volume' || metric === 'maxLoad' || metric === 'e1rm')) bodyWeights = await loadBodyWeights(userId);
-    let sessions = (await DB.sessionsOf(userId)).filter(s => !s.draft);
+    // opts.sessions: los entrenos ya leídos (computeRecords los pasa para no leerlos una vez por ejercicio y marca)
+    let sessions = (opts.sessions || await DB.sessionsOf(userId)).filter(s => !s.draft);
     sessions.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
     const points = [];
     const lname = exName.toLowerCase();
@@ -281,7 +282,7 @@ const VProgress = (() => {
       seen.add(nl);
       // un ejercicio puede tener VARIAS marcas: guardamos todas las que tengan datos
       for (const metric of recordMetrics(ex)) {
-        const pts = await exerciseSeries(userId, ex.name, metric, { bodyWeights });
+        const pts = await exerciseSeries(userId, ex.name, metric, { bodyWeights, sessions });
         const best = bestPoint(pts, metric);
         if (best && best.y > 0) out.push({ ex, metric, point: best });
       }
@@ -376,8 +377,8 @@ const VProgress = (() => {
   async function logrosRecientes(app, uid) {
     const hoy = DB.todayISO();
     const out = [];
-    // Peso
-    const ws = await pesosDe(uid);
+    // Peso y récords a la vez (no hace falta esperar a uno para pedir el otro)
+    const [ws, records] = await Promise.all([pesosDe(uid), computeRecords(app, uid)]);
     const ins = weightInsight(ws);
     const goal = app.activeUser.weightGoal || '';
     const ph = weightPhrase(ins, goal);
@@ -388,7 +389,6 @@ const VProgress = (() => {
       out.push({ kind: 'peso', date: ins.last.date, tag: `Peso · ${UI.fmtDateShort(ins.last.date)}`, big: `${fmt1(ins.last.kg)} kg`, txt: ph.txt, sub: ph.sub, spark: { pts, ref: ref && { x: ref.date, y: ref.kg } } });
     }
     // Récords recientes (una tarjeta por ejercicio, con su marca principal)
-    const records = await computeRecords(app, uid);
     const porEj = new Map();
     const SIN_LOGRO = new Set(['calentamiento', 'movilidad', 'estiramientos']);
     const CORRER = new Set(['carrera', 'cardio']);
@@ -402,16 +402,18 @@ const VProgress = (() => {
       if (!cur || MAIN_METRICS.indexOf(r.metric) < MAIN_METRICS.indexOf(cur.metric)) porEj.set(r.ex.name, r);
     });
     const conRecord = new Set();
-    const bodyWeights = await loadBodyWeights(uid);
+    // pesos y entrenos leídos una sola vez para todas las mini gráficas (antes, una lectura por ejercicio)
+    const bodyWeights = ws.map(e => ({ date: e.date, kg: e.kg }));
+    const sessions = await DB.sessionsOf(uid);
     for (const r of [...porEj.values()].filter(r => diasEntre(r.point.x, hoy) <= RECIENTE_DIAS)) {
       conRecord.add(r.ex.name);
-      const pts = await exerciseSeries(uid, r.ex.name, r.metric, { bodyWeights });
+      const pts = await exerciseSeries(uid, r.ex.name, r.metric, { bodyWeights, sessions });
       out.push({ kind: 'record', date: r.point.x, tag: `Récord · ${UI.fmtDateShort(r.point.x)}`, big: fmtMetricValue(r.metric, r.point.y), txt: r.ex.name, sub: subDe(r.metric, r.point), spark: { pts: pts.filter(p => p.x <= r.point.x).slice(-12), invert: LOWER_BETTER.has(r.metric) } });
     }
     // «Lo mejor desde»: lo último que hiciste no es récord, pero no lo igualabas desde hace un mes o más
     for (const r of porEj.values()) {
       if (conRecord.has(r.ex.name)) continue;
-      const pts = await exerciseSeries(uid, r.ex.name, r.metric, { bodyWeights });
+      const pts = await exerciseSeries(uid, r.ex.name, r.metric, { bodyWeights, sessions });
       const last = pts[pts.length - 1];
       if (!last || diasEntre(last.x, hoy) > RECIENTE_DIAS) continue;
       const antes = pts.slice(0, -1).reverse();
@@ -472,35 +474,26 @@ const VProgress = (() => {
     return { n, vol, secs, km };
   }
 
+  // Skeleton: un bloque gris que late mientras llega su dato. Cada parte de la pantalla se pinta en cuanto
+  // tiene lo suyo, sin esperar a las demás; lo que no necesita datos (títulos, botones) sale al momento.
+  const sk = (w = '100%', h = 14, extra = '') => `<span class="sk" style="width:${w};height:${h}px${extra ? ';' + extra : ''}"></span>`;
+  const skFallo = '<p class="dim pg-fallo">No se ha podido cargar esta parte. Vuelve a entrar en Progreso.</p>';
+
   async function renderResumen(app, host) {
     const uid = app.activeUser.id;
-    const sessions = (await DB.sessionsOf(uid)).filter(s => !s.draft && s.date);
     const hoy = DB.todayISO(), now = new Date();
-    if (!sessions.length && !(await pesosDe(uid)).length) {
-      host.innerHTML = `<div class="empty-state"><p><strong>Aquí verás cómo vas.</strong></p><p class="dim">Tus logros, tu semana y tu mes frente a los anteriores, tu constancia y qué músculos has trabajado. Aparece en cuanto guardes tu primer entreno o apuntes tu peso.</p></div>`;
-      return;
-    }
-
-    // 1) Logros recientes
-    const logros = await logrosRecientes(app, uid);
-    const ICO = { peso: 'activity', record: 'trophy', desde: 'star' };
-    const logroHTML = (l) => `<div class="pg-logro ${l.kind}">
-      <div class="pg-lh"><span class="pg-lic">${UI.icon(ICO[l.kind], 15)}</span><span class="pg-tag">${UI.esc(l.tag)}</span></div>
-      <span class="pg-big">${UI.esc(l.big)}</span>
-      <span class="pg-txt">${UI.esc(l.txt)}</span>
-      <span class="pg-sub">${UI.esc(l.sub || '')}</span>
-      ${sparkSVG(l.spark)}
-    </div>`;
-    const logrosHTML = logros.length
-      ? `<div class="pg-logros">${logros.slice(0, 8).map(logroHTML).join('')}</div>`
-      : `<div class="card pg-vacio"><span class="dim">Sin logros en las últimas 2 semanas. Cuando batas una marca, o hagas lo mejor en mucho tiempo, saldrá aquí.</span></div>`;
-
-    // 2) Esta semana frente a la pasada (de lunes al mismo día) o, con un toque, este mes frente al anterior (del 1 al mismo día)
     const y = now.getFullYear(), m = now.getMonth(), dia = now.getDate();
+    const vivo = () => host.isConnected;
     const kg = (v) => v >= 1000 ? `${fmt1(v / 1000)} t` : `${Math.round(v)} kg`;
     const hm = (s) => s >= 3600 ? `${fmt1(s / 3600)} h` : `${Math.round(s / 60)} min`;
     const flecha = (a, b) => { if (!a && !b) return ''; const r = b ? (a - b) / b : 1; return Math.abs(r) < 0.05 ? '<i class="pg-eq">=</i>' : r > 0 ? '<i class="pg-up">▲</i>' : '<i class="pg-dn">▼</i>'; };
-    const periodoDe = (per) => {
+    const lunes = new Date(y, m, dia - ((now.getDay() + 6) % 7));
+
+    // ---- Semana | Mes: el título, el subtítulo y las columnas no dependen de los datos
+    const PER_KEY = 'traindia.progresoPeriodo';
+    let periodo = 'semana';
+    try { if (localStorage.getItem(PER_KEY) === 'mes') periodo = 'mes'; } catch (e) { /* sin almacenamiento: semana */ }
+    const perMeta = (per) => {
       if (per === 'mes') {
         const pm = new Date(y, m - 1, 1);
         const finPrev = new Date(pm.getFullYear(), pm.getMonth(), Math.min(dia, new Date(pm.getFullYear(), pm.getMonth() + 1, 0).getDate()));
@@ -508,7 +501,7 @@ const VProgress = (() => {
         return {
           titulo: 'Este mes', sub: dia === 1 ? 'solo el día 1, los dos' : `los dos, del 1 al ${dia}`,
           cols: [MESES[m], MESES[pm.getMonth()]],
-          este: statsDe(sessions, isoOf(new Date(y, m, 1).getTime()), hoy), prev: statsDe(sessions, isoOf(pm.getTime()), isoOf(finPrev.getTime())),
+          a: [isoOf(new Date(y, m, 1).getTime()), hoy], b: [isoOf(pm.getTime()), isoOf(finPrev.getTime())],
         };
       }
       const nDia = (now.getDay() + 6) % 7; // 0 = lunes … 6 = domingo
@@ -516,80 +509,45 @@ const VProgress = (() => {
       return {
         titulo: 'Esta semana', sub: nDia === 6 ? 'de lunes a domingo' : nDia === 0 ? 'solo los lunes' : `las dos, de lunes a ${DIAS[nDia]}`,
         cols: ['Esta', 'Pasada'],
-        este: statsDe(sessions, isoOf(new Date(y, m, dia - nDia).getTime()), hoy),
-        prev: statsDe(sessions, isoOf(new Date(y, m, dia - nDia - 7).getTime()), isoOf(new Date(y, m, dia - 7).getTime())),
+        a: [isoOf(new Date(y, m, dia - nDia).getTime()), hoy],
+        b: [isoOf(new Date(y, m, dia - nDia - 7).getTime()), isoOf(new Date(y, m, dia - 7).getTime())],
       };
     };
-    const PER_KEY = 'traindia.progresoPeriodo';
-    let periodo = 'semana';
-    try { if (localStorage.getItem(PER_KEY) === 'mes') periodo = 'mes'; } catch (e) { /* sin almacenamiento: semana */ }
+    let sesiones = null; // llegan después; mientras, la tabla enseña skeletons
     const periodoHTML = (per) => {
-      const { titulo, sub, cols, este, prev } = periodoDe(per);
-      const filas = [
-        ['Entrenos', String(este.n), String(prev.n), este.n, prev.n],
-        este.vol || prev.vol ? ['Peso levantado', kg(este.vol), kg(prev.vol), este.vol, prev.vol] : null,
-        este.secs || prev.secs ? ['Tiempo entrenando', hm(este.secs), hm(prev.secs), este.secs, prev.secs] : null,
-        este.km || prev.km ? ['Cardio', `${fmt1(este.km)} km`, `${fmt1(prev.km)} km`, este.km, prev.km] : null,
-      ].filter(Boolean);
+      const { titulo, sub, cols, a, b } = perMeta(per);
+      let filasHTML;
+      if (!sesiones) {
+        filasHTML = [0, 1, 2, 3].map(() => `<div class="pg-mt"><span>${sk('62%', 13)}</span><span>${sk('70%', 13, 'margin-left:auto')}</span><span>${sk('60%', 13, 'margin-left:auto')}</span><span></span></div>`).join('');
+      } else {
+        const este = statsDe(sesiones, a[0], a[1]), prev = statsDe(sesiones, b[0], b[1]);
+        filasHTML = [
+          ['Entrenos', String(este.n), String(prev.n), este.n, prev.n],
+          este.vol || prev.vol ? ['Peso levantado', kg(este.vol), kg(prev.vol), este.vol, prev.vol] : null,
+          este.secs || prev.secs ? ['Tiempo entrenando', hm(este.secs), hm(prev.secs), este.secs, prev.secs] : null,
+          este.km || prev.km ? ['Cardio', `${fmt1(este.km)} km`, `${fmt1(prev.km)} km`, este.km, prev.km] : null,
+        ].filter(Boolean).map(([l, va1, vb1, va, vb]) => `<div class="pg-mt"><span class="pg-ml">${l}</span><span class="pg-mv on">${va1}</span><span class="pg-mv">${vb1}</span>${flecha(va, vb)}</div>`).join('');
+      }
       return `<div class="pg-ph"><strong>${titulo}</strong>
           <span class="pg-seg" role="tablist"><button type="button" data-per="semana" class="${per === 'semana' ? 'on' : ''}">Semana</button><button type="button" data-per="mes" class="${per === 'mes' ? 'on' : ''}">Mes</button></span></div>
         <div class="pg-psub dim">${sub}</div>
         <div class="pg-mt pg-mthead"><span></span><span class="pg-mth on">${UI.esc(cols[0])}</span><span class="pg-mth">${UI.esc(cols[1])}</span><span></span></div>
-        ${filas.map(([l, a, b, va, vb]) => `<div class="pg-mt"><span class="pg-ml">${l}</span><span class="pg-mv on">${a}</span><span class="pg-mv">${b}</span>${flecha(va, vb)}</div>`).join('')}`;
+        ${filasHTML}`;
     };
-    const mesHTML = `<div class="card pg-mes" id="pgPer">${periodoHTML(periodo)}</div>`;
 
-    // 3) Constancia: entrenos por semana (últimas 12) y racha
-    const curWk = weekIndex(now);
-    const lunes = new Date(now.getFullYear(), now.getMonth(), now.getDate() - ((now.getDay() + 6) % 7));
-    const porSem = new Map();
-    sessions.forEach(s => { const w = weekIndex(new Date(s.date + 'T00:00:00')); porSem.set(w, (porSem.get(w) || 0) + 1); });
-    const semanas = new Set(porSem.keys());
-    let racha = 0, anchor = semanas.has(curWk) ? curWk : (semanas.has(curWk - 1) ? curWk - 1 : null);
-    if (anchor != null) { let w = anchor; while (semanas.has(w)) { racha++; w--; } }
-    let mejor = 0, run = 0, prevW = null;
-    [...semanas].sort((a, b) => a - b).forEach(w => { run = prevW != null && w === prevW + 1 ? run + 1 : 1; mejor = Math.max(mejor, run); prevW = w; });
-    const NW = 12;
-    const cols = [];
-    for (let i = NW - 1; i >= 0; i--) {
-      const ini = new Date(lunes.getFullYear(), lunes.getMonth(), lunes.getDate() - i * 7);
-      cols.push({ n: porSem.get(curWk - i) || 0, ini: isoOf(ini.getTime()), actual: i === 0 });
-    }
-    const maxN = Math.max(4, ...cols.map(c => c.n));
-    const conEntreno = cols.filter(c => !c.actual);
-    const media = conEntreno.reduce((a, c) => a + c.n, 0) / conEntreno.length;
-    const constHTML = `<div class="card pg-const">
-      <div class="pg-h"><strong>Constancia</strong><span class="dim">entrenos por semana</span></div>
-      <div class="pg-racha"><span class="pg-rn">${racha}</span><div><strong>${racha === 1 ? 'semana seguida' : 'semanas seguidas'} entrenando</strong><span class="dim">${mejor > racha ? `Tu mejor racha: ${mejor} semanas` : racha > 1 ? 'Es tu mejor racha' : 'Entrena esta semana para empezar una racha'}</span></div></div>
-      <div class="pg-weeks">${cols.map(c => `<div class="pg-wk${c.actual ? ' now' : ''}"><span class="pg-wn">${c.n || ''}</span><span class="pg-wb"><i style="height:${c.n ? Math.max(8, c.n / maxN * 100) : 0}%"></i></span></div>`).join('')}</div>
-      <div class="pg-wl"><span>${UI.fmtDateShort(cols[0].ini)}</span><span>${UI.fmtDateShort(cols[Math.floor(NW / 2)].ini)}</span><span>esta semana</span></div>
-      <p class="pg-media dim">Media de las últimas ${NW - 1} semanas: <strong>${fmt1(media)}</strong> entrenos por semana</p>
-    </div>`;
+    // ---- Lo que sale al momento: títulos, botones y un skeleton donde va cada dato
+    const constHead = '<div class="pg-h"><strong>Constancia</strong><span class="dim">entrenos por semana</span></div>';
+    const musHead = '<div class="pg-h"><strong>Series por músculo</strong><span class="dim">esta semana</span></div>';
+    host.innerHTML = `<div class="card-label pg-sec">Tus logros recientes</div>
+      <div id="pgLogros"><div class="pg-logros">${[0, 1].map(() => `<div class="pg-logro sk-card">${sk('55%', 12)}${sk('62%', 30, 'margin-top:14px')}${sk('80%', 14, 'margin-top:8px')}${sk('100%', 44, 'margin-top:16px')}</div>`).join('')}</div></div>
+      <div class="card pg-mes" id="pgPer">${periodoHTML(periodo)}</div>
+      <div class="card pg-const" id="pgConst">${constHead}
+        <div class="pg-racha">${sk('44px', 34)}<div style="flex:1">${sk('72%', 14)}${sk('45%', 12, 'margin-top:6px')}</div></div>
+        <div class="pg-weeks">${Array.from({ length: 12 }, () => '<div class="pg-wk"><span class="pg-wn"></span><span class="pg-wb"></span></div>').join('')}</div>
+        ${sk('62%', 12, 'margin-top:12px')}
+      </div>
+      <div class="card pg-mus" id="pgMus">${musHead}${[0, 1, 2, 3].map(() => `<div class="pg-bar"><span>${sk('75%', 12)}</span><span class="pg-bt"></span><span></span></div>`).join('')}</div>`;
 
-    // 4) Series por músculo esta semana (y lo que sueles entrenar y aún no has tocado)
-    const catalog = await DB.exercisesOf(uid);
-    const byId = new Map(catalog.map(e => [e.id, e])), byName = new Map(catalog.map(e => [UI.norm(e.name), e]));
-    const grupoDe = (e) => { const ex = (e.exerciseId && byId.get(e.exerciseId)) || byName.get(UI.norm(e.name || '')); return (ex && ex.muscleGroup) || ''; };
-    const iniSem = isoOf(lunes.getTime()), hace4 = isoOf(lunes.getTime() - 28 * DAY);
-    const series = new Map(), habituales = new Set();
-    sessions.forEach(s => (s.entries || []).forEach(e => {
-      const g = grupoDe(e); if (!g || NO_MUSCULO.has(UI.norm(g))) return;
-      const hechas = (e.sets || []).filter(st => st.done !== false && (parseFloat(st.reps) || parseFloat(st.weight) || parseFloat(st.time))).length;
-      if (!hechas) return;
-      if (s.date >= iniSem && s.date <= hoy) series.set(g, (series.get(g) || 0) + hechas);
-      else if (s.date >= hace4 && s.date < iniSem) habituales.add(g);
-    }));
-    const sinTocar = [...habituales].filter(g => !series.has(g));
-    const filas = [...series.entries()].sort((a, b) => b[1] - a[1]);
-    const maxS = Math.max(10, ...filas.map(f => f[1]));
-    const musHTML = (filas.length || sinTocar.length) ? `<div class="card pg-mus">
-      <div class="pg-h"><strong>Series por músculo</strong><span class="dim">esta semana</span></div>
-      ${filas.map(([g, n]) => `<div class="pg-bar"><span class="pg-bn">${UI.esc(g)}</span><span class="pg-bt"><i style="width:${Math.max(4, n / maxS * 100)}%"></i></span><span class="pg-bv">${n}</span></div>`).join('')}
-      ${sinTocar.map(g => `<div class="pg-bar off"><span class="pg-bn">${UI.esc(g)}</span><span class="pg-bt"></span><span class="pg-bv">0</span></div>`).join('')}
-      ${sinTocar.length ? `<p class="pg-aviso">${UI.icon('info', 14)} ${UI.esc(lista(sinTocar))} ${sinTocar.length === 1 ? 'lo sueles entrenar y aún no lo has tocado' : 'los sueles entrenar y aún no los has tocado'} esta semana.</p>` : ''}
-    </div>` : '';
-
-    host.innerHTML = `<div class="card-label pg-sec">Tus logros recientes</div>${logrosHTML}${mesHTML}${constHTML}${musHTML}`;
     const perCard = host.querySelector('#pgPer');
     perCard.addEventListener('click', (ev) => {
       const b = ev.target.closest('[data-per]');
@@ -598,6 +556,92 @@ const VProgress = (() => {
       try { localStorage.setItem(PER_KEY, periodo); } catch (e) { /* no se recuerda, da igual */ }
       perCard.innerHTML = periodoHTML(periodo);
     });
+
+    // ---- Cada parte carga lo suyo y se pinta sola
+    const sesP = DB.sessionsOf(uid).then(l => l.filter(s => !s.draft && s.date));
+    const catP = DB.exercisesOf(uid);
+
+    // 1) Logros recientes (lo más lento: récords de todos los ejercicios)
+    logrosRecientes(app, uid).then(logros => {
+      if (!vivo()) return;
+      const ICO = { peso: 'activity', record: 'trophy', desde: 'star' };
+      const logroHTML = (l) => `<div class="pg-logro ${l.kind}">
+        <div class="pg-lh"><span class="pg-lic">${UI.icon(ICO[l.kind], 15)}</span><span class="pg-tag">${UI.esc(l.tag)}</span></div>
+        <span class="pg-big">${UI.esc(l.big)}</span>
+        <span class="pg-txt">${UI.esc(l.txt)}</span>
+        <span class="pg-sub">${UI.esc(l.sub || '')}</span>
+        ${sparkSVG(l.spark)}
+      </div>`;
+      host.querySelector('#pgLogros').innerHTML = logros.length
+        ? `<div class="pg-logros">${logros.slice(0, 8).map(logroHTML).join('')}</div>`
+        : `<div class="card pg-vacio"><span class="dim">Sin logros en las últimas 2 semanas. Cuando batas una marca, o hagas lo mejor en mucho tiempo, saldrá aquí.</span></div>`;
+    }).catch(err => { console.error(err); if (vivo()) host.querySelector('#pgLogros').innerHTML = `<div class="card">${skFallo}</div>`; });
+
+    // 2) Semana | Mes y 3) Constancia: solo necesitan los entrenos
+    sesP.then(sessions => {
+      if (!vivo()) return;
+      sesiones = sessions;
+      perCard.innerHTML = periodoHTML(periodo);
+
+      const curWk = weekIndex(now);
+      const porSem = new Map();
+      sessions.forEach(s => { const w = weekIndex(new Date(s.date + 'T00:00:00')); porSem.set(w, (porSem.get(w) || 0) + 1); });
+      const semanas = new Set(porSem.keys());
+      let racha = 0;
+      const anchor = semanas.has(curWk) ? curWk : (semanas.has(curWk - 1) ? curWk - 1 : null);
+      if (anchor != null) { let w = anchor; while (semanas.has(w)) { racha++; w--; } }
+      let mejor = 0, run = 0, prevW = null;
+      [...semanas].sort((a, b) => a - b).forEach(w => { run = prevW != null && w === prevW + 1 ? run + 1 : 1; mejor = Math.max(mejor, run); prevW = w; });
+      const NW = 12;
+      const cols = [];
+      for (let i = NW - 1; i >= 0; i--) {
+        const ini = new Date(lunes.getFullYear(), lunes.getMonth(), lunes.getDate() - i * 7);
+        cols.push({ n: porSem.get(curWk - i) || 0, ini: isoOf(ini.getTime()), actual: i === 0 });
+      }
+      const maxN = Math.max(4, ...cols.map(c => c.n));
+      const conEntreno = cols.filter(c => !c.actual);
+      const media = conEntreno.reduce((a, c) => a + c.n, 0) / conEntreno.length;
+      host.querySelector('#pgConst').innerHTML = `${constHead}
+        <div class="pg-racha"><span class="pg-rn">${racha}</span><div><strong>${racha === 1 ? 'semana seguida' : 'semanas seguidas'} entrenando</strong><span class="dim">${mejor > racha ? `Tu mejor racha: ${mejor} semanas` : racha > 1 ? 'Es tu mejor racha' : 'Entrena esta semana para empezar una racha'}</span></div></div>
+        <div class="pg-weeks">${cols.map(c => `<div class="pg-wk${c.actual ? ' now' : ''}"><span class="pg-wn">${c.n || ''}</span><span class="pg-wb"><i style="height:${c.n ? Math.max(8, c.n / maxN * 100) : 0}%"></i></span></div>`).join('')}</div>
+        <div class="pg-wl"><span>${UI.fmtDateShort(cols[0].ini)}</span><span>${UI.fmtDateShort(cols[Math.floor(NW / 2)].ini)}</span><span>esta semana</span></div>
+        <p class="pg-media dim">Media de las últimas ${NW - 1} semanas: <strong>${fmt1(media)}</strong> entrenos por semana</p>`;
+    }).catch(err => {
+      console.error(err);
+      if (!vivo()) return;
+      perCard.innerHTML = skFallo;
+      host.querySelector('#pgConst').innerHTML = constHead + skFallo;
+    });
+
+    // 4) Series por músculo: entrenos + catálogo (para saber el grupo de cada ejercicio)
+    Promise.all([sesP, catP]).then(([sessions, catalog]) => {
+      if (!vivo()) return;
+      const card = host.querySelector('#pgMus');
+      const byId = new Map(catalog.map(e => [e.id, e])), byName = new Map(catalog.map(e => [UI.norm(e.name), e]));
+      const grupoDe = (e) => { const ex = (e.exerciseId && byId.get(e.exerciseId)) || byName.get(UI.norm(e.name || '')); return (ex && ex.muscleGroup) || ''; };
+      const iniSem = isoOf(lunes.getTime()), hace4 = isoOf(lunes.getTime() - 28 * DAY);
+      const series = new Map(), habituales = new Set();
+      sessions.forEach(s => (s.entries || []).forEach(e => {
+        const g = grupoDe(e); if (!g || NO_MUSCULO.has(UI.norm(g))) return;
+        const hechas = (e.sets || []).filter(st => st.done !== false && (parseFloat(st.reps) || parseFloat(st.weight) || parseFloat(st.time))).length;
+        if (!hechas) return;
+        if (s.date >= iniSem && s.date <= hoy) series.set(g, (series.get(g) || 0) + hechas);
+        else if (s.date >= hace4 && s.date < iniSem) habituales.add(g);
+      }));
+      const sinTocar = [...habituales].filter(g => !series.has(g));
+      const filas = [...series.entries()].sort((a, b) => b[1] - a[1]);
+      if (!filas.length && !sinTocar.length) { card.remove(); return; }
+      const maxS = Math.max(10, ...filas.map(f => f[1]));
+      card.innerHTML = `${musHead}
+        ${filas.map(([g, n]) => `<div class="pg-bar"><span class="pg-bn">${UI.esc(g)}</span><span class="pg-bt"><i style="width:${Math.max(4, n / maxS * 100)}%"></i></span><span class="pg-bv">${n}</span></div>`).join('')}
+        ${sinTocar.map(g => `<div class="pg-bar off"><span class="pg-bn">${UI.esc(g)}</span><span class="pg-bt"></span><span class="pg-bv">0</span></div>`).join('')}
+        ${sinTocar.length ? `<p class="pg-aviso">${UI.icon('info', 14)} ${UI.esc(lista(sinTocar))} ${sinTocar.length === 1 ? 'lo sueles entrenar y aún no lo has tocado' : 'los sueles entrenar y aún no los has tocado'} esta semana.</p>` : ''}`;
+    }).catch(err => { console.error(err); if (vivo()) { const c = host.querySelector('#pgMus'); if (c) c.innerHTML = musHead + skFallo; } });
+
+    // Sin nada todavía (ni entrenos ni pesajes): en vez de tarjetas vacías, la explicación
+    Promise.all([sesP, pesosDe(uid)]).then(([s, p]) => {
+      if (vivo() && !s.length && !p.length) host.innerHTML = `<div class="empty-state"><p><strong>Aquí verás cómo vas.</strong></p><p class="dim">Tus logros, tu semana y tu mes frente a los anteriores, tu constancia y qué músculos has trabajado. Aparece en cuanto guardes tu primer entreno o apuntes tu peso.</p></div>`;
+    }).catch(() => {});
   }
   const lista = (arr) => arr.length <= 1 ? (arr[0] || '') : `${arr.slice(0, -1).join(', ')} y ${arr[arr.length - 1]}`;
 
@@ -687,7 +731,7 @@ const VProgress = (() => {
     ];
     const tabBar = `<div class="tabs pg-tabs">${tabs.map(t => `<button class="tab${tab === t.id ? ' on' : ''}" data-tab="${t.id}">${t.label}</button>`).join('')}</div>`;
     const host = { summary: 'tabSummary', body: 'tabBody', exercise: 'tabEx', records: 'tabRecords', compare: 'tabCompare' }[tab] || 'tabSummary';
-    return tabBar + `<div id="${host}"><div class="loading">Cargando…</div></div>`;
+    return tabBar + `<div id="${host}"><div class="card">${sk('45%', 14)}${sk('100%', 130, 'margin-top:14px')}</div><div class="card">${sk('60%', 14)}${sk('85%', 12, 'margin-top:10px')}${sk('70%', 12, 'margin-top:8px')}</div></div>`;
   }
 
   function bind(app, root, params) {
@@ -702,17 +746,51 @@ const VProgress = (() => {
 
   // ---------- CORPORAL ----------
   const RANGES = [{ id: '1m', label: '1 mes', days: 31 }, { id: '3m', label: '3 meses', days: 92 }, { id: '6m', label: '6 meses', days: 183 }, { id: '1a', label: '1 año', days: 366 }, { id: 'all', label: 'Todo', days: 0 }];
+  // Lo fijo de Corporal (objetivo y «Apuntar»): funciona aunque los datos aún no hayan llegado
+  function bindBodyFijos(app, host) {
+    const gb = host.querySelector('#pwGoal');
+    if (gb) gb.addEventListener('click', () => UI.pickFromList({
+      title: 'Tu objetivo de peso',
+      options: GOALS,
+      value: app.activeUser.weightGoal || '',
+      onPick: async (val) => {
+        await DB.put('users', { ...app.activeUser, weightGoal: val });
+        app.activeUser.weightGoal = val; // sin recargar perfiles: así no cambia el perfil activo
+        renderBody(app, host);
+        UI.toast(val ? `Objetivo: ${GOALS.find(g => g.value === val).label.toLowerCase()}` : 'Sin objetivo de peso');
+      },
+    }));
+    const add = host.querySelector('#addProg');
+    if (add) add.addEventListener('click', () => editProgress(app, null, () => renderBody(app, host)));
+  }
   async function renderBody(app, host) {
     const u = app.activeUser;
-    const entries = (await DB.progressOf(u.id)).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
     const goal = u.weightGoal || '';
     const range = host._range || '6m';
+    if (!host._pintado) {
+      // primera vez: la tarjeta con su título, el objetivo, los periodos y «Apuntar» al momento; skeletons en lo que depende de tus datos
+      const gl = (GOALS.find(g => g.value === goal) || GOALS[3]).label;
+      host.innerHTML = `<div class="card pw-card">
+          <div class="pw-head"><span class="pw-title">Peso corporal</span><button type="button" class="pw-goal" id="pwGoal">Objetivo: <strong>${UI.esc(gl.toLowerCase())}</strong> ▾</button></div>
+          ${sk('150px', 44)}${sk('64px', 13, 'margin-top:8px')}${sk('200px', 30, 'margin-top:12px;border-radius:99px')}
+          <div class="pw-datos">${sk('100%', 62, 'border-radius:12px')}${sk('100%', 62, 'border-radius:12px')}</div>
+          ${sk('100%', 170, 'margin-top:16px;border-radius:12px')}
+          <div class="pg-seg pw-rangos">${RANGES.map(r => `<button type="button" class="${r.id === range ? 'on' : ''}" disabled>${r.label}</button>`).join('')}</div>
+        </div>
+        <button class="btn primary block" id="addProg">+ Apuntar peso o medidas</button>
+        <div class="card-label pg-sec">Registros</div>
+        <div class="card pr-list">${[0, 1, 2, 3].map(() => `<div class="pr-row">${sk('42px', 12)}${sk('70px', 15)}<span></span><span></span></div>`).join('')}</div>`;
+      bindBodyFijos(app, host);
+    }
+    const [todasEntradas, ws] = await Promise.all([DB.progressOf(u.id), pesosDe(u.id)]);
+    if (!host.isConnected) return;
+    host._pintado = true;
+    const entries = todasEntradas.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
     const rDays = (RANGES.find(r => r.id === range) || RANGES[2]).days;
     const hoy = DB.todayISO();
     const enRango = (p) => !rDays || diasEntre(p.x, hoy) <= rDays;
 
     // --- Peso: el número de hoy, qué tiene de especial, el ritmo y la tendencia
-    const ws = await pesosDe(u.id);
     const ins = weightInsight(ws);
     const ph = weightPhrase(ins, goal);
     const trend = trendOf(ws);
@@ -810,19 +888,7 @@ const VProgress = (() => {
       renderBody(app, host);
     }));
     host.querySelectorAll('[data-metric]').forEach(c => c.addEventListener('click', () => { host._metric = c.dataset.metric; renderBody(app, host); }));
-    const gb = host.querySelector('#pwGoal');
-    if (gb) gb.addEventListener('click', () => UI.pickFromList({
-      title: 'Tu objetivo de peso',
-      options: GOALS,
-      value: goal,
-      onPick: async (val) => {
-        await DB.put('users', { ...app.activeUser, weightGoal: val });
-        app.activeUser.weightGoal = val; // sin recargar perfiles: así no cambia el perfil activo
-        renderBody(app, host);
-        UI.toast(val ? `Objetivo: ${GOALS.find(g => g.value === val).label.toLowerCase()}` : 'Sin objetivo de peso');
-      },
-    }));
-    host.querySelector('#addProg').addEventListener('click', () => editProgress(app, null, () => renderBody(app, host)));
+    bindBodyFijos(app, host);
     const todos = host.querySelector('#prTodos');
     if (todos) todos.addEventListener('click', () => { host._todos = !host._todos; renderBody(app, host); });
     host.querySelectorAll('[data-more]').forEach(b => b.addEventListener('click', async () => {
