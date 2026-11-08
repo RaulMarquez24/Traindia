@@ -633,16 +633,37 @@ const UI = (() => {
     return `<button type="button" class="select-btn" id="${esc(id)}">${esc(label)}<span class="select-caret">▾</span></button>`;
   }
 
+  // ---- Skeletons de carga ----
+  // Un bloque gris que late donde va un dato que aún no ha llegado. Lo que no necesita datos
+  // (títulos, botones) se pinta de verdad al momento; esto solo ocupa el sitio de lo que falta.
+  const sk = (w = '100%', h = 14, extra = '') => `<span class="sk" style="width:${w};height:${h}px${extra ? ';' + extra : ''}"></span>`;
+  // Filas de lista genéricas (fecha/título/pastilla), para listas que aún cargan.
+  const skRows = (n = 4) => Array.from({ length: n }, () => `<div class="sk-row">${sk('38px', 38, 'border-radius:10px')}<div class="sk-row-txt">${sk('62%', 14)}${sk('40%', 11, 'margin-top:7px')}</div></div>`).join('');
+  // Pantalla genérica mientras carga una vista que no tiene la suya propia.
+  const skView = () => `<div class="section"><div class="card">${sk('45%', 16)}${sk('100%', 120, 'margin-top:14px;border-radius:12px')}</div><div class="card">${skRows(3)}</div></div>`;
+
   // ---- Formato de fecha legible ----
+  // Los formateadores se crean una vez y se reutilizan: toLocaleDateString crea uno nuevo en cada llamada,
+  // y en listas largas (sesiones, registros, récords) eso se nota en el móvil.
+  const _dtf = new Map();
+  function dtf(opts) {
+    const k = JSON.stringify(opts || {});
+    let f = _dtf.get(k);
+    if (!f) { f = new Intl.DateTimeFormat('es-ES', opts); _dtf.set(k, f); }
+    return f;
+  }
+  const _fd = new Map(), _fds = new Map();
   function fmtDate(iso) {
     if (!iso) return '';
-    const d = new Date(iso + 'T00:00:00');
-    return d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
+    let s = _fd.get(iso);
+    if (s == null) { s = dtf({ day: '2-digit', month: 'short', year: 'numeric' }).format(new Date(iso + 'T00:00:00')); _fd.set(iso, s); }
+    return s;
   }
   function fmtDateShort(iso) {
     if (!iso) return '';
-    const d = new Date(iso + 'T00:00:00');
-    return d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
+    let s = _fds.get(iso);
+    if (s == null) { s = dtf({ day: '2-digit', month: 'short' }).format(new Date(iso + 'T00:00:00')); _fds.set(iso, s); }
+    return s;
   }
 
   // ---- Reordenar arrastrando (touch + ratón) ----
@@ -809,6 +830,6 @@ const UI = (() => {
     field, input, textarea, select, readForm,
     colorPicker, bindColorPicker, avatar, COLORS, ESSENTIALS,
     pickExercise, prompt, askAI, icon, autoFocus, pickFromList, selectButton,
-    lineChart, fmtDate, fmtDateShort, makeSortable,
+    lineChart, fmtDate, fmtDateShort, dtf, makeSortable, sk, skRows, skView,
   };
 })();

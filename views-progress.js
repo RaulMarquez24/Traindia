@@ -476,7 +476,7 @@ const VProgress = (() => {
 
   // Skeleton: un bloque gris que late mientras llega su dato. Cada parte de la pantalla se pinta en cuanto
   // tiene lo suyo, sin esperar a las demás; lo que no necesita datos (títulos, botones) sale al momento.
-  const sk = (w = '100%', h = 14, extra = '') => `<span class="sk" style="width:${w};height:${h}px${extra ? ';' + extra : ''}"></span>`;
+  const sk = UI.sk;
   const skFallo = '<p class="dim pg-fallo">No se ha podido cargar esta parte. Vuelve a entrar en Progreso.</p>';
 
   async function renderResumen(app, host) {

@@ -1539,8 +1539,9 @@ const VPlan = (() => {
     return { items, removableDup: await dedupeRemovable(app) };
   }
 
-  async function exercises(app) {
-    const { removableDup } = await catalogData(app);
+  // El buscador, «Nuevo» y la ayuda salen al momento; la lista, los filtros con sus números y el
+  // botón de duplicados se rellenan en exercisesBind en cuanto llegan los datos (una sola lectura).
+  function exercises(app) {
     return `<div class="section ex-catalog">
       <div class="cat-bar" id="catBar">
         <div class="cat-search-row">
@@ -1552,13 +1553,13 @@ const VPlan = (() => {
           <button class="btn primary cat-new" id="addEx" aria-label="Nuevo ejercicio">${UI.icon('plus', 16)}<span>Nuevo</span></button>
         </div>
         <div class="cat-filters"><div>
-          <div class="seg cat-use cat-use4" id="catUse"></div>
+          <div class="seg cat-use cat-use4" id="catUse">${UI.sk('100%', 34, 'border-radius:99px')}</div>
           <div class="cat-picks" id="catPicks"></div>
         </div></div>
       </div>
-      <div class="cat-count" id="catCount"></div>
-      <div id="catalogBody"></div>
-      ${removableDup.length ? `<button class="btn ghost danger block" id="cleanDups" style="margin-top:16px">${UI.icon('trash', 16)} Eliminar ${removableDup.length} duplicado${removableDup.length === 1 ? '' : 's'} idéntico${removableDup.length === 1 ? '' : 's'}</button>` : ''}
+      <div class="cat-count" id="catCount">${UI.sk('90px', 12)}</div>
+      <div id="catalogBody"><div class="card">${UI.skRows(6)}</div></div>
+      <div id="catDups"></div>
       <details class="det cat-help"><summary>¿Cómo funciona el catálogo?</summary>
         <p class="field-hint">Catálogo de <strong>${UI.esc(app.activeUser.name)}</strong>. <strong>En el plan</strong>: está en algún día de tu plan activo (o es suplente de uno que lo está). <strong>Sueltos</strong>: no están en tu plan, pero los has apuntado alguna vez (añadiéndolos a mano en un entreno o de un plan anterior); su historial sigue en Progreso. <strong>Sin usar</strong>: ni en tu plan ni con registros; son los que puedes borrar sin perder nada. Toca un ejercicio para editarlo.</p>
       </details>
@@ -1571,7 +1572,7 @@ const VPlan = (() => {
   ];
 
   function exercisesBind(app, root) {
-    let items = [];
+    let items = [], cargado = false;
     const $ = (sel) => root.querySelector(sel);
     const search = $('#exCatalogSearch');
     if (!search) return;
@@ -1633,6 +1634,7 @@ const VPlan = (() => {
     };
 
     const paint = () => {
+      if (!cargado) return; // hasta que lleguen los datos se quedan los skeletons
       const all = items.length;
       const useC = countBy('use', it => it.state);
       const useOpts = [
@@ -1693,7 +1695,10 @@ const VPlan = (() => {
     // posición. Si se indica un id, se resalta esa fila.
     const refresh = async (flashId) => {
       const y = window.scrollY;
-      items = (await catalogData(app)).items;
+      const datos = await catalogData(app);
+      if (!document.body.contains(host)) return; // ya estás en otra pantalla
+      items = datos.items; cargado = true;
+      pintaDups(datos.removableDup);
       paint();
       window.scrollTo(0, y);
       if (flashId) {
@@ -1757,14 +1762,21 @@ const VPlan = (() => {
       if ((ev.key === 'Enter' || ev.key === ' ') && ev.target.classList && ev.target.classList.contains('cat-row')) { ev.preventDefault(); ev.target.click(); }
     });
 
-    const cleanBtn = $('#cleanDups');
-    if (cleanBtn) cleanBtn.addEventListener('click', async () => {
-      const rem = await dedupeRemovable(app);
-      const ok = await UI.confirm({ title: 'Eliminar duplicados', message: `Se eliminarán ${rem.length} ejercicio(s) idéntico(s) repetido(s) y se conservará uno de cada. Tu plan, tus sesiones y tu progreso se mantienen.`, confirmLabel: 'Eliminar', danger: true });
-      if (!ok) return;
-      const n = await cleanupDuplicates(app);
-      app.render(); UI.toast(`${n} duplicado(s) eliminado(s)`);
-    });
+    // Botón de duplicados idénticos: aparece solo si los hay (se sabe al cargar los datos)
+    function pintaDups(removableDup) {
+      const box = $('#catDups');
+      if (!box) return;
+      const n = removableDup.length;
+      box.innerHTML = n ? `<button class="btn ghost danger block" id="cleanDups" style="margin-top:16px">${UI.icon('trash', 16)} Eliminar ${n} duplicado${n === 1 ? '' : 's'} idéntico${n === 1 ? '' : 's'}</button>` : '';
+      const cleanBtn = $('#cleanDups');
+      if (cleanBtn) cleanBtn.addEventListener('click', async () => {
+        const rem = await dedupeRemovable(app);
+        const ok = await UI.confirm({ title: 'Eliminar duplicados', message: `Se eliminarán ${rem.length} ejercicio(s) idéntico(s) repetido(s) y se conservará uno de cada. Tu plan, tus sesiones y tu progreso se mantienen.`, confirmLabel: 'Eliminar', danger: true });
+        if (!ok) return;
+        const k = await cleanupDuplicates(app);
+        app.render(); UI.toast(`${k} duplicado(s) eliminado(s)`);
+      });
+    }
 
     refresh();
   }

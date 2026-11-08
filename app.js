@@ -315,7 +315,7 @@ const app = {
       guide:    { render: (a, p) => VPlan.guide(a, p),  bind: (a, r, p) => VPlan.guideBind(a, r, p) },
       info:     { render: (a, p) => VPlan.info(a, p),      bind: (a, r, p) => VPlan.infoBind(a, r, p) },
 
-      sessions: { render: (a, p) => VSessions.list(a, p),   bind: (a, r, p) => VSessions.listBind(a, r, p) },
+      sessions: { render: (a, p) => VSessions.list(a, p),   bind: (a, r, p) => VSessions.listBind(a, r, p), skeleton: (a, p) => VSessions.listSkeleton(a, p) },
       session:  { render: (a, p) => VSessions.detail(a, p), bind: (a, r, p) => VSessions.detailBind(a, r, p) },
       live:     { render: (a, p) => VSessions.live(a, p),   bind: (a, r, p) => VSessions.liveBind(a, r, p) },
 
@@ -394,14 +394,27 @@ const app = {
     this.updateNavActive();
     const main = document.getElementById('mainContent');
     const def = this.views[this.currentView] || this.views.week;
-    main.innerHTML = `<div class="view active"><div class="loading">Cargando…</div></div>`;
+    // Cada render lleva su número: si mientras carga se pide otra pantalla, este ya no pinta nada
+    // (antes, una pantalla lenta podía pisar a la que tocaste después).
+    const seq = this._renderSeq = (this._renderSeq || 0) + 1;
+    const params = this.params;
+    // Si tarda, en vez de un «Cargando…» se ve el esqueleto de la pantalla (lo fijo de verdad y
+    // skeletons donde van los datos). Si es casi instantánea no se enseña, para que no parpadee.
+    const skTimer = setTimeout(() => {
+      if (seq !== this._renderSeq) return;
+      let skHTML = '';
+      try { skHTML = def.skeleton ? def.skeleton(this, params) : UI.skView(); } catch (e) { skHTML = UI.skView(); }
+      main.innerHTML = `<div class="view active view-sk">${skHTML}</div>`;
+    }, 80);
     let html = '';
     try {
-      html = await def.render(this, this.params);
+      html = await def.render(this, params);
     } catch (e) {
       console.error(e);
       html = `<div class="empty-state"><p>Error al cargar la vista.</p><p class="dim">${UI.esc(e.message || e)}</p></div>`;
     }
+    clearTimeout(skTimer);
+    if (seq !== this._renderSeq) return; // ya se está pintando otra pantalla
     main.innerHTML = `<div class="view active">${html}</div>`;
     this.updateHeader();   // otra vez: algunas vistas solo saben su título tras cargar sus datos
     this.bindLinks(main);

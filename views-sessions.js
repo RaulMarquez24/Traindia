@@ -1667,7 +1667,7 @@ const VSessions = (() => {
   function dayLabel(iso) {
     if (!iso) return 'Sin fecha';
     const d = new Date(iso + 'T00:00:00');
-    const s = d.toLocaleDateString('es-ES', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' });
+    const s = UI.dtf({ weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' }).format(d);
     return s.charAt(0).toUpperCase() + s.slice(1);
   }
 
@@ -1834,7 +1834,7 @@ const VSessions = (() => {
     if (mon === thisMon) return 'Esta semana';
     if (mon === calAddDays(thisMon, -7)) return 'Semana pasada';
     const d = new Date(mon + 'T12:00:00');
-    const txt = d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }).replace('.', '');
+    const txt = UI.dtf({ day: 'numeric', month: 'short' }).format(d).replace('.', '');
     return `Semana del ${txt}${mon.slice(0, 4) !== thisMon.slice(0, 4) ? ' ' + mon.slice(0, 4) : ''}`;
   }
 
@@ -1849,7 +1849,7 @@ const VSessions = (() => {
     const nSets = (s.entries || []).reduce((n, e) => n + (e.sets ? e.sets.filter(st => !st.skip).length : 0), 0); // «no hecho» no es una serie hecha
     const recs = (s.prs || []).filter(p => !p.first).length;
     const d = s.date ? new Date(s.date + 'T12:00:00') : null;
-    const dow = d ? d.toLocaleDateString('es-ES', { weekday: 'short' }).replace('.', '') : '';
+    const dow = d ? UI.dtf({ weekday: 'short' }).format(d).replace('.', '') : '';
     // Cómo amaneciste: en texto en la última sesión o si pide no subir carga; si no, el punto
     const r = s.response && RESPONSE[s.response];
     let resp = '';
@@ -1864,7 +1864,7 @@ const VSessions = (() => {
       recs ? `<span class="ss-pill pr">${UI.icon('trophy', 11)} ${recs}</span>` : '',
       resp,
     ].join('');
-    const q = [name, focus, INT_LABEL[type] || '', s.date ? dayLabel(s.date) : '', d ? d.toLocaleDateString('es-ES') : ''].join(' ');
+    const q = [name, focus, INT_LABEL[type] || '', s.date ? dayLabel(s.date) : '', d ? UI.dtf().format(d) : ''].join(' ');
     const author = showAuthor ? app.userById(s.userId) : null;
     return `<div class="ss-row t-${type || 'none'}" role="button" tabindex="0" data-link="session" data-params='${JSON.stringify({ sessionId: s.id, ownerId: s.userId })}' data-date="${s.date || ''}" data-q="${UI.esc(UI.norm(q))}">
         <span class="ss-date"><small>${dow}</small><b>${d ? d.getDate() : '–'}</b></span>
@@ -1875,6 +1875,21 @@ const VSessions = (() => {
         </span>
         ${author ? UI.avatar(author, 26) : ''}
       </div>`;
+  }
+
+  // Esqueleto de Sesiones mientras carga: los filtros por persona y «Empezar entreno» ya son los de
+  // verdad; la racha y la lista, skeletons.
+  function listSkeleton(app, params) {
+    const filter = (params && params.filterUser) || app.mainUser.id;
+    const users = Object.values(app.usersById || {});
+    const chips = [{ id: 'all', name: 'Todos' }].concat(users.map(u => ({ id: u.id, name: u.name })))
+      .map(c => `<button class="chip${filter === c.id ? ' on' : ''}">${UI.esc(c.name)}</button>`).join('');
+    return `<div class="section">
+      <div class="ss-top"><div class="chips-row">${chips}</div></div>
+      <div class="card">${UI.sk('50%', 16)}${UI.sk('100%', 96, 'margin-top:14px;border-radius:12px')}</div>
+      <div class="sessions-cta"><button class="btn primary">${UI.icon('play', 15)} ${app._live ? 'Continuar entreno' : 'Empezar entreno'}</button><button class="btn ghost ss-add" aria-hidden="true">${UI.icon('plus', 20)}</button></div>
+      <div class="ss-week">${UI.sk('40%', 14, 'margin:6px 0 10px')}<div class="card">${UI.skRows(4)}</div></div>
+    </div>`;
   }
 
   async function list(app, params) {
@@ -2362,7 +2377,7 @@ const VSessions = (() => {
     });
   }
 
-  return { live, liveBind, list, listBind, fmtDur, detail, detailBind, checkDayAfter, sessionVolume, reportModel, checkResume, liveHasData, restEnsure, TIME_FIELDS, CHECK_FIELDS,
+  return { live, liveBind, list, listSkeleton, listBind, fmtDur, detail, detailBind, checkDayAfter, sessionVolume, reportModel, checkResume, liveHasData, restEnsure, TIME_FIELDS, CHECK_FIELDS,
     notifStatus, setRestNotify, restNotifyOn, testPush, REST_NOTIFY_TEXT,
     getRestDuration, setRestDefault, restSoundOn, restVibrateOn, setRestSound, setRestVibrate, fmtClock,
     setPaceSec, repDistKm, fmtPace, exerciseHistory, keyForEntry };

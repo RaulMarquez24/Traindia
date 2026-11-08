@@ -1878,3 +1878,9 @@ body.has-active-bar .dv-start { bottom: calc(var(--nav-h) + var(--safe-bottom) +
 .pg-logro.sk-card { background: transparent; border: 1px solid var(--line-soft); }
 .pg-fallo { margin: 6px 0 0; font-size: 12.5px; }
 .pw-rangos button:disabled { cursor: default; }
+/* Rendimiento: lo que queda fuera de la pantalla no se maqueta ni se pinta hasta que te acercas */
+.ss-week, .rec-group { content-visibility: auto; contain-intrinsic-size: auto 360px; }
+.sk-row { display: flex; align-items: center; gap: 12px; padding: 9px 0; border-top: 1px solid var(--line-soft); }
+.sk-row:first-child { border-top: none; }
+.sk-row-txt { flex: 1; min-width: 0; }
+.view-sk button { pointer-events: none; }

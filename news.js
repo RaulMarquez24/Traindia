@@ -69,7 +69,7 @@ const VNews = (() => {
   const untint = () => { const m = document.querySelector('meta[name="theme-color"]'); if (m && _tinted !== null) m.content = _tinted; _tinted = null; };
   // Con «reducir movimiento» activado en el móvil, los avances de vídeo no arrancan solos.
   const autoplay = () => (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) ? '' : 'autoplay';
-  const fecha = (iso) => new Date(iso + 'T12:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+  const fecha = (iso) => UI.dtf({ day: 'numeric', month: 'short' }).format(new Date(iso + 'T12:00:00'));
 
   // Al entrar: el último anuncio, y solo si estás en reposo en Semana (sin entreno en
   // marcha ni a medias, sin ventanas abiertas, sin nada escrito). Cuenta como visto cuando

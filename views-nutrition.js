@@ -193,7 +193,7 @@ const VNutrition = (() => {
       if (app.params) app.params.lista = 1;
       _saltarA = planes[0].id;
       _plan = planes[0]; _planId = _plan.id;
-      return `<div class="loading">Abriendo…</div>`;
+      return UI.skView();
     }
     _plan = null;
     return listaPlanesHTML(planes);
