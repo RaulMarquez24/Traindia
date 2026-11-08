@@ -104,11 +104,14 @@ const VNews = (() => {
   const fecha = (iso) => UI.dtf({ day: 'numeric', month: 'short' }).format(new Date(iso + 'T12:00:00'));
 
   // Al entrar: el anuncio más nuevo que no hayas visto (y si te faltaba otro reciente, otro
-  // día: como mucho uno al día), solo si estás en reposo en Semana (sin entreno en marcha ni
-  // a medias, sin ventanas abiertas, sin nada escrito). Cuenta como visto cuando lo cierras,
-  // llegas al final, tocas «Pruébalo» o abres el vídeo: si desaparece porque la app se
-  // recargó o la cerraste, vuelve a salir la próxima vez. Los de hace más de 4 semanas ya no salen.
-  function maybeShow(app) {
+  // día: como mucho uno al día), en la pantalla que estés, en cuanto estés en reposo: sin
+  // entreno en marcha ni a medias, sin ventanas abiertas y sin nada a medio escribir. Si en ese
+  // momento estás con algo, espera a que acabes (con un entreno en marcha, no sale en esta visita).
+  // Cuenta como visto cuando lo cierras, llegas al final, tocas «Pruébalo» o abres el vídeo; si
+  // desaparece porque la app se recargó o la cerraste, vuelve a salir la próxima vez. Los de hace
+  // más de 4 semanas ya no salen. luego(): lo que tocaba al abrir («¿Cómo amaneciste?», copia…),
+  // que va cuando cierras las historias. Devuelve true si hay historias que enseñar.
+  function maybeShow(app, luego) {
     const vistos = newsVistos();
     // Quien se dio de alta después de un anuncio no lo necesita: para él todo es nuevo.
     const alta = app.mainUser && app.mainUser.createdAt;
@@ -119,13 +122,16 @@ const VNews = (() => {
       if (diasDesde(x.date) > NEWS_VIVE_DIAS) continue;
       n = x; break;
     }
-    if (!n) return;
+    if (!n) return false;
     const hoy = DB.todayISO();
-    if (ls(NEWS_DAY_KEY) === hoy) return; // hoy ya viste uno: el siguiente, otro día
-    setTimeout(() => {
-      if (app._live || app._updReady || app.currentView !== 'week' || document.visibilityState !== 'visible' || !app.isIdle()) return;
-      play(app, n.stories, 0, null, () => { marcarNews(n.id); ls(NEWS_DAY_KEY, hoy); });
-    }, 1200);
+    if (ls(NEWS_DAY_KEY) === hoy) return false; // hoy ya viste uno: el siguiente, otro día
+    const intentar = () => {
+      if (app._live) return;                       // un entreno manda: hoy no se interrumpe con esto
+      if (app._updReady || document.visibilityState !== 'visible' || !app.isIdle()) { setTimeout(intentar, 2000); return; } // en cuanto acabes
+      play(app, n.stories, 0, () => { if (luego) setTimeout(luego, 400); }, () => { marcarNews(n.id); ls(NEWS_DAY_KEY, hoy); });
+    };
+    setTimeout(intentar, 1200);
+    return true;
   }
 
   // ---- Reproductor de historias ----
