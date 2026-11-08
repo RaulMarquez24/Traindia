@@ -564,6 +564,10 @@ const VProgress = (() => {
     // ---- Lo que sale al momento: títulos, botones y un skeleton donde va cada dato
     const constHead = '<div class="pg-h"><strong>Constancia</strong><span class="dim">entrenos por semana</span></div>';
     const musHead = '<div class="pg-h"><strong>Series por músculo</strong><span class="dim">esta semana</span></div>';
+    const amigoHTML = hayAmigos(app) ? '' : `<button type="button" class="card pg-amigo" id="pgAmigo">
+        <span class="pg-amigo-ic">${UI.icon('users', 18)}</span>
+        <span><strong>Compárate con un amigo</strong><span class="dim">Cuando un amigo te pase su enlace de «Compartir mi progreso», veréis vuestro mes y vuestras marcas lado a lado.</span></span>
+      </button>`;
     host.innerHTML = `<div class="card-label pg-sec">Tus logros recientes</div>
       <div id="pgLogros"><div class="pg-logros">${[0, 1].map(() => `<div class="pg-logro sk-card">${sk('55%', 12)}${sk('62%', 30, 'margin-top:14px')}${sk('80%', 14, 'margin-top:8px')}${sk('100%', 44, 'margin-top:16px')}</div>`).join('')}</div></div>
       <div class="card pg-mes" id="pgPer">${periodoHTML(periodo)}</div>
@@ -572,7 +576,10 @@ const VProgress = (() => {
         <div class="pg-weeks">${Array.from({ length: 12 }, () => '<div class="pg-wk"><span class="pg-wn"></span><span class="pg-wb"></span></div>').join('')}</div>
         ${sk('62%', 12, 'margin-top:12px')}
       </div>
-      <div class="card pg-mus" id="pgMus">${musHead}${[0, 1, 2, 3].map(() => `<div class="pg-bar"><span>${sk('75%', 12)}</span><span class="pg-bt"></span><span></span></div>`).join('')}</div>`;
+      <div class="card pg-mus" id="pgMus">${musHead}${[0, 1, 2, 3].map(() => `<div class="pg-bar"><span>${sk('75%', 12)}</span><span class="pg-bt"></span><span></span></div>`).join('')}</div>
+      ${amigoHTML}`;
+    const amigoBtn = host.querySelector('#pgAmigo');
+    if (amigoBtn) amigoBtn.addEventListener('click', () => VData.openShare(app));
 
     const perCard = host.querySelector('#pgPer');
     perCard.addEventListener('click', (ev) => {
@@ -809,18 +816,21 @@ const VProgress = (() => {
   }
 
   // ====================================================
+  // Pestañas: Resumen · Corporal · Ejercicios (la lista con tu récord de cada uno; al tocar uno, su detalle).
+  // «Comparar» solo aparece si tienes algún amigo (invitado) con quien compararte.
+  const hayAmigos = (app) => Object.values(app.usersById || {}).some(u => !u.isMain);
   async function render(app, params) {
+    if (params.tab === 'records') params.tab = 'exercise'; // la antigua pestaña Récords es ahora la lista de Ejercicios
     params.tab = params.tab || 'summary';
     const tab = params.tab;
     const tabs = [
       { id: 'summary', label: 'Resumen' },
       { id: 'body', label: 'Corporal' },
       { id: 'exercise', label: 'Ejercicios' },
-      { id: 'records', label: 'Récords' },
-      { id: 'compare', label: 'Comparar' },
+      ...(hayAmigos(app) || tab === 'compare' ? [{ id: 'compare', label: 'Comparar' }] : []),
     ];
-    const tabBar = `<div class="tabs pg-tabs">${tabs.map(t => `<button class="tab${tab === t.id ? ' on' : ''}" data-tab="${t.id}">${t.label}</button>`).join('')}</div>`;
-    const host = { summary: 'tabSummary', body: 'tabBody', exercise: 'tabEx', records: 'tabRecords', compare: 'tabCompare' }[tab] || 'tabSummary';
+    const tabBar = `<div class="tabs pg-tabs${tabs.length === 3 ? ' pg-tabs3' : ''}">${tabs.map(t => `<button class="tab${tab === t.id ? ' on' : ''}" data-tab="${t.id}">${t.label}</button>`).join('')}</div>`;
+    const host = { summary: 'tabSummary', body: 'tabBody', exercise: 'tabEx', compare: 'tabCompare' }[tab] || 'tabSummary';
     return tabBar + `<div id="${host}"><div class="card">${sk('45%', 14)}${sk('100%', 130, 'margin-top:14px')}</div><div class="card">${sk('60%', 14)}${sk('85%', 12, 'margin-top:10px')}${sk('70%', 12, 'margin-top:8px')}</div></div>`;
   }
 
@@ -829,8 +839,11 @@ const VProgress = (() => {
     root.querySelectorAll('[data-tab]').forEach(b => b.addEventListener('click', () => app.go('progress', { tab: b.dataset.tab }, true)));
     if (tab === 'summary') renderResumen(app, root.querySelector('#tabSummary'));
     else if (tab === 'body') renderBody(app, root.querySelector('#tabBody'));
-    else if (tab === 'exercise') renderExercise(app, root.querySelector('#tabEx'), params);
-    else if (tab === 'records') renderRecords(app, root.querySelector('#tabRecords'));
+    else if (tab === 'exercise') {
+      // sin ejercicio elegido, la lista; con uno, su detalle (y «atrás» vuelve a la lista)
+      if (params.exId || params.exName) renderExercise(app, root.querySelector('#tabEx'), params);
+      else renderRecords(app, root.querySelector('#tabEx'));
+    }
     else renderCompare(app, root.querySelector('#tabCompare'), params);
   }
 

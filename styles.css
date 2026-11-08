@@ -1927,3 +1927,9 @@ body.has-active-bar .dv-start { bottom: calc(var(--nav-h) + var(--safe-bottom) +
 .picker-groups { margin: 10px 0; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
 .picker-groups .chip { flex-shrink: 0; }
 .picker-fixed { height: 52vh; overflow-y: auto; align-content: start; }
+.pg-tabs3 .tab { font-size: 14px; }
+.pg-amigo { display: flex; align-items: flex-start; gap: 12px; width: 100%; text-align: left; font-family: inherit; color: inherit; cursor: pointer; }
+.pg-amigo > span:last-child { display: flex; flex-direction: column; gap: 3px; }
+.pg-amigo strong { font-size: 14.5px; color: var(--ink); }
+.pg-amigo .dim { font-size: 12.5px; line-height: 1.4; }
+.pg-amigo-ic { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; flex-shrink: 0; color: var(--strong); background: color-mix(in srgb, var(--strong) 14%, transparent); }
