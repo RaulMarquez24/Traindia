@@ -1853,3 +1853,11 @@ body.has-active-bar .dv-start { bottom: calc(var(--nav-h) + var(--safe-bottom) +
 .pr-dif.good { color: #059669; background: color-mix(in srgb, #10b981 14%, transparent); }
 .pr-dif.bad { color: #dc2626; background: color-mix(in srgb, #ef4444 12%, transparent); }
 .pr-more { color: var(--ink-dim); }
+/* Progreso: Semana | Mes */
+.pg-ph { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.pg-ph strong { font-size: 15px; }
+.pg-seg { display: inline-flex; padding: 3px; border-radius: 99px; background: var(--line-soft); flex-shrink: 0; }
+.pg-seg button { border: none; background: none; font-family: inherit; font-size: 12.5px; padding: 5px 12px; border-radius: 99px; color: var(--ink-soft); cursor: pointer; }
+.pg-seg button.on { background: var(--strong); color: #fff; font-weight: 700; }
+.pg-psub { font-size: 12px; margin: 2px 0 12px; }
+.pg-mt.pg-mthead { border-top: none; padding: 0 0 4px; }

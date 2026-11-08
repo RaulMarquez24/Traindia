@@ -468,7 +468,7 @@ const VProgress = (() => {
     const sessions = (await DB.sessionsOf(uid)).filter(s => !s.draft && s.date);
     const hoy = DB.todayISO(), now = new Date();
     if (!sessions.length && !(await pesosDe(uid)).length) {
-      host.innerHTML = `<div class="empty-state"><p><strong>Aquí verás cómo vas.</strong></p><p class="dim">Tus logros, el mes comparado con el anterior, tu constancia y qué músculos has trabajado. Aparece en cuanto guardes tu primer entreno o apuntes tu peso.</p></div>`;
+      host.innerHTML = `<div class="empty-state"><p><strong>Aquí verás cómo vas.</strong></p><p class="dim">Tus logros, tu semana y tu mes frente a los anteriores, tu constancia y qué músculos has trabajado. Aparece en cuanto guardes tu primer entreno o apuntes tu peso.</p></div>`;
       return;
     }
 
@@ -486,27 +486,49 @@ const VProgress = (() => {
       ? `<div class="pg-logros">${logros.slice(0, 8).map(logroHTML).join('')}</div>`
       : `<div class="card pg-vacio"><span class="dim">Sin logros en las últimas 2 semanas. Cuando batas una marca, o hagas lo mejor en mucho tiempo, saldrá aquí.</span></div>`;
 
-    // 2) Esta semana (de lunes a hoy) frente a lo mismo de la semana pasada
+    // 2) Esta semana frente a la pasada (de lunes al mismo día) o, con un toque, este mes frente al anterior (del 1 al mismo día)
     const y = now.getFullYear(), m = now.getMonth(), dia = now.getDate();
-    const nDia = (now.getDay() + 6) % 7; // 0 = lunes … 6 = domingo
-    const lun = new Date(y, m, dia - nDia), lunPrev = new Date(y, m, dia - nDia - 7), mismoPrev = new Date(y, m, dia - 7);
-    const este = statsDe(sessions, isoOf(lun.getTime()), hoy), prev = statsDe(sessions, isoOf(lunPrev.getTime()), isoOf(mismoPrev.getTime()));
-    const DIAS = ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo'];
-    const subSem = nDia === 6 ? 'de lunes a domingo' : nDia === 0 ? 'solo los lunes' : `las dos, de lunes a ${DIAS[nDia]}`;
     const kg = (v) => v >= 1000 ? `${fmt1(v / 1000)} t` : `${Math.round(v)} kg`;
     const hm = (s) => s >= 3600 ? `${fmt1(s / 3600)} h` : `${Math.round(s / 60)} min`;
     const flecha = (a, b) => { if (!a && !b) return ''; const r = b ? (a - b) / b : 1; return Math.abs(r) < 0.05 ? '<i class="pg-eq">=</i>' : r > 0 ? '<i class="pg-up">▲</i>' : '<i class="pg-dn">▼</i>'; };
-    const filasMes = [
-      ['Entrenos', String(este.n), String(prev.n), este.n, prev.n],
-      este.vol || prev.vol ? ['Peso levantado', kg(este.vol), kg(prev.vol), este.vol, prev.vol] : null,
-      este.secs || prev.secs ? ['Tiempo entrenando', hm(este.secs), hm(prev.secs), este.secs, prev.secs] : null,
-      este.km || prev.km ? ['Cardio', `${fmt1(este.km)} km`, `${fmt1(prev.km)} km`, este.km, prev.km] : null,
-    ].filter(Boolean);
-    const mesHTML = `<div class="card pg-mes">
-      <div class="pg-h"><strong>Esta semana</strong><span class="dim">${subSem}</span></div>
-      <div class="pg-mt"><span></span><span class="pg-mth on">Esta</span><span class="pg-mth">Pasada</span><span></span></div>
-      ${filasMes.map(([l, a, b, va, vb]) => `<div class="pg-mt"><span class="pg-ml">${l}</span><span class="pg-mv on">${a}</span><span class="pg-mv">${b}</span>${flecha(va, vb)}</div>`).join('')}
-    </div>`;
+    const periodoDe = (per) => {
+      if (per === 'mes') {
+        const pm = new Date(y, m - 1, 1);
+        const finPrev = new Date(pm.getFullYear(), pm.getMonth(), Math.min(dia, new Date(pm.getFullYear(), pm.getMonth() + 1, 0).getDate()));
+        const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+        return {
+          titulo: 'Este mes', sub: dia === 1 ? 'solo el día 1, los dos' : `los dos, del 1 al ${dia}`,
+          cols: [MESES[m], MESES[pm.getMonth()]],
+          este: statsDe(sessions, isoOf(new Date(y, m, 1).getTime()), hoy), prev: statsDe(sessions, isoOf(pm.getTime()), isoOf(finPrev.getTime())),
+        };
+      }
+      const nDia = (now.getDay() + 6) % 7; // 0 = lunes … 6 = domingo
+      const DIAS = ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo'];
+      return {
+        titulo: 'Esta semana', sub: nDia === 6 ? 'de lunes a domingo' : nDia === 0 ? 'solo los lunes' : `las dos, de lunes a ${DIAS[nDia]}`,
+        cols: ['Esta', 'Pasada'],
+        este: statsDe(sessions, isoOf(new Date(y, m, dia - nDia).getTime()), hoy),
+        prev: statsDe(sessions, isoOf(new Date(y, m, dia - nDia - 7).getTime()), isoOf(new Date(y, m, dia - 7).getTime())),
+      };
+    };
+    const PER_KEY = 'traindia.progresoPeriodo';
+    let periodo = 'semana';
+    try { if (localStorage.getItem(PER_KEY) === 'mes') periodo = 'mes'; } catch (e) { /* sin almacenamiento: semana */ }
+    const periodoHTML = (per) => {
+      const { titulo, sub, cols, este, prev } = periodoDe(per);
+      const filas = [
+        ['Entrenos', String(este.n), String(prev.n), este.n, prev.n],
+        este.vol || prev.vol ? ['Peso levantado', kg(este.vol), kg(prev.vol), este.vol, prev.vol] : null,
+        este.secs || prev.secs ? ['Tiempo entrenando', hm(este.secs), hm(prev.secs), este.secs, prev.secs] : null,
+        este.km || prev.km ? ['Cardio', `${fmt1(este.km)} km`, `${fmt1(prev.km)} km`, este.km, prev.km] : null,
+      ].filter(Boolean);
+      return `<div class="pg-ph"><strong>${titulo}</strong>
+          <span class="pg-seg" role="tablist"><button type="button" data-per="semana" class="${per === 'semana' ? 'on' : ''}">Semana</button><button type="button" data-per="mes" class="${per === 'mes' ? 'on' : ''}">Mes</button></span></div>
+        <div class="pg-psub dim">${sub}</div>
+        <div class="pg-mt pg-mthead"><span></span><span class="pg-mth on">${UI.esc(cols[0])}</span><span class="pg-mth">${UI.esc(cols[1])}</span><span></span></div>
+        ${filas.map(([l, a, b, va, vb]) => `<div class="pg-mt"><span class="pg-ml">${l}</span><span class="pg-mv on">${a}</span><span class="pg-mv">${b}</span>${flecha(va, vb)}</div>`).join('')}`;
+    };
+    const mesHTML = `<div class="card pg-mes" id="pgPer">${periodoHTML(periodo)}</div>`;
 
     // 3) Constancia: entrenos por semana (últimas 12) y racha
     const curWk = weekIndex(now);
@@ -559,6 +581,14 @@ const VProgress = (() => {
     </div>` : '';
 
     host.innerHTML = `<div class="card-label pg-sec">Tus logros recientes</div>${logrosHTML}${mesHTML}${constHTML}${musHTML}`;
+    const perCard = host.querySelector('#pgPer');
+    perCard.addEventListener('click', (ev) => {
+      const b = ev.target.closest('[data-per]');
+      if (!b || b.dataset.per === periodo) return;
+      periodo = b.dataset.per;
+      try { localStorage.setItem(PER_KEY, periodo); } catch (e) { /* no se recuerda, da igual */ }
+      perCard.innerHTML = periodoHTML(periodo);
+    });
   }
   const lista = (arr) => arr.length <= 1 ? (arr[0] || '') : `${arr.slice(0, -1).join(', ')} y ${arr[arr.length - 1]}`;
 
