@@ -434,7 +434,7 @@ const VProgress = (() => {
     for (const r of [...porEj.values()].filter(r => diasEntre(r.point.x, hoy) <= RECIENTE_DIAS)) {
       conRecord.add(r.ex.name);
       const pts = await exerciseSeries(uid, r.ex.name, r.metric, { bodyWeights, sessions });
-      out.push({ kind: 'record', date: r.point.x, tag: `Récord · ${UI.fmtDateShort(r.point.x)}`, big: fmtMetricValue(r.metric, r.point.y), txt: r.ex.name, sub: subDe(r.metric, r.point), spark: { pts: pts.filter(p => p.x <= r.point.x).slice(-12), invert: LOWER_BETTER.has(r.metric) } });
+      out.push({ kind: 'record', date: r.point.x, tag: `Récord · ${UI.fmtDateShort(r.point.x)}`, big: fmtMetricValue(r.metric, r.point.y), txt: r.ex.name, sub: subLogro(r.metric, r.point), spark: { pts: pts.filter(p => p.x <= r.point.x).slice(-12), invert: LOWER_BETTER.has(r.metric) } });
     }
     // «Lo mejor desde»: lo último que hiciste no es récord, pero no lo igualabas desde hace un mes o más
     for (const r of porEj.values()) {
@@ -445,7 +445,7 @@ const VProgress = (() => {
       const antes = pts.slice(0, -1).reverse();
       const igual = antes.find(p => !better(last, p, r.metric)); // la última vez que hiciste lo mismo o más
       if (!igual || diasEntre(igual.x, last.x) < 28) continue;
-      out.push({ kind: 'desde', date: last.x, tag: `Mejor desde el ${UI.fmtDateShort(igual.x)}`, big: fmtMetricValue(r.metric, last.y), txt: r.ex.name, sub: subDe(r.metric, last), spark: { pts: pts.filter(p => p.x >= igual.x).slice(-14), ref: igual, invert: LOWER_BETTER.has(r.metric) } });
+      out.push({ kind: 'desde', date: last.x, tag: `Mejor desde el ${UI.fmtDateShort(igual.x)}`, big: fmtMetricValue(r.metric, last.y), txt: r.ex.name, sub: subLogro(r.metric, last), spark: { pts: pts.filter(p => p.x >= igual.x).slice(-14), ref: igual, invert: LOWER_BETTER.has(r.metric) } });
     }
     // el peso primero; luego lo más reciente
     out.sort((a, b) => (a.kind === 'peso' ? -1 : b.kind === 'peso' ? 1 : (b.date || '').localeCompare(a.date || '')));
@@ -470,6 +470,8 @@ const VProgress = (() => {
       <circle cx="${X(last.x).toFixed(1)}" cy="${Y(last.y).toFixed(1)}" r="4" class="pg-sp-p"/>
     </svg>`;
   }
+  // En los logros, un tiempo de cardio dice de qué distancia es («Mejor 5 km · en una salida de 6,6 km»)
+  const subLogro = (metric, p) => TIME_REC[metric] ? [TIME_REC_LABEL[metric], subDe(metric, p)].filter(Boolean).join(' · ') : subDe(metric, p);
   // Subtítulo corto de una marca: «12 repeticiones», «en 42:30», «a 4:51 /km»…
   function subDe(metric, p) {
     const d = (p.detail || '').trim().replace(/^·\s*/, ''); // sin el «·» del principio (ya va separado)
@@ -632,13 +634,15 @@ const VProgress = (() => {
         cols.push({ n: porSem.get(curWk - i) || 0, ini: isoOf(ini.getTime()), actual: i === 0 });
       }
       const maxN = Math.max(4, ...cols.map(c => c.n));
-      const conEntreno = cols.filter(c => !c.actual);
-      const media = conEntreno.reduce((a, c) => a + c.n, 0) / conEntreno.length;
+      // la media, solo con las semanas desde que empezaste (las de antes no cuentan como «0»)
+      const primera = Math.min(...semanas);
+      const conEntreno = cols.filter((c, i) => !c.actual && curWk - (NW - 1 - i) >= primera);
+      const media = conEntreno.length ? conEntreno.reduce((a, c) => a + c.n, 0) / conEntreno.length : 0;
       host.querySelector('#pgConst').innerHTML = `${constHead}
         <div class="pg-racha"><span class="pg-rn">${racha}</span><div><strong>${racha === 1 ? 'semana seguida' : 'semanas seguidas'} entrenando</strong><span class="dim">${mejor > racha ? `Tu mejor racha: ${mejor} semanas` : racha > 1 ? 'Es tu mejor racha' : 'Entrena esta semana para empezar una racha'}</span></div></div>
         <div class="pg-weeks">${cols.map(c => `<div class="pg-wk${c.actual ? ' now' : ''}"><span class="pg-wn">${c.n || ''}</span><span class="pg-wb"><i style="height:${c.n ? Math.max(8, c.n / maxN * 100) : 0}%"></i></span></div>`).join('')}</div>
         <div class="pg-wl"><span>${UI.fmtDateShort(cols[0].ini)}</span><span>${UI.fmtDateShort(cols[Math.floor(NW / 2)].ini)}</span><span>esta semana</span></div>
-        <p class="pg-media dim">Media de las últimas ${NW - 1} semanas: <strong>${fmt1(media)}</strong> entrenos por semana</p>`;
+        ${conEntreno.length ? `<p class="pg-media dim">Media de ${conEntreno.length === 1 ? 'la semana pasada' : `las últimas ${conEntreno.length} semanas`}: <strong>${fmt1(media)}</strong> entrenos por semana</p>` : ''}`;
     }).catch(err => {
       console.error(err);
       if (!vivo()) return;

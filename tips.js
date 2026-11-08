@@ -46,6 +46,7 @@ const TIPS_DATA = {
     // ---- Progreso ----
     { id: 'racha', cat: 'progreso', title: 'Tu racha de semanas', text: 'En Sesiones ves cuántas semanas seguidas llevas y un calendario coloreado por intensidad.', shot: 'aprende/sessions.jpg', try: 'go:sessions', k: 'calendario constancia semanas' },
     { id: 'amaneciste', cat: 'progreso', title: '¿Cómo amaneciste?', text: 'Al día siguiente te pregunta cómo te levantaste: igual o mejor, sube; algo cargado, mantén; peor, baja.', shot: 'aprende/amaneciste.jpg', k: 'semaforo agujetas cansado subir carga' },
+    { id: 'resumen', cat: 'progreso', title: 'Tu progreso de un vistazo', text: 'Progreso → Resumen: tus logros recientes, tu semana frente a la pasada (o el mes, con un toque), tu racha y las series por músculo.', shot: 'aprende/prog-resumen.jpg', try: 'go:progress:summary', k: 'resumen logros racha semana mes constancia' },
     { id: 'medidas', cat: 'progreso', title: 'Peso y medidas con gráfica', text: 'Progreso → Corporal → «+ Apuntar peso o medidas». Tu peso con su objetivo y su gráfica, y cada medida con la suya.', shot: 'aprende/prog-body.jpg', try: 'go:progress:body', k: 'peso cintura grafica' },
     { id: 'por-ejercicio', cat: 'progreso', title: 'La evolución de cada ejercicio', text: 'Progreso → Ejercicios y toca uno: tu récord frente a la última vez y la gráfica con cada nuevo récord marcado.', shot: 'aprende/prog-ex.jpg', try: 'go:progress:exercise', k: '1rm fuerza grafica volumen' },
     { id: 'records', cat: 'progreso', title: 'Todos tus récords', text: 'Progreso → Ejercicios: cada ejercicio con su mejor marca. Ordénalos por «Hace tiempo» para ver lo que llevas más sin superar.', shot: 'aprende/prog-rec.jpg', try: 'go:progress:exercise', k: 'record marca mejor pr' },
@@ -64,6 +65,7 @@ const TIPS_DATA = {
     { id: 'copia', cat: 'compartir', title: 'Haz una copia completa', text: 'Más → Copias y datos → «Hacer copia completa ahora». Con ese archivo recuperas todo en otro móvil.', shot: 'aprende/backups.jpg', try: 'go:backups', k: 'backup copia seguridad movil nuevo' },
     { id: 'pdf', cat: 'compartir', title: 'El entreno en PDF para tu entrenador', text: 'En una sesión, «Compartir» → «PDF para tu entrenador».', shot: 'aprende/session.jpg', k: 'pdf entrenador enviar sesion' },
     { id: 'invitados', cat: 'compartir', title: 'Entrena con amigos en tu móvil', text: 'Más → Perfiles: añade a alguien y apunta sus entrenos aparte, sin mezclarlos con los tuyos.', shot: 'aprende/profiles.jpg', try: 'go:profiles', k: 'perfil invitado pareja' },
+    { id: 'importar', cat: 'compartir', title: 'Importa sin duplicar', text: 'Al importar un archivo, antes de tocar nada ves qué se añade, qué ya tienes igual y qué es distinto, lado a lado para elegir. Nada se duplica.', shot: 'aprende/importar.jpg', k: 'importar archivo duplicar copia json' },
     { id: 'exportar', cat: 'compartir', title: 'Exporta e importa lo que quieras', text: 'El botón ⇧ de arriba: exporta tu plan, un día o tus sesiones, e importa lo que te pasen.', shot: 'aprende/share-menu.jpg', k: 'exportar importar archivo json' },
 
     // ---- La app ----
