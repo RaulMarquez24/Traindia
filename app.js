@@ -525,6 +525,7 @@ const app = {
       await DB.createPlan(user.id, tplId ? 'template' : 'custom', { activate: true, templateId: tplId });
       await this.finishOnboarding(host, user);
       if (planType === 'ai') setTimeout(() => VPlanAI.open(this), 400);
+      else if (planType === 'import') setTimeout(() => VData.startImport(this), 400);
       else setTimeout(() => VShare.checkPending(this), 500); // llegó por el enlace de un amigo antes de tener perfil
     });
   },

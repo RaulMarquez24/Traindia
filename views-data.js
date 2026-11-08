@@ -315,8 +315,8 @@ const VData = (() => {
     UI.modal({
       title: 'Importar datos', size: 'wide',
       bodyHTML: `
-        <p class="field-hint" style="margin-top:0">Pega aquí el texto JSON exportado <strong>o el enlace que te hayan compartido</strong>, o elige un archivo. <strong>Desde el móvil</strong>: en WhatsApp o Archivos, dale al documento → <strong>Compartir</strong> → <strong>Traindía</strong> y se importa solo.</p>
-        <textarea class="inp" id="impText" rows="6" placeholder='Pega el JSON aquí… (empieza por {"format":"traindia-export"…})'></textarea>
+        <p class="field-hint" style="margin-top:0">Pega aquí <strong>el enlace que te han pasado</strong> o elige el archivo. Truco: en WhatsApp o en Archivos, mantén pulsado el archivo → <strong>Compartir</strong> → <strong>Traindía</strong> y se abre solo.</p>
+        <textarea class="inp" id="impText" rows="5" placeholder="Pega aquí el enlace (o el texto del archivo)"></textarea>
         <button class="btn ghost block" id="impFileBtn" style="margin-top:8px">${UI.icon('upload', 15)} …o elegir un archivo</button>`,
       actions: [
         { label: 'Cancelar', kind: 'ghost' },
