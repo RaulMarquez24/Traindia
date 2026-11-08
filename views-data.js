@@ -406,38 +406,6 @@ const VData = (() => {
     await DB.put('routines', rec);
     return rec;
   }
-  // Fusiona los días elegidos del plan del archivo DENTRO del plan activo del destino:
-  // sustituye el día con el mismo nombre (conserva su id/orden) o lo añade si no existe.
-  async function mergeDaysIntoPlan(targetUserId, routine, dayIds, exercises) {
-    const idMap = await mapExercisesToCatalog(targetUserId, exercises || []);
-    const rts = await DB.routinesOf(targetUserId);
-    const target = rts.find(r => r.isPrimary) || rts[0];
-    if (!target) { await createImportedPlan(targetUserId, routine, dayIds, routine.name || 'Plan importado', exercises); return; }
-    const elegidos = (routine.days || []).filter(d => dayIds.has(d.id)).slice().sort((a, b) => (a.order || 0) - (b.order || 0));
-    const remap = (sd) => {
-      const copy = JSON.parse(JSON.stringify(sd));
-      (copy.blocks || []).forEach(b => (b.exercises || []).forEach(e => { if (e.exerciseId && idMap[e.exerciseId]) e.exerciseId = idMap[e.exerciseId]; }));
-      return copy;
-    };
-    // Plan en blanco (p. ej. los 7 días vacíos con los que se empieza un perfil nuevo):
-    // no hay nada que conservar, así que queda el plan del archivo tal cual, con su nombre.
-    // Así restaurar tu copia en un móvil nuevo no mezcla tus días con Lunes…Domingo vacíos.
-    const vacio = !(target.days || []).some(d => (d.blocks || []).some(b => (b.exercises || []).length));
-    if (vacio) {
-      target.days = elegidos.map((sd, i) => ({ ...remap(sd), id: DB.uid('day'), order: i }));
-      if (routine.name) target.name = routine.name;
-      await DB.put('routines', target);
-      return;
-    }
-    let next = Math.max(-1, ...target.days.map(d => d.order || 0)) + 1;
-    elegidos.forEach(sd => {
-      const copy = remap(sd);
-      const idx = target.days.findIndex(d => (d.name || '').trim().toLowerCase() === (sd.name || '').trim().toLowerCase());
-      if (idx >= 0) { copy.id = target.days[idx].id; copy.order = target.days[idx].order; target.days[idx] = copy; }
-      else { copy.id = DB.uid('day'); copy.order = next++; target.days.push(copy); } // los nuevos, al final y en su orden
-    });
-    await DB.put('routines', target);
-  }
   // Lista de casillas de días de un plan (marcados por defecto).
   function dayChecksHTML(days) {
     return (days || []).map(d => `<label class="check-row"><input type="checkbox" data-day="${UI.esc(d.id)}" checked><span>${UI.esc(d.name)}${d.isRest ? ' (descanso)' : ` — ${(d.blocks || []).reduce((a, b) => a + (b.exercises || []).length, 0)} ej`}</span></label>`).join('');
@@ -651,23 +619,17 @@ const VData = (() => {
         ${editable ? `<div class="imp-items" data-items="${s.key}" style="display:none">${items.map(it => `<label class="check-row sub"><input type="checkbox" data-item="${s.key}" data-id="${UI.esc(String(it.id))}" checked><span>${importItemLabel(s.key, it)}</span></label>`).join('')}</div>` : ''}
       </div>`;
     };
-    // sección "Días del plan": desmarcada por defecto (no toca tu plan salvo que la actives),
-    // con destino (a tu plan actual / plan nuevo) y casillas por día.
-    const daysSection = hasPlan ? `<div class="imp-sec">
-      <label class="check-row imp-sec-head"><input type="checkbox" data-sec="days"><span>Días del plan <span class="dim">(${(planRoutine.days || []).length})</span></span><button type="button" class="imp-toggle" data-toggle="days">editar</button></label>
-      <div class="imp-items" data-items="days" style="display:none">
-        <div style="margin-bottom:6px">
-          <label class="check-row"><input type="radio" name="daysdest" value="merge" checked><span>A mi plan actual (sustituye esos días)</span></label>
-          <label class="check-row"><input type="radio" name="daysdest" value="new"><span>Como plan nuevo aparte</span></label>
-        </div>
-        <div id="daysNewName" style="display:none;margin-bottom:6px">${UI.field('Nombre del plan nuevo', UI.input('planName', planRoutine.name ? `${planRoutine.name} (de ${sender})` : `Plan de ${sender}`))}</div>
-        ${dayChecksHTML(planRoutine.days)}
-      </div>
+    // «Planes»: todos los del archivo (el activo, marcado). Los que no tengas se añaden sin
+    // activarlos; si tu plan activo está vacío, pasa a ser el activo del archivo.
+    const filePlans = planRoutine ? [planRoutine, ...otherPlans] : [];
+    const plansSection = filePlans.length ? `<div class="imp-sec">
+      <label class="check-row imp-sec-head"><input type="checkbox" data-sec="plans" checked><span>Planes <span class="dim">(${filePlans.length})</span></span>${filePlans.length > 1 ? '<button type="button" class="imp-toggle" data-toggle="plans">editar</button>' : ''}</label>
+      ${filePlans.length > 1 ? `<div class="imp-items" data-items="plans" style="display:none">${filePlans.map(r => `<label class="check-row sub"><input type="checkbox" data-item="plans" data-id="${UI.esc(String(r.id))}" checked><span>${UI.esc(r.name || 'Plan')} <span class="dim">· ${(r.days || []).length} días${r === planRoutine ? ' · el activo' : ''}</span></span></label>`).join('')}</div>` : ''}
     </div>` : '';
-    const otherPlansSection = otherPlans.length ? `<div class="imp-sec">
-      <label class="check-row imp-sec-head"><input type="checkbox" data-sec="otherplans" checked><span>Otros planes <span class="dim">(${otherPlans.length})</span></span>${otherPlans.length > 1 ? '<button type="button" class="imp-toggle" data-toggle="otherplans">editar</button>' : ''}</label>
-      <p class="field-hint" style="margin:0 0 6px 30px">Se añaden como planes aparte, sin activarlos${otherPlans.length === 1 ? `: <strong>${UI.esc(otherPlans[0].name || 'Plan')}</strong>` : ''}.</p>
-      ${otherPlans.length > 1 ? `<div class="imp-items" data-items="otherplans" style="display:none">${otherPlans.map(r => `<label class="check-row sub"><input type="checkbox" data-item="otherplans" data-id="${UI.esc(String(r.id))}" checked><span>${UI.esc(r.name || 'Plan')} <span class="dim">· ${(r.days || []).length} días</span></span></label>`).join('')}</div>` : ''}
+    // «Días sueltos»: meter algunos días del plan activo del archivo en TU plan activo.
+    const daysSection = hasPlan ? `<div class="imp-sec">
+      <label class="check-row imp-sec-head"><input type="checkbox" data-sec="days"><span>Días sueltos a tu plan activo <span class="dim">(${(planRoutine.days || []).length})</span></span><button type="button" class="imp-toggle" data-toggle="days">editar</button></label>
+      <div class="imp-items" data-items="days" style="display:none">${dayChecksHTML(planRoutine.days)}</div>
     </div>` : '';
 
     UI.modal({
@@ -686,34 +648,36 @@ const VData = (() => {
             ${UI.field('Color', UI.colorPicker('guestColor', payload.user?.color || UI.ESSENTIALS[1]))}
           </div>
           <span class="field-label">Qué importar</span>
-          <p class="field-hint" style="margin-top:0;margin-bottom:8px">Marca lo que quieras. En "Días" pulsa <em>editar</em> para elegir días sueltos y si van a tu plan o a uno nuevo.</p>
-          <div style="margin-bottom:12px">
-            ${daysSection}${otherPlansSection}${DATA_SECTIONS.map(sectionHTML).join('')}
+          <p class="field-hint" style="margin-top:0;margin-bottom:8px">Marca lo que quieras. Antes de importar verás qué se añade, qué ya tienes y qué es distinto. Nada se duplica y nada tuyo cambia sin que lo elijas.</p>
+          <div style="margin-bottom:4px">
+            ${plansSection}${daysSection}${DATA_SECTIONS.map(sectionHTML).join('')}
             ${(!hasPlan && !hasData) ? '<p class="dim" style="padding:2px">El archivo no tiene datos.</p>' : ''}
           </div>
-          ${hasData ? `<span class="field-label">Si ya tienes esos datos</span>
-          ${UI.select('policy', [{ value: 'duplicate', label: 'Añadir como copia nueva' }, { value: 'overwrite', label: 'Reemplazar lo que coincida' }], 'duplicate')}
-          <p class="field-hint" id="policyHint"></p>` : ''}
         </div>`,
       actions: [
         { label: 'Cancelar', kind: 'ghost' },
-        { label: 'Importar', kind: 'primary', onClick: async (root) => {
+        { label: 'Revisar', kind: 'primary', onClick: async (root) => {
           const targetIds = [...root.querySelectorAll('[data-user]:checked')].map(c => c.dataset.user);
           const newGuest = root.querySelector('[data-newguest]').checked;
           if (!targetIds.length && !newGuest) { UI.toast('Elige al menos un perfil', 'err'); return false; }
 
-          // Días del plan
-          let dayIds = null, daysDest = 'merge', planName = '';
-          const daysChk = root.querySelector('[data-sec="days"]');
-          const wantDays = hasPlan && daysChk && daysChk.checked;
-          if (wantDays) {
-            dayIds = new Set([...root.querySelectorAll('[data-day]:checked')].map(c => c.dataset.day));
-            if (!dayIds.size) { UI.toast('Marca al menos un día del plan', 'err'); return false; }
-            daysDest = root.querySelector('[name="daysdest"]:checked')?.value || 'merge';
-            planName = (root.querySelector('input[name="planName"]')?.value || '').trim() || `Plan de ${sender}`;
+          // Planes
+          let plans = [];
+          const plChk = root.querySelector('[data-sec="plans"]');
+          if (plChk && plChk.checked) {
+            const box = root.querySelector('[data-items="plans"]');
+            if (box) { const ids = new Set([...root.querySelectorAll('[data-item="plans"]:checked')].map(c => c.dataset.id)); plans = filePlans.filter(r => ids.has(String(r.id))); }
+            else plans = filePlans;
           }
-
-          // Datos (sin rutinas: los días se gestionan en su sección)
+          // Días sueltos
+          let days = null;
+          const daysChk = root.querySelector('[data-sec="days"]');
+          if (hasPlan && daysChk && daysChk.checked) {
+            const dayIds = new Set([...root.querySelectorAll('[data-day]:checked')].map(c => c.dataset.day));
+            if (!dayIds.size) { UI.toast('Marca al menos un día', 'err'); return false; }
+            days = { routine: planRoutine, dayIds };
+          }
+          // Datos
           const chosen = new Set();
           const filtered = {};
           for (const s of DATA_SECTIONS) {
@@ -725,59 +689,42 @@ const VData = (() => {
             else sel = (counts[s.key] || []);
             if (sel.length) { filtered[s.key] = sel; chosen.add(s.key); }
           }
+          if (!plans.length && !days && !chosen.size) { UI.toast('Marca al menos algo que importar', 'err'); return false; }
 
-          // Otros planes
-          let extraPlans = [];
-          const opChk = root.querySelector('[data-sec="otherplans"]');
-          if (opChk && opChk.checked) {
-            const box = root.querySelector('[data-items="otherplans"]');
-            if (box) { const ids = new Set([...root.querySelectorAll('[data-item="otherplans"]:checked')].map(c => c.dataset.id)); extraPlans = otherPlans.filter(r => ids.has(String(r.id))); }
-            else extraPlans = otherPlans;
-          }
-
-          if (!wantDays && !chosen.size && !extraPlans.length) { UI.toast('Marca al menos algo que importar', 'err'); return false; }
-
+          let guestName = '', guestColor = '';
           if (newGuest) {
-            const name = (root.querySelector('input[name="guestName"]').value || '').trim();
-            if (!name) { UI.toast('Escribe el nombre del invitado', 'err'); return false; }
-            const color = root.querySelector('input[name="guestColor"]').value;
-            const g = await DB.createUser({ name, color, isGuest: true });
-            targetIds.push(g.id);
+            guestName = (root.querySelector('input[name="guestName"]').value || '').trim();
+            if (!guestName) { UI.toast('Escribe el nombre del invitado', 'err'); return false; }
+            guestColor = root.querySelector('input[name="guestColor"]').value;
           }
 
-          const policy = targetIds.length > 1 ? 'duplicate' : (root.querySelector('select[name="policy"]')?.value || 'duplicate');
-          for (const tid of targetIds) {
-            if (chosen.size) {
-              const payload2 = { ...payload, data: { exercises: [], routines: [], sessions: [], progress: [], ...filtered } };
-              await applyImport(app, payload2, tid, policy, chosen);
-            }
-            if (wantDays) {
-              if (daysDest === 'new') await createImportedPlan(tid, planRoutine, dayIds, planName, counts.exercises || []);
-              else await mergeDaysIntoPlan(tid, planRoutine, dayIds, counts.exercises || []);
-            }
-            for (const rt of extraPlans) {
-              // "Reemplazar" sobre el mismo perfil: si ya tienes ese plan (mismo id), se
-              // actualiza en su sitio (restaurar tu copia no lo duplica).
-              const existing = policy === 'overwrite' ? await DB.get('routines', rt.id) : null;
-              if (existing && existing.userId === tid) {
-                const idMap = await mapExercisesToCatalog(tid, counts.exercises || []);
-                const days = JSON.parse(JSON.stringify(rt.days || []));
-                days.forEach(d => (d.blocks || []).forEach(b => (b.exercises || []).forEach(e => { if (e.exerciseId && idMap[e.exerciseId]) e.exerciseId = idMap[e.exerciseId]; })));
-                await DB.put('routines', { ...rt, userId: tid, days, isPrimary: !!existing.isPrimary });
-              } else {
-                await createImportedPlan(tid, rt, new Set((rt.days || []).map(d => d.id)), rt.name || `Plan de ${sender}`, counts.exercises || []);
-              }
-            }
+          // Revisión por perfil (el invitado nuevo se revisa vacío y se crea solo si confirmas)
+          const want = { sections: chosen, data: filtered, plans, fileActive: plans.includes(planRoutine) ? planRoutine : null, days, allExercises: counts.exercises || [] };
+          const destinos = [...targetIds.map(id => ({ id, name: (users.find(u => u.id === id) || {}).name })), ...(newGuest ? [{ id: null, name: guestName }] : [])];
+          const listos = [];
+          for (const d of destinos) {
+            const A = await VMerge.analyze(d.id, want);
+            const r = await VMerge.review(app, A, { who: destinos.length > 1 || !d.id ? d.name : '' });
+            if (r === 'back') return false;          // vuelve a esta pantalla, con lo que habías marcado
+            if (r !== 'ok') return;                  // cancelado: no se toca nada
+            if (VMerge.hayAlgo(A)) listos.push({ d, A });
           }
-          if (wantDays || extraPlans.length) {
-            const usedDays = [...(wantDays ? (planRoutine.days || []).filter(d => dayIds.has(d.id)) : []), ...extraPlans.flatMap(r => r.days || [])];
+          if (!listos.length) return;
+          let añadidos = 0, cambiados = 0;
+          for (const { d, A } of listos) {
+            if (!d.id) { const g = await DB.createUser({ name: guestName, color: guestColor, isGuest: true }); A.uid = g.id; }
+            const r = await VMerge.apply(A);
+            añadidos += r.añadidos; cambiados += r.cambiados;
+          }
+          if (plans.length || days) {
+            const usedDays = [...plans.flatMap(r => r.days || []), ...(days ? (planRoutine.days || []).filter(x => days.dayIds.has(x.id)) : [])];
             await importPlaces(counts.places, usedDays);
           }
-
           await app.loadUsers();
           await app.refreshRoutine();
           app.render();
-          UI.toast(targetIds.length === 1 ? 'Importado' : `Importado a ${targetIds.length} perfiles`);
+          const partes = [añadidos ? `${añadidos} añadido${añadidos === 1 ? '' : 's'}` : '', cambiados ? `${cambiados} actualizado${cambiados === 1 ? '' : 's'}` : ''].filter(Boolean);
+          UI.toast(`Importado${partes.length ? ' · ' + partes.join(' · ') : ''}${listos.length > 1 ? ` en ${listos.length} perfiles` : ''}`);
         }},
       ],
       onMount: (root) => {
@@ -795,22 +742,12 @@ const VData = (() => {
         root.querySelectorAll('[data-sec]').forEach(sc => sc.addEventListener('change', () => {
           root.querySelectorAll(`[data-item="${sc.dataset.sec}"]`).forEach(ic => { ic.checked = sc.checked; });
         }));
-        const daysNewName = root.querySelector('#daysNewName');
-        root.querySelectorAll('[name="daysdest"]').forEach(r => r.addEventListener('change', () => {
-          if (daysNewName) daysNewName.style.display = (root.querySelector('[name="daysdest"]:checked').value === 'new') ? '' : 'none';
-        }));
-        const pol = root.querySelector('select[name="policy"]');
-        const hint = root.querySelector('#policyHint');
-        if (pol && hint) {
-          const setHint = () => { hint.textContent = pol.value === 'duplicate'
-            ? 'Se añade como entradas NUEVAS; nunca pisa lo que ya tienes (si lo tenías idéntico, se duplica).'
-            : 'Actualiza en su sitio lo que coincida (mismo identificador); el resto se añade. Ideal para RESTAURAR tus propios datos.'; };
-          pol.addEventListener('change', setHint); setHint();
-        }
       },
     });
   }
 
+  // Solo para lo que llega por enlace al perfil invitado de ese amigo (su «espejo»):
+  // se actualiza en su sitio lo que coincida. Las importaciones a mano van por VMerge.
   async function applyImport(app, payload, targetUserId, policy, sections) {
     const data = payload.data || {};
     const duplicate = policy === 'duplicate';

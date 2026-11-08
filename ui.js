@@ -94,10 +94,11 @@ const UI = (() => {
   // ---- Modal genérico (con pila para anidar) ----
   // open({ title, bodyHTML, actions:[{label,kind,onClick→puede devolver false p/ no cerrar}], onMount })
   const modalStack = [];
-  function modal({ title, bodyHTML = '', actions = [], onMount, size = '', dismissable = true }) {
+  function modal({ title, bodyHTML = '', actions = [], onMount, onClose, size = '', dismissable = true }) {
     const overlay = document.createElement('div');
     overlay.className = 'modal-overlay';
     overlay.style.zIndex = String(500 + modalStack.length * 10);
+    if (onClose) overlay._onClose = onClose; // se avisa al cerrarse por cualquier vía (botón, ×, fuera)
     overlay.innerHTML = `
       <div class="modal ${size}" role="dialog" aria-modal="true">
         <div class="modal-head">
@@ -185,6 +186,7 @@ const UI = (() => {
     if (idx !== -1) modalStack.splice(idx, 1);
     target.remove();
     if (modalStack.length === 0) document.body.classList.remove('modal-open');
+    if (target._onClose) { const f = target._onClose; target._onClose = null; try { f(); } catch (e) { console.error(e); } }
   }
 
   // ---- Confirmación ----

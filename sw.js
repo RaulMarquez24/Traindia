@@ -21,6 +21,7 @@ const ASSETS = [
   './views-progress.js',
   './views-nutrition.js',
   './views-data.js',
+  './import-merge.js',
   './session-pdf.js',
   './share-link.js',
   './plan-review.js',
