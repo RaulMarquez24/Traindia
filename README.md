@@ -103,9 +103,10 @@ Nació como un plan de entrenamiento concreto y evolucionó a una herramienta ge
 - Historial **agrupado por día** con **filtros por año / mes / día** y por autor.
 
 #### 📈 Progreso
-- **Peso corporal y medidas** por fecha.
-- **Historial por ejercicio**: peso máximo, volumen y reps a lo largo del tiempo.
-- **Comparativa** entre el perfil principal y un invitado.
+- **Resumen**: tus logros recientes (récords, «lo mejor desde…», tu peso más bajo desde…), tu semana o tu mes frente al anterior, la constancia en semanas seguidas y las series por músculo.
+- **Corporal**: peso con objetivo (bajar, subir o mantener), ritmo por semana, pesajes o tendencia, y medidas.
+- **Ejercicios**: cada uno con su récord y su mini gráfica; dentro, récord frente a la última vez, gráfica con cada nuevo récord marcado e historial. En cardio, mejores tiempos en 1, 3, 5 y 10 km.
+- **Comparar** con un amigo que te pase su enlace: vuestro mes, lo que hacéis los dos y la gráfica de ambos.
 - Gráficas **SVG** hechas a mano (sin librerías).
 
 #### 👥 Perfiles

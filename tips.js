@@ -14,7 +14,7 @@ const TIPS_DATA = {
   ],
   tips: [
     // ---- Empezar ----
-    { id: 'plantilla', cat: 'empezar', title: 'Empieza con una plantilla', text: 'Más → Planes → «Nuevo plan» y elige «Full body clásico»: la semana sale hecha, con series y descansos.', shot: 'aprende/crear-plan.jpg', try: 'go:info', k: 'plan nuevo crear rutina' },
+    { id: 'plantilla', cat: 'empezar', title: 'Empieza con una plantilla', text: 'Más → Planes → «Nuevo plan» → «Plantillas de Traindía» y elige una, como «Full body clásico»: la semana sale hecha, con series y descansos.', shot: 'aprende/crear-plan.jpg', try: 'go:info', k: 'plan nuevo crear rutina' },
     { id: 'semana', cat: 'empezar', title: 'Tu semana de un vistazo', text: 'Cada día con su intensidad (fuerte, moderado o ligero) y lo que dura. Toca uno para ver qué te toca.', shot: 'aprende/week.jpg', try: 'go:week', k: 'semana dias inicio' },
     { id: 'ordenar', cat: 'empezar', title: 'Ordena los días a tu gusto', text: 'Deja pulsado un día de la semana y arrástralo a su sitio. Toca «Listo» al acabar.', shot: 'aprende/reorder.jpg', k: 'mover cambiar orden arrastrar' },
     { id: 'instalar', cat: 'empezar', title: 'Instálala como una app', text: 'Más → Ajustes → «Instalar en el móvil». Se abre a pantalla completa, con su icono, y funciona sin conexión.', shot: 'aprende/settings.jpg', try: 'go:settings', k: 'instalar icono pantalla de inicio' },
