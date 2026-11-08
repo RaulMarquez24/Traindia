@@ -701,13 +701,13 @@ const VProgress = (() => {
   }
 
   // ---------- CORPORAL ----------
-  const RANGES = [{ id: '1m', label: '1 mes', days: 31 }, { id: '6m', label: '6 meses', days: 183 }, { id: 'all', label: 'Todo', days: 0 }];
+  const RANGES = [{ id: '1m', label: '1 mes', days: 31 }, { id: '3m', label: '3 meses', days: 92 }, { id: '6m', label: '6 meses', days: 183 }, { id: '1a', label: '1 año', days: 366 }, { id: 'all', label: 'Todo', days: 0 }];
   async function renderBody(app, host) {
     const u = app.activeUser;
     const entries = (await DB.progressOf(u.id)).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
     const goal = u.weightGoal || '';
     const range = host._range || '6m';
-    const rDays = (RANGES.find(r => r.id === range) || RANGES[1]).days;
+    const rDays = (RANGES.find(r => r.id === range) || RANGES[2]).days;
     const hoy = DB.todayISO();
     const enRango = (p) => !rDays || diasEntre(p.x, hoy) <= rDays;
 
@@ -759,7 +759,7 @@ const VProgress = (() => {
         ] : [
           { label: 'Peso', color: u.color, points: raw, width: 2.5, r: 3.5, noLegend: true },
         ], { width: 320, height: 160, noLegend: true, niceY: true, fmtY: (v) => fmt1(v).replace(',0', ''), refLines: ref ? [ref] : [], fmtPoint: (p) => `${fmt1(p.y)} kg` }) : '<div class="chart-empty">Sin pesajes en este periodo.</div>'}
-        <div class="pw-foot"><div class="chips-row small">${RANGES.map(r => `<button class="chip${r.id === range ? ' on' : ''}" data-range="${r.id}">${r.label}</button>`).join('')}</div></div>`
+        <div class="pg-seg pw-rangos">${RANGES.map(r => `<button type="button" class="${r.id === range ? 'on' : ''}" data-range="${r.id}">${r.label}</button>`).join('')}</div>`
       : '<p class="dim" style="margin:6px 0 0">Aún no has apuntado tu peso. Apúntalo de vez en cuando y aquí verás tu tendencia.</p>'}
     </div>`;
 

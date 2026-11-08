@@ -1868,3 +1868,5 @@ body.has-active-bar .dv-start { bottom: calc(var(--nav-h) + var(--safe-bottom) +
 .pw-key i { margin-left: 6px; }
 .pw-vista { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 16px 0 -6px; }
 .pw-vista .pg-seg button { font-size: 12px; padding: 4px 11px; }
+.pw-rangos { display: flex; width: 100%; margin-top: 10px; }
+.pw-rangos button { flex: 1; padding: 6px 2px; font-size: 12px; white-space: nowrap; }
