@@ -54,14 +54,14 @@ const VPlanAI = (() => {
   ];
   const hasExercises = (rt) => (rt.days || []).some(d => (d.blocks || []).some(b => (b.exercises || []).length));
 
-  async function open(app) {
+  async function open(app, opts = {}) {
     const uid = app.activeUser.id;
     const [exs, plans, sessions] = await Promise.all([DB.exercisesOf(uid), DB.routinesOf(uid), DB.sessionsOf(uid)]);
     const cats = [...new Set([...BASE_CATS, ...exs.map(e => e.muscleGroup).filter(Boolean)])];
     const tuyos = usados(exs, plans, sessions);
     const bases = plans.filter(hasExercises).sort((a, b) => (a.order || 0) - (b.order || 0));
     const activeId = app.routine && app.routine.id;
-    let mode = 'doc', rel = 'nuevo';
+    let mode = opts.mode === 'ia' ? 'ia' : 'doc', rel = 'nuevo';
     // Lo de pegar la respuesta va arriba y en grande solo si ya le pediste el texto (vuelves de la IA)
     const vuelves = pidioPrompt();
     UI.modal({

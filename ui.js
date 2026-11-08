@@ -80,6 +80,12 @@ const UI = (() => {
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => { el.className = 'toast'; }, 2600);
   }
+  // Quita el aviso que esté a la vista (p. ej. «Abriendo…» cuando lo que sigue es una ventana)
+  function hideToast() {
+    clearTimeout(toastTimer);
+    const el = document.getElementById('toast');
+    if (el) el.className = 'toast';
+  }
 
   // Enfocar un campo al abrir un modal. En móvil (pantalla táctil) NO se hace en
   // los selectores con lista: abrir el teclado solo tapaba la lista y movía el modal
@@ -94,10 +100,11 @@ const UI = (() => {
   // ---- Modal genérico (con pila para anidar) ----
   // open({ title, bodyHTML, actions:[{label,kind,onClick→puede devolver false p/ no cerrar}], onMount })
   const modalStack = [];
-  function modal({ title, bodyHTML = '', actions = [], onMount, size = '', dismissable = true }) {
+  function modal({ title, bodyHTML = '', actions = [], onMount, onClose, size = '', dismissable = true }) {
     const overlay = document.createElement('div');
     overlay.className = 'modal-overlay';
     overlay.style.zIndex = String(500 + modalStack.length * 10);
+    if (onClose) overlay._onClose = onClose; // se avisa al cerrarse por cualquier vía (botón, ×, fuera)
     overlay.innerHTML = `
       <div class="modal ${size}" role="dialog" aria-modal="true">
         <div class="modal-head">
@@ -185,6 +192,7 @@ const UI = (() => {
     if (idx !== -1) modalStack.splice(idx, 1);
     target.remove();
     if (modalStack.length === 0) document.body.classList.remove('modal-open');
+    if (target._onClose) { const f = target._onClose; target._onClose = null; try { f(); } catch (e) { console.error(e); } }
   }
 
   // ---- Confirmación ----
@@ -394,8 +402,23 @@ const UI = (() => {
     let minY = Math.min(...ys), maxY = Math.max(...ys);
     if (minX === maxX) { minX -= 86400000; maxX += 86400000; }
     if (minY === maxY) { minY -= 1; maxY += 1; }
+    const refs = (opts.refLines || []).filter(r => r && isFinite(r.y));
+    refs.forEach(r => { minY = Math.min(minY, r.y); maxY = Math.max(maxY, r.y); });
+    const positivos = minY >= 0;
     const yPad = (maxY - minY) * 0.1;
     minY -= yPad; maxY += yPad;
+    if (positivos && minY < 0) minY = 0; // km, kg, reps… nunca por debajo de 0
+    // opts.niceY: el eje en saltos iguales y redondos (0,5 · 1 · 2 · 5 · 10…), con 3 a 5 marcas
+    let ticks = null;
+    if (opts.niceY) {
+      const span = maxY - minY;
+      const step = [0.5, 1, 2, 5, 10, 15, 20, 30, 50, 60, 100, 200, 500, 1000, 2000, 5000].filter(s => s >= (opts.minStep || 0)).find(s => span / s <= 4) || 10000;
+      minY = Math.floor(minY / step) * step; maxY = Math.ceil(maxY / step) * step;
+      if (positivos && minY < 0) minY = 0;
+      if (maxY - minY < step * 2) maxY = minY + step * 2;
+      ticks = [];
+      for (let v = minY; v <= maxY + step / 1000; v += step) ticks.push(Math.round(v * 100) / 100);
+    }
 
     const sx = (x) => padL + ((+new Date(x) - minX) / (maxX - minX)) * (W - padL - padR);
     const sy = opts.invertY // p. ej. el ritmo: menos es mejor, así que lo bajo va arriba
@@ -405,14 +428,19 @@ const UI = (() => {
     const fmtY = opts.fmtY || ((v) => Math.round(v));
     // grid horizontal (3 líneas)
     let grid = '';
-    for (let i = 0; i <= 3; i++) {
-      const yVal = minY + (i / 3) * (maxY - minY);
+    (ticks || [0, 1, 2, 3].map(i => minY + (i / 3) * (maxY - minY))).forEach(yVal => {
       const yy = sy(yVal);
       grid += `<line x1="${padL}" y1="${yy.toFixed(1)}" x2="${W - padR}" y2="${yy.toFixed(1)}" class="chart-grid"/>`;
       grid += `<text x="2" y="${(yy + 3).toFixed(1)}" class="chart-axis">${esc(String(fmtY(yVal)))}</text>`;
-    }
+    });
+    // opts.refLines: [{ y, label }] líneas de referencia discontinuas (p. ej. tu mínimo del periodo)
+    refs.forEach(r => {
+      const yy = sy(r.y);
+      grid += `<line x1="${padL}" y1="${yy.toFixed(1)}" x2="${W - padR}" y2="${yy.toFixed(1)}" class="chart-ref"/>`;
+      if (r.label) grid += `<text x="${padL + 4}" y="${(yy - 4).toFixed(1)}" class="chart-ref-txt">${esc(r.label)}</text>`;
+    });
 
-    const multi = series.length > 1;
+    const multi = series.filter(s => !s.noLegend).length > 1;
     const pointInfo = (p, s) => {
       const valTxt = opts.fmtPoint ? opts.fmtPoint(p) : (p.detail ? `${fmtY(p.y)} ${p.detail}` : String(fmtY(p.y)));
       const pre = multi ? `${s.label}: ` : '';
@@ -422,17 +450,22 @@ const UI = (() => {
       const pts = [...s.points].sort((a, b) => +new Date(a.x) - +new Date(b.x));
       if (pts.length === 0) return '';
       const d = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${sx(p.x).toFixed(1)},${sy(p.y).toFixed(1)}`).join(' ');
-      const dots = pts.map(p => {
+      const dotOp = s.dotOpacity != null ? ` fill-opacity="${s.dotOpacity}"` : '';
+      const dots = s.noDots ? '' : pts.map(p => {
         const cx = sx(p.x).toFixed(1), cy = sy(p.y).toFixed(1);
         // círculo visible + área de toque invisible (r grande) con la info del punto
-        return `<circle cx="${cx}" cy="${cy}" r="2.5" fill="${s.color}"/>`
+        return (p.mark ? `<circle cx="${cx}" cy="${cy}" r="${(s.r || 2.5) + 4}" fill="none" stroke="${s.color}" stroke-width="1.8"/>` : '')
+          + `<circle cx="${cx}" cy="${cy}" r="${s.r || 2.5}" fill="${s.color}"${dotOp}/>`
           + `<circle class="chart-hit" cx="${cx}" cy="${cy}" r="9" fill="transparent" data-cx="${cx}" data-cy="${cy}" data-color="${s.color}" data-info="${esc(pointInfo(p, s))}"/>`;
       }).join('');
-      return `<path d="${d}" fill="none" stroke="${s.color}" stroke-width="2" stroke-linejoin="round"/>${dots}`;
+      // por serie: grosor, opacidad y trazo (la tendencia va gruesa y sin puntos; los datos, tenues)
+      const extra = `${s.opacity != null ? ` stroke-opacity="${s.opacity}"` : ''}${s.dash ? ` stroke-dasharray="${s.dash}"` : ''}`;
+      // s.noLine: solo los puntos (p. ej. los pesajes sueltos debajo de la tendencia)
+      return `${s.noLine ? '' : `<path d="${d}" fill="none" stroke="${s.color}" stroke-width="${s.width || 2}" stroke-linejoin="round" stroke-linecap="round"${extra}/>`}${dots}`;
     }).join('');
 
-    const legend = multi
-      ? `<div class="chart-legend">${series.map(s => `<span><i style="background:${s.color}"></i>${esc(s.label)}</span>`).join('')}</div>`
+    const legend = multi && !opts.noLegend
+      ? `<div class="chart-legend">${series.filter(s => !s.noLegend).map(s => `<span><i style="background:${s.color}"></i>${esc(s.label)}</span>`).join('')}</div>`
       : '';
 
     return `<div class="chart-wrap"><svg data-w="${W}" data-h="${H}" viewBox="0 0 ${W} ${H}" class="chart-svg" preserveAspectRatio="none">${grid}${paths}</svg><div class="chart-tip" hidden></div>${legend}</div>`;
@@ -587,20 +620,29 @@ const UI = (() => {
   function pickFromList({ title = 'Elegir', options, value, onPick }) {
     const opts = (options || []).map(o => (typeof o === 'object' ? o : { value: o, label: o }));
     const searchable = opts.length > 8;
+    // opciones con «group» (p. ej. la categoría de un ejercicio): fila de filtros arriba
+    const grupos = [...new Set(opts.map(o => o.group).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+    let grupo = '';
     modal({
       title, size: 'wide',
-      bodyHTML: `${searchable ? '<input class="inp picker-search" id="listSearch" placeholder="Buscar…" autocomplete="off">' : ''}<div class="picker-list" id="listResults"></div>`,
+      bodyHTML: `${searchable ? '<input class="inp picker-search" id="listSearch" placeholder="Buscar…" autocomplete="off">' : ''}${grupos.length > 1 ? `<div class="chips-row small picker-groups"><button class="chip on" data-grp="">Todos</button>${grupos.map(g => `<button class="chip" data-grp="${esc(g)}">${esc(g)}</button>`).join('')}</div>` : ''}<div class="picker-list${searchable ? ' picker-fixed' : ''}" id="listResults"></div>`,
       actions: [{ label: 'Cerrar', kind: 'ghost' }],
       onMount: (root) => {
         const listEl = root.querySelector('#listResults');
         const draw = (q) => {
           const ql = norm(q || '');
-          const items = opts.filter(o => !ql || norm(o.label).includes(ql));
-          listEl.innerHTML = items.map(o => `<button class="picker-row${String(o.value) === String(value) ? ' sel' : ''}" data-val="${esc(o.value)}"><span class="picker-name">${esc(o.label)}</span></button>`).join('') || '<div class="empty-state"><p class="dim">Sin resultados.</p></div>';
+          const items = opts.filter(o => (!ql || norm(o.label + ' ' + (o.hint || '')).includes(ql)) && (!grupo || o.group === grupo));
+          listEl.innerHTML = items.map(o => `<button class="picker-row${String(o.value) === String(value) ? ' sel' : ''}" data-val="${esc(o.value)}"><span class="picker-name">${esc(o.label)}</span>${o.hint ? `<span class="picker-tag">${esc(o.hint)}</span>` : ''}</button>`).join('') || '<div class="empty-state"><p class="dim">Sin resultados.</p></div>';
           listEl.querySelectorAll('[data-val]').forEach(b => b.addEventListener('click', () => { closeModal(); onPick(b.dataset.val, opts.find(o => String(o.value) === b.dataset.val)); }));
         };
         const search = root.querySelector('#listSearch');
         if (search) { search.addEventListener('input', () => draw(search.value)); autoFocus(search); }
+        root.querySelectorAll('[data-grp]').forEach(b => b.addEventListener('click', () => {
+          grupo = b.dataset.grp;
+          root.querySelectorAll('[data-grp]').forEach(x => x.classList.toggle('on', x === b));
+          b.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' });
+          draw(search ? search.value : '');
+        }));
         draw('');
       },
     });
@@ -610,16 +652,37 @@ const UI = (() => {
     return `<button type="button" class="select-btn" id="${esc(id)}">${esc(label)}<span class="select-caret">▾</span></button>`;
   }
 
+  // ---- Skeletons de carga ----
+  // Un bloque gris que late donde va un dato que aún no ha llegado. Lo que no necesita datos
+  // (títulos, botones) se pinta de verdad al momento; esto solo ocupa el sitio de lo que falta.
+  const sk = (w = '100%', h = 14, extra = '') => `<span class="sk" style="width:${w};height:${h}px${extra ? ';' + extra : ''}"></span>`;
+  // Filas de lista genéricas (fecha/título/pastilla), para listas que aún cargan.
+  const skRows = (n = 4) => Array.from({ length: n }, () => `<div class="sk-row">${sk('38px', 38, 'border-radius:10px')}<div class="sk-row-txt">${sk('62%', 14)}${sk('40%', 11, 'margin-top:7px')}</div></div>`).join('');
+  // Pantalla genérica mientras carga una vista que no tiene la suya propia.
+  const skView = () => `<div class="section"><div class="card">${sk('45%', 16)}${sk('100%', 120, 'margin-top:14px;border-radius:12px')}</div><div class="card">${skRows(3)}</div></div>`;
+
   // ---- Formato de fecha legible ----
+  // Los formateadores se crean una vez y se reutilizan: toLocaleDateString crea uno nuevo en cada llamada,
+  // y en listas largas (sesiones, registros, récords) eso se nota en el móvil.
+  const _dtf = new Map();
+  function dtf(opts) {
+    const k = JSON.stringify(opts || {});
+    let f = _dtf.get(k);
+    if (!f) { f = new Intl.DateTimeFormat('es-ES', opts); _dtf.set(k, f); }
+    return f;
+  }
+  const _fd = new Map(), _fds = new Map();
   function fmtDate(iso) {
     if (!iso) return '';
-    const d = new Date(iso + 'T00:00:00');
-    return d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
+    let s = _fd.get(iso);
+    if (s == null) { s = dtf({ day: '2-digit', month: 'short', year: 'numeric' }).format(new Date(iso + 'T00:00:00')); _fd.set(iso, s); }
+    return s;
   }
   function fmtDateShort(iso) {
     if (!iso) return '';
-    const d = new Date(iso + 'T00:00:00');
-    return d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
+    let s = _fds.get(iso);
+    if (s == null) { s = dtf({ day: '2-digit', month: 'short' }).format(new Date(iso + 'T00:00:00')); _fds.set(iso, s); }
+    return s;
   }
 
   // ---- Reordenar arrastrando (touch + ratón) ----
@@ -757,6 +820,7 @@ const UI = (() => {
     if (!hit) {
       // clic fuera de un punto: oculta cualquier tooltip abierto
       document.querySelectorAll('.chart-tip:not([hidden])').forEach(t => { t.hidden = true; });
+      document.querySelectorAll('.chart-sel').forEach(c => c.remove());
       return;
     }
     const wrap = hit.closest('.chart-wrap');
@@ -770,22 +834,36 @@ const UI = (() => {
     const py = (+hit.dataset.cy / Hh) * rect.height + (rect.top - wrapRect.top);
     tip.textContent = hit.dataset.info || '';
     tip.style.setProperty('--tip-color', hit.dataset.color || 'var(--accent)');
+    tip.style.setProperty('--ax', '50%');
     tip.hidden = false;
     tip.style.left = px + 'px';
     tip.style.top = py + 'px';
-    // si se sale por un borde, ajusta para que no se corte
+    // el punto tocado, marcado con un anillo (encima de todo)
+    svg.querySelectorAll('.chart-sel').forEach(c => c.remove());
+    const sel = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    sel.setAttribute('class', 'chart-sel');
+    sel.setAttribute('cx', hit.dataset.cx); sel.setAttribute('cy', hit.dataset.cy); sel.setAttribute('r', '7');
+    sel.setAttribute('stroke', hit.dataset.color || 'currentColor');
+    svg.appendChild(sel);
+    // si el globo se sale por un borde se mueve hacia dentro, pero la flecha sigue señalando el punto
     requestAnimationFrame(() => {
       const tr = tip.getBoundingClientRect();
-      if (tr.left < wrapRect.left + 2) tip.style.left = (px + (wrapRect.left + 2 - tr.left)) + 'px';
-      if (tr.right > wrapRect.right - 2) tip.style.left = (px - (tr.right - (wrapRect.right - 2))) + 'px';
+      let dx = 0;
+      if (tr.left < wrapRect.left + 2) dx = wrapRect.left + 2 - tr.left;
+      else if (tr.right > wrapRect.right - 2) dx = (wrapRect.right - 2) - tr.right;
+      if (dx) {
+        tip.style.left = (px + dx) + 'px';
+        const ax = Math.max(10, Math.min(tr.width - 10, tr.width / 2 - dx));
+        tip.style.setProperty('--ax', ax + 'px');
+      }
     });
   });
 
   return {
-    esc, norm, toast, modal, closeModal, confirm,
+    esc, norm, toast, hideToast, modal, closeModal, confirm,
     field, input, textarea, select, readForm,
     colorPicker, bindColorPicker, avatar, COLORS, ESSENTIALS,
     pickExercise, prompt, askAI, icon, autoFocus, pickFromList, selectButton,
-    lineChart, fmtDate, fmtDateShort, makeSortable,
+    lineChart, fmtDate, fmtDateShort, dtf, makeSortable, sk, skRows, skView,
   };
 })();

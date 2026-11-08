@@ -5,7 +5,10 @@
 const VNews = (() => {
   // Clave nueva desde v2.64.2: la v2.64.0 marcaba las novedades como vistas solo con
   // aparecer, así que se empieza de cero para todos (y se borra la vieja).
-  const NEWS_SEEN_KEY = 'traindia.newsVisto';
+  const NEWS_SEEN_KEY = 'traindia.newsVisto';   // hasta v2.6x: solo el último anuncio visto
+  const NEWS_LIST_KEY = 'traindia.newsVistos';  // ahora: todos los anuncios vistos
+  const NEWS_DAY_KEY = 'traindia.newsDia';      // el día en que salió uno solo (como mucho uno al día)
+  const NEWS_VIVE_DIAS = 28; // pasado ese tiempo un anuncio ya no sale solo ni en «Lo nuevo» (queda como trucos)
   try { localStorage.removeItem('traindia.newsSeen'); } catch (e) {}
   const SEEN_KEY = 'traindia.tutosSeen';
   const TIPS_SEEN_KEY = 'traindia.tipsSeen';
@@ -15,6 +18,7 @@ const VNews = (() => {
   // Vídeos verticales en tutoriales/. No los guarda el SW: se bajan solo al verlos.
   // teaser: unos segundos sin sonido (≈170 KB) que se ven de fondo en la historia.
   const TUTOS = [
+    { id: 'progreso', title: 'Tu progreso, en un minuto', sub: 'Logros, récords y tu peso, de un vistazo', dur: '1:01', src: 'tutoriales/progreso.mp4', poster: 'tutoriales/progreso.jpg', teaser: 'tutoriales/progreso-teaser.mp4', try: 'go:progress:summary' },
     { id: 'plan-ia', title: 'Tu plan del entrenador con una IA', sub: 'Del PDF a tu semana en 3 pasos', dur: '1:27', src: 'tutoriales/plan-ia.mp4', poster: 'tutoriales/plan-ia.jpg', teaser: 'tutoriales/plan-ia-teaser.mp4', try: 'planAI' },
   ];
   // Color por tipo: Nuevo, morado; Mejora, verde azulado.
@@ -34,6 +38,22 @@ const VNews = (() => {
   // etiqueta que lo remata (timer cuenta solo). Sin cifras que se queden viejas. Sin vídeo, capturas
   // de la app (con datos de ejemplo, en novedades/) dentro de un móvil.
   const NEWS = [
+    { id: '2026-11-08', date: '2026-11-08', stories: [
+      { tag: 'nuevo', title: 'Tu progreso, de un vistazo', text: 'Progreso empieza con un resumen: tus logros recientes, tu semana frente a la pasada (o el mes, con un toque) y tu racha de semanas entrenando.', video: 'progreso', try: 'go:progress:summary',
+        card: { lines: ['Tu progreso,', 'de un', 'vistazo'], mark: 0 } },
+      { tag: 'mejora', title: 'Cada récord, a la vista', text: 'En Progreso → Ejercicios, cada uno con su récord. Dentro, tu récord frente a la última vez y la gráfica marca cada vez que lo batiste. En cardio, tu mejor tiempo en cada distancia: 1 km, 5 km, 10 km…', shots: ['novedades/records-1.jpg', 'novedades/records-2.jpg'], try: 'go:progress:exercise',
+        card: { lines: ['Cada récord,', 'a la', 'vista'], mark: 0, go: 'Verlos',
+          crop: { img: 'novedades/records-2.jpg', iw: 267, x: 13, y: 285, w: 236, h: 129, r: 14, b: 78, rot: -4 },
+          chip: { icon: 'trophy', txt: 'Nuevo récord', l: 20, b: 56 } } },
+      { tag: 'mejora', title: 'Tu peso, con objetivo', text: 'Dile si quieres bajar, subir o mantener: verás tu ritmo por semana, cuánto llevas desde tu máximo y tus pesajes o la tendencia.', shots: ['novedades/peso.jpg'], try: 'go:progress:body',
+        card: { lines: ['Tu peso,', 'con', 'objetivo'], mark: 2, go: 'Verlo',
+          crop: { img: 'novedades/peso.jpg', iw: 279, x: 21, y: 272, w: 236, h: 98, r: 16, b: 96, rot: -3 },
+          chip: { icon: 'activity', txt: 'Objetivo: bajar', l: 20, b: 62 } } },
+      { tag: 'mejora', title: 'Importar sin miedo', text: 'Antes de importar ves qué se añade, qué ya tienes y qué cambia, con lo tuyo y lo del archivo lado a lado. Nada se duplica y nada tuyo cambia sin que lo elijas.', shots: ['novedades/importar.jpg'],
+        card: { pal: 'rosa', lines: ['Importar', 'sin', 'miedo'], mark: 2, go: 'Ver cómo',
+          crop: { img: 'novedades/importar.jpg', iw: 260, x: 12, y: 277, w: 236, h: 100, r: 14, b: 100, rot: -4 },
+          chip: { icon: 'check', txt: 'Nada se duplica', l: 20, b: 60 } } },
+    ] },
     { id: '2026-11-04', date: '2026-11-04', stories: [
       { tag: 'mejora', title: 'Del PDF de tu entrenador a tu Traindía', text: 'Crear tu plan con una IA ahora es más corto: preparas el texto, se lo das a tu IA y pegas lo que te devuelva.', video: 'plan-ia', try: 'planAI',
         card: { lines: ['Del PDF', 'de tu entrenador', 'a tu Traindía'], mark: 0 } },
@@ -57,6 +77,18 @@ const VNews = (() => {
   const seen = () => { try { return JSON.parse(ls(SEEN_KEY) || '[]'); } catch (e) { return []; } };
   const markSeen = (id) => { const s = seen(); if (!s.includes(id)) { s.push(id); ls(SEEN_KEY, JSON.stringify(s)); } };
   const tuto = (id) => TUTOS.find(t => t.id === id);
+  // Anuncios vistos (incluye el que guardaba la versión anterior, para no repetirlo)
+  const newsVistos = () => {
+    let l = [];
+    try { l = JSON.parse(ls(NEWS_LIST_KEY) || '[]'); } catch (e) {}
+    const viejo = ls(NEWS_SEEN_KEY);
+    if (viejo && !l.includes(viejo)) l.push(viejo);
+    return l;
+  };
+  const marcarNews = (id) => { const l = newsVistos(); if (!l.includes(id)) { l.push(id); ls(NEWS_LIST_KEY, JSON.stringify(l)); } };
+  const diasDesde = (iso) => Math.round((new Date(DB.todayISO() + 'T12:00:00') - new Date(iso + 'T12:00:00')) / 86400000);
+  // Los anuncios que siguen «vivos»: el último siempre, y los demás mientras sean recientes
+  const vivos = () => NEWS.filter((n, i) => i === 0 || diasDesde(n.date) <= NEWS_VIVE_DIAS);
   const tipsSeen = () => { try { return JSON.parse(ls(TIPS_SEEN_KEY) || '[]'); } catch (e) { return []; } };
   const markTip = (id) => { const s = tipsSeen(); if (!s.includes(id)) { s.push(id); ls(TIPS_SEEN_KEY, JSON.stringify(s)); } };
   const cat = (id) => CATS.find(c => c.id === id);
@@ -69,21 +101,30 @@ const VNews = (() => {
   const untint = () => { const m = document.querySelector('meta[name="theme-color"]'); if (m && _tinted !== null) m.content = _tinted; _tinted = null; };
   // Con «reducir movimiento» activado en el móvil, los avances de vídeo no arrancan solos.
   const autoplay = () => (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) ? '' : 'autoplay';
-  const fecha = (iso) => new Date(iso + 'T12:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+  const fecha = (iso) => UI.dtf({ day: 'numeric', month: 'short' }).format(new Date(iso + 'T12:00:00'));
 
-  // Al entrar: el último anuncio, y solo si estás en reposo en Semana (sin entreno en
-  // marcha ni a medias, sin ventanas abiertas, sin nada escrito). Cuenta como visto cuando
-  // lo cierras, llegas al final, tocas «Pruébalo» o abres el vídeo: si desaparece porque la
-  // app se recargó o la cerraste, vuelve a salir la próxima vez.
+  // Al entrar: el anuncio más nuevo que no hayas visto (y si te faltaba otro reciente, otro
+  // día: como mucho uno al día), solo si estás en reposo en Semana (sin entreno en marcha ni
+  // a medias, sin ventanas abiertas, sin nada escrito). Cuenta como visto cuando lo cierras,
+  // llegas al final, tocas «Pruébalo» o abres el vídeo: si desaparece porque la app se
+  // recargó o la cerraste, vuelve a salir la próxima vez. Los de hace más de 4 semanas ya no salen.
   function maybeShow(app) {
-    const n = NEWS[0];
-    if (!n || ls(NEWS_SEEN_KEY) === n.id) return;
-    // Quien se acaba de dar de alta no necesita «novedades»: para él todo es nuevo.
+    const vistos = newsVistos();
+    // Quien se dio de alta después de un anuncio no lo necesita: para él todo es nuevo.
     const alta = app.mainUser && app.mainUser.createdAt;
-    if (alta && alta > new Date(n.date + 'T00:00:00').getTime()) { ls(NEWS_SEEN_KEY, n.id); return; }
+    let n = null;
+    for (const x of NEWS) { // del más nuevo al más viejo
+      if (vistos.includes(x.id)) continue;
+      if (alta && alta > new Date(x.date + 'T00:00:00').getTime()) { marcarNews(x.id); continue; }
+      if (diasDesde(x.date) > NEWS_VIVE_DIAS) continue;
+      n = x; break;
+    }
+    if (!n) return;
+    const hoy = DB.todayISO();
+    if (ls(NEWS_DAY_KEY) === hoy) return; // hoy ya viste uno: el siguiente, otro día
     setTimeout(() => {
       if (app._live || app._updReady || app.currentView !== 'week' || document.visibilityState !== 'visible' || !app.isIdle()) return;
-      play(app, n.stories, 0, null, () => ls(NEWS_SEEN_KEY, n.id));
+      play(app, n.stories, 0, null, () => { marcarNews(n.id); ls(NEWS_DAY_KEY, hoy); });
     }, 1200);
   }
 
@@ -249,7 +290,7 @@ const VNews = (() => {
   // ---- Tarjeta de «Lo nuevo»: póster con titular grande, palabra marcada y el momento
   // clave de la app flotando (o el avance del vídeo de fondo). ----
   const hms = (s) => `${Math.floor(s / 3600)}:${String(Math.floor(s / 60) % 60).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
-  function newCard(st, k) {
+  function newCard(st, k, gi = 0) {
     const tg = TAGS[st.tag] || TAGS.nuevo, tv = st.video && tuto(st.video), cd = st.card || { lines: [st.title], mark: -1 };
     const p = PALS[cd.pal] || PALS[st.tag] || PALS.nuevo, cr = cd.crop, ch = cd.chip;
     const titulo = cd.lines.map((l, i) => i === cd.mark ? `<em>${esc(l)}</em>` : esc(l)).join('<br>');
@@ -257,7 +298,7 @@ const VNews = (() => {
       ch.timer != null ? `<b class="lr-timer" data-s="${ch.timer}">${hms(ch.timer)}</b>`
       : ch.avatar ? `<i class="lr-av" style="background:${ch.color}">${esc(ch.avatar)}</i>`
       : ch.icon ? `<i class="lr-ic">${UI.icon(ch.icon, 15)}</i>` : ''}${esc(ch.txt)}</span>`;
-    return `<button class="lr-new-c${tv ? ' lr-v' : ''}" data-story="${k}" style="--a:${p.a};--b:${p.b};--c:${p.c};--d:${p.d};--k:${p.k}">
+    return `<button class="lr-new-c${tv ? ' lr-v' : ''}" data-news="${gi}" data-story="${k}" style="--a:${p.a};--b:${p.b};--c:${p.c};--d:${p.d};--k:${p.k}">
       ${tv ? `<video class="lr-bgv" src="${tv.teaser}" poster="${tv.poster}" muted ${autoplay()} loop playsinline></video><span class="lr-shade"></span>`
         : '<span class="lr-bg"></span><i class="lr-ring"></i><i class="lr-ring lr-ring2"></i>'}
       <span class="lr-tags"><b>${tg.txt}</b>${tv ? `<i>${UI.icon('play', 11)} vídeo</i>` : ''}</span>
@@ -279,13 +320,13 @@ const VNews = (() => {
       ${vistos.includes(t.id) ? '' : '<em class="lr-new">Nuevo</em>'}<span class="lr-play">${UI.icon('play', 16)}</span>
       <span class="lr-tuto-t"><strong>${esc(t.title)}</strong><small>${t.dur}</small></span></button>`;
   function learnView() {
-    const n = NEWS[0], vistos = seen(), seenIds = tipsSeen();
+    const grupos = vivos(), vistos = seen(), seenIds = tipsSeen();
     return `<div class="section lr">
       <label class="lr-search">${UI.icon('search', 18)}<input id="lrQ" type="search" placeholder="Busca: descanso, copia, IA…" autocomplete="off" enterkeyhint="search"></label>
       <div id="lrRes" hidden></div>
       <div id="lrHome">
-        ${n ? `<div class="lr-h"><span>Lo nuevo · ${fecha(n.date)}</span></div>
-        <div class="lr-row">${n.stories.map((st, k) => newCard(st, k)).join('')}</div>` : ''}
+        ${grupos.map((n, gi) => `<div class="lr-h"><span>${gi === 0 ? 'Lo nuevo' : 'Antes'} · ${fecha(n.date)}</span></div>
+        <div class="lr-row">${n.stories.map((st, k) => newCard(st, k, gi)).join('')}</div>`).join('')}
         ${TUTOS.length ? `<div class="lr-h"><span>Tutoriales</span>${TUTOS.length > 2 ? '<button class="link-btn" data-go="tutorials">Ver todos</button>' : ''}</div>
         <div class="lr-row">${TUTOS.map(t => tutoCard(t, vistos)).join('')}</div>` : ''}
         <div class="lr-h"><span>Por temas</span><small>${TIPS.length} trucos</small></div>
@@ -307,7 +348,7 @@ const VNews = (() => {
     }));
   }
   function learnBind(app, root) {
-    const n = NEWS[0];
+    const grupos = vivos();
     const timers = [...root.querySelectorAll('.lr-timer')];
     if (timers.length) {
       const iv = setInterval(() => {
@@ -315,7 +356,11 @@ const VNews = (() => {
         timers.forEach(t => { t.dataset.s = +t.dataset.s + 1; t.textContent = hms(+t.dataset.s); });
       }, 1000);
     }
-    root.querySelectorAll('[data-story]').forEach(b => b.addEventListener('click', () => play(app, n.stories, +b.dataset.story)));
+    // verlo desde aquí también cuenta como visto (así no vuelve a salir solo al abrir la app)
+    root.querySelectorAll('[data-story]').forEach(b => b.addEventListener('click', () => {
+      const n = grupos[+b.dataset.news || 0];
+      if (n) play(app, n.stories, +b.dataset.story, null, () => marcarNews(n.id));
+    }));
     root.querySelectorAll('[data-go]').forEach(b => b.addEventListener('click', () => app.go(b.dataset.go)));
     root.querySelectorAll('[data-cat]').forEach(b => b.addEventListener('click', () => app.go('learnCat', { cat: b.dataset.cat })));
     bindTutos(app, root);

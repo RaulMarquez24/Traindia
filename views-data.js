@@ -315,8 +315,8 @@ const VData = (() => {
     UI.modal({
       title: 'Importar datos', size: 'wide',
       bodyHTML: `
-        <p class="field-hint" style="margin-top:0">Pega aquí el texto JSON exportado <strong>o el enlace que te hayan compartido</strong>, o elige un archivo. <strong>Desde el móvil</strong>: en WhatsApp o Archivos, dale al documento → <strong>Compartir</strong> → <strong>Traindía</strong> y se importa solo.</p>
-        <textarea class="inp" id="impText" rows="6" placeholder='Pega el JSON aquí… (empieza por {"format":"traindia-export"…})'></textarea>
+        <p class="field-hint" style="margin-top:0">Pega aquí <strong>el enlace que te han pasado</strong> o elige el archivo. Truco: en WhatsApp o en Archivos, mantén pulsado el archivo → <strong>Compartir</strong> → <strong>Traindía</strong> y se abre solo.</p>
+        <textarea class="inp" id="impText" rows="5" placeholder="Pega aquí el enlace (o el texto del archivo)"></textarea>
         <button class="btn ghost block" id="impFileBtn" style="margin-top:8px">${UI.icon('upload', 15)} …o elegir un archivo</button>`,
       actions: [
         { label: 'Cancelar', kind: 'ghost' },
@@ -353,6 +353,51 @@ const VData = (() => {
         UI.autoFocus(root.querySelector('#impText')); // en móvil no: el teclado tapaba el botón de elegir archivo
       },
     });
+  }
+
+  // ---- Alta: «¿Ya usabas Traindía?» → recupera la copia completa en un perfil nuevo ----
+  // Se crea el perfil con el nombre y el color de la copia y entra todo (no hay nada
+  // con lo que chocar: el perfil está vacío). Después, onDone(user) termina el alta.
+  function restoreOnboarding(app, onDone) {
+    const inp = document.createElement('input');
+    inp.type = 'file'; // sin 'accept': en Android los .json de WhatsApp llegan como octet-stream
+    inp.addEventListener('change', () => {
+      const f = inp.files[0]; if (!f) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        let p = null;
+        try { p = JSON.parse(reader.result); } catch (e) {}
+        if (!p || !isExportFormat(p.format) || !p.data) { UI.toast('Ese archivo no es una copia de Traindía', 'err'); return; }
+        if (p.kind !== 'profile' || !(p.data.routines || []).length && !(p.data.sessions || []).length) {
+          UI.toast('Ese archivo no es una copia completa. Crea tu perfil y luego impórtalo desde Compartir → Importar.', 'err'); return;
+        }
+        const d = p.data, n = (k) => (d[k] || []).length;
+        const partes = [[n('routines'), 'plan', 'planes'], [n('sessions'), 'sesión', 'sesiones'], [n('progress'), 'registro de progreso', 'registros de progreso'], [n('nutrition'), 'pauta', 'pautas'], [n('files'), 'documento', 'documentos']]
+          .filter(([x]) => x).map(([x, a, b]) => `${x} ${x === 1 ? a : b}`);
+        const cuando = p.exportedAt ? new Date(p.exportedAt).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' }) : '';
+        UI.modal({
+          title: 'Recuperar tu copia',
+          bodyHTML: `<p class="modal-text">Copia de <strong>${UI.esc(p.user?.name || 'Traindía')}</strong>${cuando ? ` del ${UI.esc(cuando)}` : ''}.</p>
+            <div class="mg-sum"><div class="mg-row add"><span class="mg-ic">${UI.icon('upload', 16)}</span><div><strong>Se recupera</strong><span>${UI.esc(partes.join(' · '))}</span></div></div></div>
+            <p class="field-hint">Tu perfil se crea con este nombre; lo puedes cambiar en Ajustes.</p>`,
+          actions: [
+            { label: 'Cancelar', kind: 'ghost' },
+            { label: 'Recuperar', kind: 'primary', onClick: async () => {
+              const user = await DB.createUser({ name: p.user?.name || 'Yo', color: p.user?.color || UI.COLORS[0], isMain: true });
+              const rts = d.routines || [];
+              const activo = rts.find(r => r.isPrimary) || rts[0] || null;
+              const sections = new Set(['exercises', 'sessions', 'progress', 'nutrition', 'files'].filter(k => n(k)));
+              const A = await VMerge.analyze(user.id, { sections, data: d, plans: rts, fileActive: activo, days: null, allExercises: d.exercises || [] });
+              await VMerge.apply(A);
+              await importPlaces(d.places, rts.flatMap(r => r.days || []));
+              await onDone(user);
+            } },
+          ],
+        });
+      };
+      reader.readAsText(f);
+    });
+    inp.click();
   }
 
   function routeImport(app, payload) {
@@ -406,22 +451,6 @@ const VData = (() => {
     await DB.put('routines', rec);
     return rec;
   }
-  // Fusiona los días elegidos del plan del archivo DENTRO del plan activo del destino:
-  // sustituye el día con el mismo nombre (conserva su id/orden) o lo añade si no existe.
-  async function mergeDaysIntoPlan(targetUserId, routine, dayIds, exercises) {
-    const idMap = await mapExercisesToCatalog(targetUserId, exercises || []);
-    const rts = await DB.routinesOf(targetUserId);
-    const target = rts.find(r => r.isPrimary) || rts[0];
-    if (!target) { await createImportedPlan(targetUserId, routine, dayIds, routine.name || 'Plan importado', exercises); return; }
-    (routine.days || []).filter(d => dayIds.has(d.id)).forEach(sd => {
-      const copy = JSON.parse(JSON.stringify(sd));
-      (copy.blocks || []).forEach(b => (b.exercises || []).forEach(e => { if (e.exerciseId && idMap[e.exerciseId]) e.exerciseId = idMap[e.exerciseId]; }));
-      const idx = target.days.findIndex(d => (d.name || '').trim().toLowerCase() === (sd.name || '').trim().toLowerCase());
-      if (idx >= 0) { copy.id = target.days[idx].id; copy.order = target.days[idx].order; target.days[idx] = copy; }
-      else { copy.id = DB.uid('day'); target.days.push(copy); }
-    });
-    await DB.put('routines', target);
-  }
   // Lista de casillas de días de un plan (marcados por defecto).
   function dayChecksHTML(days) {
     return (days || []).map(d => `<label class="check-row"><input type="checkbox" data-day="${UI.esc(d.id)}" checked><span>${UI.esc(d.name)}${d.isRest ? ' (descanso)' : ` — ${(d.blocks || []).reduce((a, b) => a + (b.exercises || []).length, 0)} ej`}</span></label>`).join('');
@@ -468,12 +497,17 @@ const VData = (() => {
           setTimeout(() => VReview.importar(app, { userId: app.mainUser.id, routine: { days }, exercises, from: sender, finalLabel: 'Añadir plan',
             onBack: () => importPlan(app, payload),
             onConfirm: async (links) => {
-              await createImportedPlan(app.mainUser.id, routine, chosen, name, exercises, { links });
+              const prev = app.routine;
+              const rt = await createImportedPlan(app.mainUser.id, routine, chosen, name, exercises, { links });
               await importPlaces(payload.data.places, days);
+              // Si tu plan activo está en blanco (el del alta, sin un solo ejercicio), el nuevo
+              // pasa a ser el activo y el vacío sobra.
+              const vacio = prev && prev.userId === app.mainUser.id && !(prev.days || []).some(d => (d.blocks || []).some(b => (b.exercises || []).length));
+              if (vacio) { await DB.setActivePlan(app.mainUser.id, rt.id); try { await DB.deletePlan(prev.id); } catch (e) {} }
               await app.refreshRoutine();
               app.render();
               if (payload.onDone) payload.onDone();
-              UI.toast('Plan añadido · actívalo en "El plan"');
+              UI.toast(vacio ? `«${rt.name}» es ahora tu plan` : 'Plan añadido · actívalo en "El plan"');
             } }), 50);
         } },
       ],
@@ -625,6 +659,14 @@ const VData = (() => {
       { key: 'files', label: 'Documentos' },
     ].filter(s => (counts[s.key] || []).length);
     const hasData = DATA_SECTIONS.length > 0;
+    // ¿A qué perfil va? Uno solo. Si el archivo es de otra persona, por defecto a un invitado
+    // (el que ya se llame así o uno nuevo); si es tuyo, a tu perfil. Antes venía marcado tu perfil
+    // y se podían marcar varios: al añadir un invitado, sus datos acababan también en el tuyo.
+    const main = users.find(u => u.isMain) || users[0];
+    const mismo = (a, b) => UI.norm(a || '').trim() === UI.norm(b || '').trim();
+    const deOtro = payload.user && payload.user.name && !mismo(payload.user.name, main && main.name);
+    const invitadoIgual = deOtro ? users.find(u => !u.isMain && mismo(u.name, payload.user.name)) : null;
+    const destinoDef = invitadoIgual ? invitadoIgual.id : deOtro ? '__new' : (main && main.id);
 
     // sección de datos: casilla global + lista de elementos editable
     const sectionHTML = (s) => {
@@ -635,23 +677,12 @@ const VData = (() => {
         ${editable ? `<div class="imp-items" data-items="${s.key}" style="display:none">${items.map(it => `<label class="check-row sub"><input type="checkbox" data-item="${s.key}" data-id="${UI.esc(String(it.id))}" checked><span>${importItemLabel(s.key, it)}</span></label>`).join('')}</div>` : ''}
       </div>`;
     };
-    // sección "Días del plan": desmarcada por defecto (no toca tu plan salvo que la actives),
-    // con destino (a tu plan actual / plan nuevo) y casillas por día.
-    const daysSection = hasPlan ? `<div class="imp-sec">
-      <label class="check-row imp-sec-head"><input type="checkbox" data-sec="days"><span>Días del plan <span class="dim">(${(planRoutine.days || []).length})</span></span><button type="button" class="imp-toggle" data-toggle="days">editar</button></label>
-      <div class="imp-items" data-items="days" style="display:none">
-        <div style="margin-bottom:6px">
-          <label class="check-row"><input type="radio" name="daysdest" value="merge" checked><span>A mi plan actual (sustituye esos días)</span></label>
-          <label class="check-row"><input type="radio" name="daysdest" value="new"><span>Como plan nuevo aparte</span></label>
-        </div>
-        <div id="daysNewName" style="display:none;margin-bottom:6px">${UI.field('Nombre del plan nuevo', UI.input('planName', planRoutine.name ? `${planRoutine.name} (de ${sender})` : `Plan de ${sender}`))}</div>
-        ${dayChecksHTML(planRoutine.days)}
-      </div>
-    </div>` : '';
-    const otherPlansSection = otherPlans.length ? `<div class="imp-sec">
-      <label class="check-row imp-sec-head"><input type="checkbox" data-sec="otherplans" checked><span>Otros planes <span class="dim">(${otherPlans.length})</span></span>${otherPlans.length > 1 ? '<button type="button" class="imp-toggle" data-toggle="otherplans">editar</button>' : ''}</label>
-      <p class="field-hint" style="margin:0 0 6px 30px">Se añaden como planes aparte, sin activarlos${otherPlans.length === 1 ? `: <strong>${UI.esc(otherPlans[0].name || 'Plan')}</strong>` : ''}.</p>
-      ${otherPlans.length > 1 ? `<div class="imp-items" data-items="otherplans" style="display:none">${otherPlans.map(r => `<label class="check-row sub"><input type="checkbox" data-item="otherplans" data-id="${UI.esc(String(r.id))}" checked><span>${UI.esc(r.name || 'Plan')} <span class="dim">· ${(r.days || []).length} días</span></span></label>`).join('')}</div>` : ''}
+    // «Planes»: todos los del archivo (el activo, marcado). Los que no tengas se añaden sin
+    // activarlos; si tu plan activo está vacío, pasa a ser el activo del archivo.
+    const filePlans = planRoutine ? [planRoutine, ...otherPlans] : [];
+    const plansSection = filePlans.length ? `<div class="imp-sec">
+      <label class="check-row imp-sec-head"><input type="checkbox" data-sec="plans" checked><span>Planes <span class="dim">(${filePlans.length})</span></span>${filePlans.length > 1 ? '<button type="button" class="imp-toggle" data-toggle="plans">editar</button>' : ''}</label>
+      ${filePlans.length > 1 ? `<div class="imp-items" data-items="plans" style="display:none">${filePlans.map(r => `<label class="check-row sub"><input type="checkbox" data-item="plans" data-id="${UI.esc(String(r.id))}" checked><span>${UI.esc(r.name || 'Plan')} <span class="dim">· ${(r.days || []).length} días${r === planRoutine ? ' · el activo' : ''}</span></span></label>`).join('')}</div>` : ''}
     </div>` : '';
 
     UI.modal({
@@ -659,45 +690,40 @@ const VData = (() => {
       bodyHTML: `
         <p class="modal-text">Archivo de <strong>${UI.esc(sender)}</strong>.</p>
         <div id="impForm">
-          <span class="field-label">Asignar a perfil(es)</span>
-          <p class="field-hint" style="margin-top:0;margin-bottom:8px">Puedes marcar varios: se importa lo mismo a cada uno.</p>
+          <span class="field-label">¿A qué perfil va?</span>
+          ${deOtro ? `<p class="field-hint" style="margin-top:0;margin-bottom:8px">Es de <strong>${UI.esc(sender)}</strong>: lo normal es un invitado, para que sus datos no se mezclen con los tuyos.</p>` : ''}
           <div class="check-list" style="max-height:none;margin-bottom:10px">
-            ${users.map((u, i) => `<label class="check-row"><input type="checkbox" data-user="${u.id}"${i === 0 ? ' checked' : ''}><span>${UI.esc(u.name)}${u.isMain ? ' (principal)' : ' (invitado)'}</span></label>`).join('')}
-            <label class="check-row"><input type="checkbox" data-newguest><span>+ Crear nuevo invitado</span></label>
+            ${users.map(u => `<label class="check-row"><input type="radio" name="impDest" data-user="${u.id}"${u.id === destinoDef ? ' checked' : ''}><span>${UI.esc(u.name)}${u.isMain ? ' (tú)' : ' (invitado)'}</span></label>`).join('')}
+            <label class="check-row"><input type="radio" name="impDest" data-newguest${destinoDef === '__new' ? ' checked' : ''}><span>+ Nuevo invitado</span></label>
           </div>
-          <div id="newGuestBox" style="display:none">
+          <div id="newGuestBox"${destinoDef === '__new' ? '' : ' style="display:none"'}>
             ${UI.field('Nombre del invitado', UI.input('guestName', sender, { placeholder: 'Nombre' }))}
             ${UI.field('Color', UI.colorPicker('guestColor', payload.user?.color || UI.ESSENTIALS[1]))}
           </div>
           <span class="field-label">Qué importar</span>
-          <p class="field-hint" style="margin-top:0;margin-bottom:8px">Marca lo que quieras. En "Días" pulsa <em>editar</em> para elegir días sueltos y si van a tu plan o a uno nuevo.</p>
-          <div style="margin-bottom:12px">
-            ${daysSection}${otherPlansSection}${DATA_SECTIONS.map(sectionHTML).join('')}
+          <p class="field-hint" style="margin-top:0;margin-bottom:8px">Marca lo que quieras. Antes de importar verás qué se añade, qué ya tienes y qué es distinto. Nada se duplica y nada tuyo cambia sin que lo elijas.</p>
+          <div style="margin-bottom:4px">
+            ${plansSection}${DATA_SECTIONS.map(sectionHTML).join('')}
             ${(!hasPlan && !hasData) ? '<p class="dim" style="padding:2px">El archivo no tiene datos.</p>' : ''}
           </div>
-          ${hasData ? `<span class="field-label">Si ya tienes esos datos</span>
-          ${UI.select('policy', [{ value: 'duplicate', label: 'Añadir como copia nueva' }, { value: 'overwrite', label: 'Reemplazar lo que coincida' }], 'duplicate')}
-          <p class="field-hint" id="policyHint"></p>` : ''}
         </div>`,
       actions: [
         { label: 'Cancelar', kind: 'ghost' },
-        { label: 'Importar', kind: 'primary', onClick: async (root) => {
+        { label: 'Revisar', kind: 'primary', onClick: async (root) => {
           const targetIds = [...root.querySelectorAll('[data-user]:checked')].map(c => c.dataset.user);
           const newGuest = root.querySelector('[data-newguest]').checked;
           if (!targetIds.length && !newGuest) { UI.toast('Elige al menos un perfil', 'err'); return false; }
 
-          // Días del plan
-          let dayIds = null, daysDest = 'merge', planName = '';
-          const daysChk = root.querySelector('[data-sec="days"]');
-          const wantDays = hasPlan && daysChk && daysChk.checked;
-          if (wantDays) {
-            dayIds = new Set([...root.querySelectorAll('[data-day]:checked')].map(c => c.dataset.day));
-            if (!dayIds.size) { UI.toast('Marca al menos un día del plan', 'err'); return false; }
-            daysDest = root.querySelector('[name="daysdest"]:checked')?.value || 'merge';
-            planName = (root.querySelector('input[name="planName"]')?.value || '').trim() || `Plan de ${sender}`;
+          // Planes
+          let plans = [];
+          const plChk = root.querySelector('[data-sec="plans"]');
+          if (plChk && plChk.checked) {
+            const box = root.querySelector('[data-items="plans"]');
+            if (box) { const ids = new Set([...root.querySelectorAll('[data-item="plans"]:checked')].map(c => c.dataset.id)); plans = filePlans.filter(r => ids.has(String(r.id))); }
+            else plans = filePlans;
           }
-
-          // Datos (sin rutinas: los días se gestionan en su sección)
+          const days = null; // (los días sueltos se pasan con «Exportar un día»)
+          // Datos
           const chosen = new Set();
           const filtered = {};
           for (const s of DATA_SECTIONS) {
@@ -709,92 +735,67 @@ const VData = (() => {
             else sel = (counts[s.key] || []);
             if (sel.length) { filtered[s.key] = sel; chosen.add(s.key); }
           }
+          if (!plans.length && !days && !chosen.size) { UI.toast('Marca al menos algo que importar', 'err'); return false; }
 
-          // Otros planes
-          let extraPlans = [];
-          const opChk = root.querySelector('[data-sec="otherplans"]');
-          if (opChk && opChk.checked) {
-            const box = root.querySelector('[data-items="otherplans"]');
-            if (box) { const ids = new Set([...root.querySelectorAll('[data-item="otherplans"]:checked')].map(c => c.dataset.id)); extraPlans = otherPlans.filter(r => ids.has(String(r.id))); }
-            else extraPlans = otherPlans;
-          }
-
-          if (!wantDays && !chosen.size && !extraPlans.length) { UI.toast('Marca al menos algo que importar', 'err'); return false; }
-
+          let guestName = '', guestColor = '';
           if (newGuest) {
-            const name = (root.querySelector('input[name="guestName"]').value || '').trim();
-            if (!name) { UI.toast('Escribe el nombre del invitado', 'err'); return false; }
-            const color = root.querySelector('input[name="guestColor"]').value;
-            const g = await DB.createUser({ name, color, isGuest: true });
-            targetIds.push(g.id);
+            guestName = (root.querySelector('input[name="guestName"]').value || '').trim();
+            if (!guestName) { UI.toast('Escribe el nombre del invitado', 'err'); return false; }
+            guestColor = root.querySelector('input[name="guestColor"]').value;
           }
 
-          const policy = targetIds.length > 1 ? 'duplicate' : (root.querySelector('select[name="policy"]')?.value || 'duplicate');
-          for (const tid of targetIds) {
-            if (chosen.size) {
-              const payload2 = { ...payload, data: { exercises: [], routines: [], sessions: [], progress: [], ...filtered } };
-              await applyImport(app, payload2, tid, policy, chosen);
-            }
-            if (wantDays) {
-              if (daysDest === 'new') await createImportedPlan(tid, planRoutine, dayIds, planName, counts.exercises || []);
-              else await mergeDaysIntoPlan(tid, planRoutine, dayIds, counts.exercises || []);
-            }
-            for (const rt of extraPlans) {
-              // "Reemplazar" sobre el mismo perfil: si ya tienes ese plan (mismo id), se
-              // actualiza en su sitio (restaurar tu copia no lo duplica).
-              const existing = policy === 'overwrite' ? await DB.get('routines', rt.id) : null;
-              if (existing && existing.userId === tid) {
-                const idMap = await mapExercisesToCatalog(tid, counts.exercises || []);
-                const days = JSON.parse(JSON.stringify(rt.days || []));
-                days.forEach(d => (d.blocks || []).forEach(b => (b.exercises || []).forEach(e => { if (e.exerciseId && idMap[e.exerciseId]) e.exerciseId = idMap[e.exerciseId]; })));
-                await DB.put('routines', { ...rt, userId: tid, days, isPrimary: !!existing.isPrimary });
-              } else {
-                await createImportedPlan(tid, rt, new Set((rt.days || []).map(d => d.id)), rt.name || `Plan de ${sender}`, counts.exercises || []);
-              }
-            }
+          // Revisión por perfil (el invitado nuevo se revisa vacío y se crea solo si confirmas)
+          const want = { sections: chosen, data: filtered, plans, fileActive: plans.includes(planRoutine) ? planRoutine : null, days, allExercises: counts.exercises || [] };
+          const destinos = [...targetIds.map(id => ({ id, name: (users.find(u => u.id === id) || {}).name })), ...(newGuest ? [{ id: null, name: guestName }] : [])];
+          const listos = [];
+          for (const d of destinos) {
+            const A = await VMerge.analyze(d.id, want);
+            const r = await VMerge.review(app, A, { who: destinos.length > 1 || !d.id ? d.name : '' });
+            if (r === 'back') return false;          // vuelve a esta pantalla, con lo que habías marcado
+            if (r !== 'ok') return;                  // cancelado: no se toca nada
+            if (VMerge.hayAlgo(A)) listos.push({ d, A });
           }
-          if (wantDays || extraPlans.length) {
-            const usedDays = [...(wantDays ? (planRoutine.days || []).filter(d => dayIds.has(d.id)) : []), ...extraPlans.flatMap(r => r.days || [])];
+          if (!listos.length) return;
+          // copia interna antes de tocar un perfil que ya existe: si algo no era lo que querías,
+          // se recupera desde Copias y datos
+          if (listos.some(x => x.d.id)) { try { await DB.saveInternalBackup(`Antes de importar el archivo de ${sender}`); } catch (e) {} }
+          let añadidos = 0, cambiados = 0;
+          for (const { d, A } of listos) {
+            if (!d.id) { const g = await DB.createUser({ name: guestName, color: guestColor, isGuest: true }); A.uid = g.id; }
+            const r = await VMerge.apply(A);
+            añadidos += r.añadidos; cambiados += r.cambiados;
+          }
+          if (plans.length || days) {
+            const usedDays = [...plans.flatMap(r => r.days || []), ...(days ? (planRoutine.days || []).filter(x => days.dayIds.has(x.id)) : [])];
             await importPlaces(counts.places, usedDays);
           }
-
           await app.loadUsers();
           await app.refreshRoutine();
           app.render();
-          UI.toast(targetIds.length === 1 ? 'Importado' : `Importado a ${targetIds.length} perfiles`);
+          const partes = [añadidos ? `${añadidos} añadido${añadidos === 1 ? '' : 's'}` : '', cambiados ? `${cambiados} actualizado${cambiados === 1 ? '' : 's'}` : ''].filter(Boolean);
+          UI.toast(`Importado${partes.length ? ' · ' + partes.join(' · ') : ''}${listos.length > 1 ? ` en ${listos.length} perfiles` : ''}`);
         }},
       ],
       onMount: (root) => {
         UI.bindColorPicker(root);
         const ng = root.querySelector('[data-newguest]');
         const gbox = root.querySelector('#newGuestBox');
-        ng.addEventListener('change', () => { gbox.style.display = ng.checked ? '' : 'none'; });
+        root.querySelectorAll('input[name="impDest"]').forEach(r => r.addEventListener('change', () => { gbox.style.display = ng.checked ? '' : 'none'; }));
         root.querySelectorAll('[data-toggle]').forEach(b => b.addEventListener('click', () => {
           const items = root.querySelector(`[data-items="${b.dataset.toggle}"]`);
           const open = items.style.display === 'none';
           items.style.display = open ? '' : 'none';
           b.textContent = open ? 'ocultar' : 'editar';
-          if (open && b.dataset.toggle === 'days') { const c = root.querySelector('[data-sec="days"]'); if (c && !c.checked) c.checked = true; } // al editar días, activarlos
         }));
         root.querySelectorAll('[data-sec]').forEach(sc => sc.addEventListener('change', () => {
           root.querySelectorAll(`[data-item="${sc.dataset.sec}"]`).forEach(ic => { ic.checked = sc.checked; });
         }));
-        const daysNewName = root.querySelector('#daysNewName');
-        root.querySelectorAll('[name="daysdest"]').forEach(r => r.addEventListener('change', () => {
-          if (daysNewName) daysNewName.style.display = (root.querySelector('[name="daysdest"]:checked').value === 'new') ? '' : 'none';
-        }));
-        const pol = root.querySelector('select[name="policy"]');
-        const hint = root.querySelector('#policyHint');
-        if (pol && hint) {
-          const setHint = () => { hint.textContent = pol.value === 'duplicate'
-            ? 'Se añade como entradas NUEVAS; nunca pisa lo que ya tienes (si lo tenías idéntico, se duplica).'
-            : 'Actualiza en su sitio lo que coincida (mismo identificador); el resto se añade. Ideal para RESTAURAR tus propios datos.'; };
-          pol.addEventListener('change', setHint); setHint();
-        }
       },
     });
   }
 
+  // Solo para lo que llega por enlace al perfil invitado de ese amigo (su «espejo»):
+  // se actualiza en su sitio lo que coincida. Las importaciones a mano van por VMerge.
   async function applyImport(app, payload, targetUserId, policy, sections) {
     const data = payload.data || {};
     const duplicate = policy === 'duplicate';
@@ -1035,5 +1036,5 @@ const VData = (() => {
     return added;
   }
 
-  return { openShare, openExport, startImport, exportRoutine: doExportPlan, gatherShare, importShared, exportDay, importDay, exportNutrition, exportSession, exportProgressEntry, routeImport, checkBackupReminder, backupProfile , createImportedPlan };
+  return { openShare, openExport, startImport, restoreOnboarding, exportRoutine: doExportPlan, gatherShare, importShared, exportDay, importDay, exportNutrition, exportSession, exportProgressEntry, routeImport, checkBackupReminder, backupProfile , createImportedPlan };
 })();

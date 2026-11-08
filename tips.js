@@ -14,7 +14,7 @@ const TIPS_DATA = {
   ],
   tips: [
     // ---- Empezar ----
-    { id: 'plantilla', cat: 'empezar', title: 'Empieza con una plantilla', text: 'Más → Planes → «Nuevo plan» y elige «Full body clásico»: la semana sale hecha, con series y descansos.', shot: 'aprende/crear-plan.jpg', try: 'go:info', k: 'plan nuevo crear rutina' },
+    { id: 'plantilla', cat: 'empezar', title: 'Empieza con una plantilla', text: 'Más → Planes → «Nuevo plan» → «Plantillas de Traindía» y elige una, como «Full body clásico»: la semana sale hecha, con series y descansos.', shot: 'aprende/crear-plan.jpg', try: 'go:info', k: 'plan nuevo crear rutina' },
     { id: 'semana', cat: 'empezar', title: 'Tu semana de un vistazo', text: 'Cada día con su intensidad (fuerte, moderado o ligero) y lo que dura. Toca uno para ver qué te toca.', shot: 'aprende/week.jpg', try: 'go:week', k: 'semana dias inicio' },
     { id: 'ordenar', cat: 'empezar', title: 'Ordena los días a tu gusto', text: 'Deja pulsado un día de la semana y arrástralo a su sitio. Toca «Listo» al acabar.', shot: 'aprende/reorder.jpg', k: 'mover cambiar orden arrastrar' },
     { id: 'instalar', cat: 'empezar', title: 'Instálala como una app', text: 'Más → Ajustes → «Instalar en el móvil». Se abre a pantalla completa, con su icono, y funciona sin conexión.', shot: 'aprende/settings.jpg', try: 'go:settings', k: 'instalar icono pantalla de inicio' },
@@ -46,10 +46,11 @@ const TIPS_DATA = {
     // ---- Progreso ----
     { id: 'racha', cat: 'progreso', title: 'Tu racha de semanas', text: 'En Sesiones ves cuántas semanas seguidas llevas y un calendario coloreado por intensidad.', shot: 'aprende/sessions.jpg', try: 'go:sessions', k: 'calendario constancia semanas' },
     { id: 'amaneciste', cat: 'progreso', title: '¿Cómo amaneciste?', text: 'Al día siguiente te pregunta cómo te levantaste: igual o mejor, sube; algo cargado, mantén; peor, baja.', shot: 'aprende/amaneciste.jpg', k: 'semaforo agujetas cansado subir carga' },
-    { id: 'medidas', cat: 'progreso', title: 'Peso y medidas con gráfica', text: 'Progreso → Corporal → «+ Registrar medida». Cada medida tiene su gráfica.', shot: 'aprende/prog-body.jpg', try: 'go:progress:body', k: 'peso cintura grafica' },
-    { id: 'por-ejercicio', cat: 'progreso', title: 'La evolución de cada ejercicio', text: 'Progreso → Por ejercicio: peso máximo, 1RM estimado, volumen o repeticiones a lo largo del tiempo.', shot: 'aprende/prog-ex.jpg', try: 'go:progress:exercise', k: '1rm fuerza grafica volumen' },
-    { id: 'records', cat: 'progreso', title: 'Todos tus récords', text: 'Progreso → Récords: busca cualquier ejercicio y mira tu mejor marca.', shot: 'aprende/prog-rec.jpg', try: 'go:progress:records', k: 'record marca mejor pr' },
-    { id: 'comparativa', cat: 'progreso', title: 'Compárate con un amigo', text: 'Progreso → Comparativa: su peso o un ejercicio contra el tuyo, en la misma gráfica.', shot: 'aprende/prog-cmp.jpg', try: 'go:progress:compare', k: 'comparar amigo invitado' },
+    { id: 'resumen', cat: 'progreso', title: 'Tu progreso de un vistazo', text: 'Progreso → Resumen: tus logros recientes, tu semana frente a la pasada (o el mes, con un toque), tu racha y las series por músculo.', shot: 'aprende/prog-resumen.jpg', try: 'go:progress:summary', k: 'resumen logros racha semana mes constancia' },
+    { id: 'medidas', cat: 'progreso', title: 'Peso y medidas con gráfica', text: 'Progreso → Corporal → «+ Apuntar peso o medidas». Tu peso con su objetivo y su gráfica, y cada medida con la suya.', shot: 'aprende/prog-body.jpg', try: 'go:progress:body', k: 'peso cintura grafica' },
+    { id: 'por-ejercicio', cat: 'progreso', title: 'La evolución de cada ejercicio', text: 'Progreso → Ejercicios y toca uno: tu récord frente a la última vez y la gráfica con cada nuevo récord marcado.', shot: 'aprende/prog-ex.jpg', try: 'go:progress:exercise', k: '1rm fuerza grafica volumen' },
+    { id: 'records', cat: 'progreso', title: 'Todos tus récords', text: 'Progreso → Ejercicios: cada ejercicio con su mejor marca. Ordénalos por «Hace tiempo» para ver lo que llevas más sin superar.', shot: 'aprende/prog-rec.jpg', try: 'go:progress:exercise', k: 'record marca mejor pr' },
+    { id: 'comparativa', cat: 'progreso', title: 'Compárate con un amigo', text: 'Cuando un amigo te pase su enlace de «Compartir mi progreso», aparece Progreso → Comparar: vuestro mes, lo que hacéis los dos y la gráfica.', shot: 'aprende/prog-cmp.jpg', try: 'go:progress:compare', k: 'comparar amigo invitado' },
 
     // ---- Nutrición ----
     { id: 'pauta', cat: 'nutricion', title: 'Tu pauta de comidas', text: 'Cada comida del día en su tarjeta. La app elige sola «Día de entreno» o «Día de descanso» mirando tu plan.', shot: 'aprende/nutricion-pauta.jpg', try: 'go:nutrition', k: 'dieta comida nutricionista dia descanso' },
@@ -64,6 +65,7 @@ const TIPS_DATA = {
     { id: 'copia', cat: 'compartir', title: 'Haz una copia completa', text: 'Más → Copias y datos → «Hacer copia completa ahora». Con ese archivo recuperas todo en otro móvil.', shot: 'aprende/backups.jpg', try: 'go:backups', k: 'backup copia seguridad movil nuevo' },
     { id: 'pdf', cat: 'compartir', title: 'El entreno en PDF para tu entrenador', text: 'En una sesión, «Compartir» → «PDF para tu entrenador».', shot: 'aprende/session.jpg', k: 'pdf entrenador enviar sesion' },
     { id: 'invitados', cat: 'compartir', title: 'Entrena con amigos en tu móvil', text: 'Más → Perfiles: añade a alguien y apunta sus entrenos aparte, sin mezclarlos con los tuyos.', shot: 'aprende/profiles.jpg', try: 'go:profiles', k: 'perfil invitado pareja' },
+    { id: 'importar', cat: 'compartir', title: 'Importa sin duplicar', text: 'Al importar un archivo, antes de tocar nada ves qué se añade, qué ya tienes igual y qué es distinto, lado a lado para elegir. Nada se duplica.', shot: 'aprende/importar.jpg', k: 'importar archivo duplicar copia json' },
     { id: 'exportar', cat: 'compartir', title: 'Exporta e importa lo que quieras', text: 'El botón ⇧ de arriba: exporta tu plan, un día o tus sesiones, e importa lo que te pasen.', shot: 'aprende/share-menu.jpg', k: 'exportar importar archivo json' },
 
     // ---- La app ----

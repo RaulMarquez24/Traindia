@@ -1,0 +1,22 @@
+{
+  "id": "traindia",
+  "name": "Traindía",
+  "services": [
+    {
+      "key": "web",
+      "name": "Traindía",
+      "icon": "smartphone",
+      "framework": "unknown",
+      "command": "npx --yes http-server -p {{port}} -c-1 .",
+      "basePort": 8123,
+      "urlHost": "localhost",
+      "env": {},
+      "envFiles": [],
+      "dependsOn": [],
+      "readyPattern": "Available on",
+      "match": { "gitRemote": "https://github.com/RaulMarquez24/Traindia.git", "folderName": "pwa_cnp" }
+    }
+  ],
+  "createdAt": 0,
+  "updatedAt": 0
+}

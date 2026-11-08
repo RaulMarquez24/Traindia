@@ -303,7 +303,7 @@ const app = {
     this._updForce = true;
     const r = await this.checkUpdate();
     if (r === true) UI.toast('Hay una versión nueva: se aplica en un momento');
-    else { this._updForce = false; UI.toast(r === false ? 'Ya tienes la última versión (v2.64.3)' : 'No se pudo comprobar. Prueba en un rato', r === false ? undefined : 'err'); }
+    else { this._updForce = false; UI.toast(r === false ? 'Ya tienes la última versión (v2.65.0)' : 'No se pudo comprobar. Prueba en un rato', r === false ? undefined : 'err'); }
   },
 
   registerViews() {
@@ -315,7 +315,7 @@ const app = {
       guide:    { render: (a, p) => VPlan.guide(a, p),  bind: (a, r, p) => VPlan.guideBind(a, r, p) },
       info:     { render: (a, p) => VPlan.info(a, p),      bind: (a, r, p) => VPlan.infoBind(a, r, p) },
 
-      sessions: { render: (a, p) => VSessions.list(a, p),   bind: (a, r, p) => VSessions.listBind(a, r, p) },
+      sessions: { render: (a, p) => VSessions.list(a, p),   bind: (a, r, p) => VSessions.listBind(a, r, p), skeleton: (a, p) => VSessions.listSkeleton(a, p) },
       session:  { render: (a, p) => VSessions.detail(a, p), bind: (a, r, p) => VSessions.detailBind(a, r, p) },
       live:     { render: (a, p) => VSessions.live(a, p),   bind: (a, r, p) => VSessions.liveBind(a, r, p) },
 
@@ -394,14 +394,27 @@ const app = {
     this.updateNavActive();
     const main = document.getElementById('mainContent');
     const def = this.views[this.currentView] || this.views.week;
-    main.innerHTML = `<div class="view active"><div class="loading">Cargando…</div></div>`;
+    // Cada render lleva su número: si mientras carga se pide otra pantalla, este ya no pinta nada
+    // (antes, una pantalla lenta podía pisar a la que tocaste después).
+    const seq = this._renderSeq = (this._renderSeq || 0) + 1;
+    const params = this.params;
+    // Si tarda, en vez de un «Cargando…» se ve el esqueleto de la pantalla (lo fijo de verdad y
+    // skeletons donde van los datos). Si es casi instantánea no se enseña, para que no parpadee.
+    const skTimer = setTimeout(() => {
+      if (seq !== this._renderSeq) return;
+      let skHTML = '';
+      try { skHTML = def.skeleton ? def.skeleton(this, params) : UI.skView(); } catch (e) { skHTML = UI.skView(); }
+      main.innerHTML = `<div class="view active view-sk">${skHTML}</div>`;
+    }, 80);
     let html = '';
     try {
-      html = await def.render(this, this.params);
+      html = await def.render(this, params);
     } catch (e) {
       console.error(e);
       html = `<div class="empty-state"><p>Error al cargar la vista.</p><p class="dim">${UI.esc(e.message || e)}</p></div>`;
     }
+    clearTimeout(skTimer);
+    if (seq !== this._renderSeq) return; // ya se está pintando otra pantalla
     main.innerHTML = `<div class="view active">${html}</div>`;
     this.updateHeader();   // otra vez: algunas vistas solo saben su título tras cargar sus datos
     this.bindLinks(main);
@@ -492,11 +505,12 @@ const app = {
           <div class="onb-eyebrow">Bienvenido a Traindía</div>
           <h2>Configura tu perfil</h2>
           <p class="onb-sub">Este es el perfil principal de este dispositivo. La app arrancará siempre con él. Podrás cambiarlo todo desde Ajustes.</p>
+          <button type="button" class="onb-restore" id="onbRestore">${UI.icon('upload', 16)}<span><strong>¿Ya usabas Traindía en otro móvil?</strong><span>Recupera tu copia completa: tu nombre, planes, sesiones y progreso.</span></span><span class="chev">›</span></button>
           <div id="onbForm">
             ${UI.field('Tu nombre', UI.input('name', '', { placeholder: 'Ej: Raúl' }))}
             ${UI.field('Color', UI.colorPicker('color', UI.COLORS[0]))}
           </div>
-          <span class="field-label">Empieza con</span>
+          <span class="field-label">¿Cómo quieres empezar tu plan?</span>
           <div class="plan-choices" id="planChoices">${VPlan.planChoicesHTML(planType)}</div>
           <button class="btn primary block" id="onbStart">Empezar</button>
         </div>
@@ -512,6 +526,7 @@ const app = {
       window.scrollTo(0, 0);
     });
     VPlan.bindPlanChoices(host, (v) => { planType = v; });
+    host.querySelector('#onbRestore').addEventListener('click', () => VData.restoreOnboarding(this, async (user) => this.finishOnboarding(host, user)));
     const start = host.querySelector('#onbStart');
     start.addEventListener('click', async () => {
       const data = UI.readForm(host.querySelector('#onbForm'));
@@ -521,21 +536,27 @@ const app = {
       const tplId = planType.startsWith('tpl:') ? planType.slice(4) : null;
       // «Plan de tu entrenador»: se empieza con uno en blanco y se abre el importador.
       await DB.createPlan(user.id, tplId ? 'template' : 'custom', { activate: true, templateId: tplId });
-      // Todo nace en el formato actual: nada que migrar.
-      await DB.saveSettings({ mainUserId: user.id, activeUserId: user.id, seeded: true, version: 2, dataVersion: 10, cardioTimeMetric: true, legacyPlanRetiredV1: true });
-      host.remove();
-      this.markHasProfile(); // ya hay perfil: se oculta la presentación y se muestra la app
-      document.getElementById('appShell').style.display = '';
-      this.settings = await DB.getSettings();
-      await this.loadUsers();
-      await this.refreshRoutine();
-      await DB.ensurePlaces(this.routine);
-      try { localStorage.setItem('traindia-welcomed', '1'); } catch (e) {} // viene de la presentación
-      UI.toast(`¡Listo, ${user.name}!`);
-      this.go('week', {}, true);
+      await this.finishOnboarding(host, user);
       if (planType === 'ai') setTimeout(() => VPlanAI.open(this), 400);
+      else if (planType === 'import') setTimeout(() => VData.startImport(this), 400);
       else setTimeout(() => VShare.checkPending(this), 500); // llegó por el enlace de un amigo antes de tener perfil
     });
+  },
+
+  // Deja la app lista tras el alta (perfil nuevo o copia recuperada).
+  async finishOnboarding(host, user) {
+    // Todo nace en el formato actual: nada que migrar.
+    await DB.saveSettings({ mainUserId: user.id, activeUserId: user.id, seeded: true, version: 2, dataVersion: 10, cardioTimeMetric: true, legacyPlanRetiredV1: true });
+    host.remove();
+    this.markHasProfile(); // ya hay perfil: se oculta la presentación y se muestra la app
+    document.getElementById('appShell').style.display = '';
+    this.settings = await DB.getSettings();
+    await this.loadUsers();
+    await this.refreshRoutine();
+    await DB.ensurePlaces(this.routine);
+    try { localStorage.setItem('traindia-welcomed', '1'); } catch (e) {} // viene de la presentación
+    UI.toast(`¡Listo, ${user.name}!`);
+    this.go('week', {}, true);
   },
 
 
@@ -899,7 +920,7 @@ const app = {
                 tipo: d.tipo,
                 mensaje: d.mensaje.trim(),
                 contacto: (d.contacto || '').trim() || '(no indicado)',
-                version: 'v2.64.3',
+                version: 'v2.65.0',
                 perfil: (this.mainUser && this.mainUser.name) || '',
                 navegador: navigator.userAgent,
               }),
@@ -960,7 +981,7 @@ const app = {
         <div class="more-group">${g.rows.map(r => `<button class="more-row" ${r.feedback ? 'data-feedback' : `data-link="${r.v}"`}>
           <span class="more-ic" style="background:${g.color}">${UI.icon(r.icon, 20)}</span>
           <span class="more-txt"><strong>${r.label}</strong><span${r.warn ? ' class="warn"' : ''}>${UI.esc(r.sub)}</span></span><span class="chev">›</span></button>`).join('')}</div>`).join('')}
-      <p class="version-foot">Traindía · v2.64.3<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
+      <p class="version-foot">Traindía · v2.65.0<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
     </div>`;
   },
   bindMore(root) {
@@ -1409,7 +1430,7 @@ const app = {
         ${(window.traindiaInstalled && window.traindiaInstalled())
           ? `<div class="more-row set-static"><span class="more-ic" style="background:var(--light)">${UI.icon('check', 18)}</span><span class="more-txt"><strong>Instalada en este móvil</strong><span>La estás usando como app</span></span></div>`
           : row('id="installRow"', 'download', 'var(--light)', 'Instalar en el móvil', 'Como una app, a pantalla completa y sin conexión')}
-        ${row('id="checkUpd"', 'repeat', 'var(--light)', 'Buscar actualizaciones', 'Tienes la v2.64.3. Se actualiza sola, esto es por si quieres forzarlo')}
+        ${row('id="checkUpd"', 'repeat', 'var(--light)', 'Buscar actualizaciones', 'Tienes la v2.65.0. Se actualiza sola, esto es por si quieres forzarlo')}
         ${row('id="seeLanding"', 'info', 'var(--rest)', 'Ver la presentación', 'Qué es Traindía y cómo funciona')}
         ${row('id="seeRepo"', 'code', 'var(--rest)', 'Código en GitHub', 'Novedades de cada versión', `<span class="chev">↗</span>`)}
       </div>

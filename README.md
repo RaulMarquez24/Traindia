@@ -50,14 +50,14 @@ Sin cuentas, sin servidores, sin dependencias. Tus datos viven en tu dispositivo
 <td width="50%" align="center">
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="ui-progreso-dark.jpg">
-  <img src="ui-progreso-light.jpg" alt="Progreso: racha de semanas, total de entrenos y gráfica de peso corporal">
+  <img src="ui-progreso-light.jpg" alt="Progreso: peso corporal con su logro, el ritmo por semana y la gráfica bajando">
 </picture>
 <br><sub><b>La gráfica no discute</b></sub>
 </td>
 <td width="50%" align="center">
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="ui-records-dark.jpg">
-  <img src="ui-records-light.jpg" alt="Récords: peso máximo, 1RM estimado, repeticiones máximas y kilos totales levantados">
+  <img src="ui-records-light.jpg" alt="Récords: el peso máximo de cada ejercicio con su fecha, frente a la última vez">
 </picture>
 <br><sub><b>Cada récord, con su fecha</b></sub>
 </td>
@@ -103,9 +103,10 @@ Nació como un plan de entrenamiento concreto y evolucionó a una herramienta ge
 - Historial **agrupado por día** con **filtros por año / mes / día** y por autor.
 
 #### 📈 Progreso
-- **Peso corporal y medidas** por fecha.
-- **Historial por ejercicio**: peso máximo, volumen y reps a lo largo del tiempo.
-- **Comparativa** entre el perfil principal y un invitado.
+- **Resumen**: tus logros recientes (récords, «lo mejor desde…», tu peso más bajo desde…), tu semana o tu mes frente al anterior, la constancia en semanas seguidas y las series por músculo.
+- **Corporal**: peso con objetivo (bajar, subir o mantener), ritmo por semana, pesajes o tendencia, y medidas.
+- **Ejercicios**: cada uno con su récord y su mini gráfica; dentro, récord frente a la última vez, gráfica con cada nuevo récord marcado e historial. En cardio, mejores tiempos en 1, 3, 5 y 10 km.
+- **Comparar** con un amigo que te pase su enlace: vuestro mes, lo que hacéis los dos y la gráfica de ambos.
 - Gráficas **SVG** hechas a mano (sin librerías).
 
 #### 👥 Perfiles
