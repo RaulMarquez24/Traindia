@@ -18,6 +18,7 @@ const VNews = (() => {
   // Vídeos verticales en tutoriales/. No los guarda el SW: se bajan solo al verlos.
   // teaser: unos segundos sin sonido (≈170 KB) que se ven de fondo en la historia.
   const TUTOS = [
+    { id: 'progreso', title: 'Tu progreso, en un minuto', sub: 'Logros, récords y tu peso, de un vistazo', dur: '1:01', src: 'tutoriales/progreso.mp4', poster: 'tutoriales/progreso.jpg', teaser: 'tutoriales/progreso-teaser.mp4', try: 'go:progress:summary' },
     { id: 'plan-ia', title: 'Tu plan del entrenador con una IA', sub: 'Del PDF a tu semana en 3 pasos', dur: '1:27', src: 'tutoriales/plan-ia.mp4', poster: 'tutoriales/plan-ia.jpg', teaser: 'tutoriales/plan-ia-teaser.mp4', try: 'planAI' },
   ];
   // Color por tipo: Nuevo, morado; Mejora, verde azulado.
@@ -39,10 +40,8 @@ const VNews = (() => {
   const NEWS = [
     // OJO: al publicar, poner aquí la fecha del día de la subida (id y date)
     { id: '2026-11-08', date: '2026-11-08', stories: [
-      { tag: 'nuevo', title: 'Tu progreso, de un vistazo', text: 'Progreso empieza con un resumen: tus logros recientes, tu semana frente a la pasada (o el mes, con un toque) y tu racha de semanas entrenando.', shots: ['novedades/resumen-1.jpg', 'novedades/resumen-2.jpg'], try: 'go:progress:summary',
-        card: { lines: ['Tu progreso,', 'de un', 'vistazo'], mark: 0, go: 'Verlo',
-          crop: { img: 'novedades/resumen-1.jpg', iw: 288, x: 9, y: 109, w: 220, h: 145, r: 16, b: 56, rot: -5 },
-          chip: { icon: 'trendUp', txt: 'tu semana vs. la pasada', l: 14, b: 182, rot: 3 } } },
+      { tag: 'nuevo', title: 'Tu progreso, de un vistazo', text: 'Progreso empieza con un resumen: tus logros recientes, tu semana frente a la pasada (o el mes, con un toque) y tu racha de semanas entrenando.', video: 'progreso', try: 'go:progress:summary',
+        card: { lines: ['Tu progreso,', 'de un', 'vistazo'], mark: 0 } },
       { tag: 'mejora', title: 'Cada récord, a la vista', text: 'En Progreso → Ejercicios, cada uno con su récord. Dentro, tu récord frente a la última vez y la gráfica marca cada vez que lo batiste. En cardio, tu mejor tiempo en cada distancia: 1 km, 5 km, 10 km…', shots: ['novedades/records-1.jpg', 'novedades/records-2.jpg'], try: 'go:progress:exercise',
         card: { lines: ['Cada récord,', 'a la', 'vista'], mark: 0, go: 'Verlos',
           crop: { img: 'novedades/records-2.jpg', iw: 267, x: 13, y: 285, w: 236, h: 129, r: 14, b: 78, rot: -4 },
