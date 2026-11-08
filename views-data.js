@@ -355,6 +355,51 @@ const VData = (() => {
     });
   }
 
+  // ---- Alta: «¿Ya usabas Traindía?» → recupera la copia completa en un perfil nuevo ----
+  // Se crea el perfil con el nombre y el color de la copia y entra todo (no hay nada
+  // con lo que chocar: el perfil está vacío). Después, onDone(user) termina el alta.
+  function restoreOnboarding(app, onDone) {
+    const inp = document.createElement('input');
+    inp.type = 'file'; // sin 'accept': en Android los .json de WhatsApp llegan como octet-stream
+    inp.addEventListener('change', () => {
+      const f = inp.files[0]; if (!f) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        let p = null;
+        try { p = JSON.parse(reader.result); } catch (e) {}
+        if (!p || !isExportFormat(p.format) || !p.data) { UI.toast('Ese archivo no es una copia de Traindía', 'err'); return; }
+        if (p.kind !== 'profile' || !(p.data.routines || []).length && !(p.data.sessions || []).length) {
+          UI.toast('Ese archivo no es una copia completa. Crea tu perfil y luego impórtalo desde Compartir → Importar.', 'err'); return;
+        }
+        const d = p.data, n = (k) => (d[k] || []).length;
+        const partes = [[n('routines'), 'plan', 'planes'], [n('sessions'), 'sesión', 'sesiones'], [n('progress'), 'registro de progreso', 'registros de progreso'], [n('nutrition'), 'pauta', 'pautas'], [n('files'), 'documento', 'documentos']]
+          .filter(([x]) => x).map(([x, a, b]) => `${x} ${x === 1 ? a : b}`);
+        const cuando = p.exportedAt ? new Date(p.exportedAt).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' }) : '';
+        UI.modal({
+          title: 'Recuperar tu copia',
+          bodyHTML: `<p class="modal-text">Copia de <strong>${UI.esc(p.user?.name || 'Traindía')}</strong>${cuando ? ` del ${UI.esc(cuando)}` : ''}.</p>
+            <div class="mg-row add"><span class="mg-ic">${UI.icon('upload', 16)}</span><div><strong>Se recupera</strong><span>${UI.esc(partes.join(' · '))}</span></div></div>
+            <p class="field-hint">Tu perfil se crea con este nombre; lo puedes cambiar en Ajustes.</p>`,
+          actions: [
+            { label: 'Cancelar', kind: 'ghost' },
+            { label: 'Recuperar', kind: 'primary', onClick: async () => {
+              const user = await DB.createUser({ name: p.user?.name || 'Yo', color: p.user?.color || UI.COLORS[0], isMain: true });
+              const rts = d.routines || [];
+              const activo = rts.find(r => r.isPrimary) || rts[0] || null;
+              const sections = new Set(['exercises', 'sessions', 'progress', 'nutrition', 'files'].filter(k => n(k)));
+              const A = await VMerge.analyze(user.id, { sections, data: d, plans: rts, fileActive: activo, days: null, allExercises: d.exercises || [] });
+              await VMerge.apply(A);
+              await importPlaces(d.places, rts.flatMap(r => r.days || []));
+              await onDone(user);
+            } },
+          ],
+        });
+      };
+      reader.readAsText(f);
+    });
+    inp.click();
+  }
+
   function routeImport(app, payload) {
     if (payload && !isExportFormat(payload.format) && typeof VPlanAI !== 'undefined' && VPlanAI.esPlan(payload)) { VPlanAI.preview(app, payload); return; } // plan de la IA en su formato
     if (!payload || !isExportFormat(payload.format) || !payload.data) { UI.toast('No es un export de Traindía', 'err'); return; }
@@ -452,12 +497,17 @@ const VData = (() => {
           setTimeout(() => VReview.importar(app, { userId: app.mainUser.id, routine: { days }, exercises, from: sender, finalLabel: 'Añadir plan',
             onBack: () => importPlan(app, payload),
             onConfirm: async (links) => {
-              await createImportedPlan(app.mainUser.id, routine, chosen, name, exercises, { links });
+              const prev = app.routine;
+              const rt = await createImportedPlan(app.mainUser.id, routine, chosen, name, exercises, { links });
               await importPlaces(payload.data.places, days);
+              // Si tu plan activo está en blanco (el del alta, sin un solo ejercicio), el nuevo
+              // pasa a ser el activo y el vacío sobra.
+              const vacio = prev && prev.userId === app.mainUser.id && !(prev.days || []).some(d => (d.blocks || []).some(b => (b.exercises || []).length));
+              if (vacio) { await DB.setActivePlan(app.mainUser.id, rt.id); try { await DB.deletePlan(prev.id); } catch (e) {} }
               await app.refreshRoutine();
               app.render();
               if (payload.onDone) payload.onDone();
-              UI.toast('Plan añadido · actívalo en "El plan"');
+              UI.toast(vacio ? `«${rt.name}» es ahora tu plan` : 'Plan añadido · actívalo en "El plan"');
             } }), 50);
         } },
       ],
@@ -988,5 +1038,5 @@ const VData = (() => {
     return added;
   }
 
-  return { openShare, openExport, startImport, exportRoutine: doExportPlan, gatherShare, importShared, exportDay, importDay, exportNutrition, exportSession, exportProgressEntry, routeImport, checkBackupReminder, backupProfile , createImportedPlan };
+  return { openShare, openExport, startImport, restoreOnboarding, exportRoutine: doExportPlan, gatherShare, importShared, exportDay, importDay, exportNutrition, exportSession, exportProgressEntry, routeImport, checkBackupReminder, backupProfile , createImportedPlan };
 })();

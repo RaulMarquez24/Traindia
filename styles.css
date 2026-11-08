@@ -400,6 +400,15 @@ body.has-active-bar .pl-new-wrap { bottom: calc(var(--nav-h) + var(--safe-bottom
 .plan-choice-meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-top: 4px; font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; letter-spacing: .02em; color: var(--ink-soft); }
 .plan-choice-more { font-family: 'Inter Tight', sans-serif; font-size: 13px; font-weight: 700; color: var(--strong); padding: 4px 0; }
 .plan-choice-soon { margin: 0; text-align: center; }
+.plan-choice-group { font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-dim); margin: 8px 2px 0; }
+.plan-choice-group:first-child { margin-top: 0; }
+.onb-restore { display: flex; align-items: center; gap: 12px; width: 100%; margin: 0 0 22px; padding: 14px; text-align: left; background: transparent; border: 1.5px dashed var(--line); border-radius: 12px; color: var(--ink-soft); cursor: pointer; font-family: inherit; }
+.onb-restore > svg { flex-shrink: 0; color: var(--strong); }
+.onb-restore > span:nth-child(2) { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.onb-restore strong { font-size: 14px; color: var(--ink); }
+.onb-restore span span { font-size: 12.5px; line-height: 1.35; }
+.onb-restore .chev { color: var(--ink-dim); font-size: 18px; }
+.onb-restore:active { transform: scale(.99); }
 /* Vista previa de una plantilla */
 .tp-days { display: flex; flex-direction: column; gap: 8px; }
 .tp-day { background: var(--bg-card); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }

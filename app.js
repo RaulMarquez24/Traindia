@@ -492,11 +492,12 @@ const app = {
           <div class="onb-eyebrow">Bienvenido a Traindía</div>
           <h2>Configura tu perfil</h2>
           <p class="onb-sub">Este es el perfil principal de este dispositivo. La app arrancará siempre con él. Podrás cambiarlo todo desde Ajustes.</p>
+          <button type="button" class="onb-restore" id="onbRestore">${UI.icon('upload', 16)}<span><strong>¿Ya usabas Traindía en otro móvil?</strong><span>Recupera tu copia completa: tu nombre, planes, sesiones y progreso.</span></span><span class="chev">›</span></button>
           <div id="onbForm">
             ${UI.field('Tu nombre', UI.input('name', '', { placeholder: 'Ej: Raúl' }))}
             ${UI.field('Color', UI.colorPicker('color', UI.COLORS[0]))}
           </div>
-          <span class="field-label">Empieza con</span>
+          <span class="field-label">Tu plan</span>
           <div class="plan-choices" id="planChoices">${VPlan.planChoicesHTML(planType)}</div>
           <button class="btn primary block" id="onbStart">Empezar</button>
         </div>
@@ -512,6 +513,7 @@ const app = {
       window.scrollTo(0, 0);
     });
     VPlan.bindPlanChoices(host, (v) => { planType = v; });
+    host.querySelector('#onbRestore').addEventListener('click', () => VData.restoreOnboarding(this, async (user) => this.finishOnboarding(host, user)));
     const start = host.querySelector('#onbStart');
     start.addEventListener('click', async () => {
       const data = UI.readForm(host.querySelector('#onbForm'));
@@ -521,21 +523,27 @@ const app = {
       const tplId = planType.startsWith('tpl:') ? planType.slice(4) : null;
       // «Plan de tu entrenador»: se empieza con uno en blanco y se abre el importador.
       await DB.createPlan(user.id, tplId ? 'template' : 'custom', { activate: true, templateId: tplId });
-      // Todo nace en el formato actual: nada que migrar.
-      await DB.saveSettings({ mainUserId: user.id, activeUserId: user.id, seeded: true, version: 2, dataVersion: 10, cardioTimeMetric: true, legacyPlanRetiredV1: true });
-      host.remove();
-      this.markHasProfile(); // ya hay perfil: se oculta la presentación y se muestra la app
-      document.getElementById('appShell').style.display = '';
-      this.settings = await DB.getSettings();
-      await this.loadUsers();
-      await this.refreshRoutine();
-      await DB.ensurePlaces(this.routine);
-      try { localStorage.setItem('traindia-welcomed', '1'); } catch (e) {} // viene de la presentación
-      UI.toast(`¡Listo, ${user.name}!`);
-      this.go('week', {}, true);
-      if (planType === 'ai') setTimeout(() => VPlanAI.open(this), 400);
+      await this.finishOnboarding(host, user);
+      if (planType === 'ai' || planType === 'ai-doc') setTimeout(() => VPlanAI.open(this, { mode: planType === 'ai' ? 'ia' : 'doc' }), 400);
+      else if (planType === 'import') setTimeout(() => VData.startImport(this), 400);
       else setTimeout(() => VShare.checkPending(this), 500); // llegó por el enlace de un amigo antes de tener perfil
     });
+  },
+
+  // Deja la app lista tras el alta (perfil nuevo o copia recuperada).
+  async finishOnboarding(host, user) {
+    // Todo nace en el formato actual: nada que migrar.
+    await DB.saveSettings({ mainUserId: user.id, activeUserId: user.id, seeded: true, version: 2, dataVersion: 10, cardioTimeMetric: true, legacyPlanRetiredV1: true });
+    host.remove();
+    this.markHasProfile(); // ya hay perfil: se oculta la presentación y se muestra la app
+    document.getElementById('appShell').style.display = '';
+    this.settings = await DB.getSettings();
+    await this.loadUsers();
+    await this.refreshRoutine();
+    await DB.ensurePlaces(this.routine);
+    try { localStorage.setItem('traindia-welcomed', '1'); } catch (e) {} // viene de la presentación
+    UI.toast(`¡Listo, ${user.name}!`);
+    this.go('week', {}, true);
   },
 
 

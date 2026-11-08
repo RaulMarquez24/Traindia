@@ -1086,8 +1086,9 @@ const VPlan = (() => {
 `;
   }
 
-  // Tarjetas para elegir con qué empezar un plan (alta y «Crear plan»).
-  // Valor: 'tpl:<id>' para una plantilla o 'custom' para uno en blanco.
+  // Tarjetas para elegir con qué empezar un plan (alta y «Crear plan»), por situación:
+  // ya tienes uno (de tu entrenador → IA; por Traindía → importar) o empiezas uno nuevo.
+  // Valor: 'ai-doc' | 'import' | 'tpl:<id>' | 'ai' | 'custom'.
   function planChoicesHTML(selected) {
     const tpls = typeof TEMPLATES !== 'undefined' ? TEMPLATES.list : [];
     const card = (value, title, sub, meta, badge) => `
@@ -1096,11 +1097,15 @@ const VPlan = (() => {
         <span class="dim">${sub}</span>
         ${meta ? `<span class="plan-choice-meta">${meta}</span>` : ''}
       </button>`;
-    return tpls.map((t, i) => card(`tpl:${t.id}`, UI.esc(t.name), UI.esc(t.tagline),
+    return '<div class="plan-choice-group">Ya tengo un plan</div>'
+      + card('ai-doc', 'De mi entrenador', 'En PDF, fotos o texto. Una IA lo pasa a Traindía con sus series y cargas.', '', 'Beta')
+      + card('import', 'Me lo han pasado por Traindía', 'Un archivo o un enlace de un amigo o de tu entrenador.', '', '')
+      + '<div class="plan-choice-group">Empezar uno nuevo</div>'
+      + tpls.map((t, i) => card(`tpl:${t.id}`, UI.esc(t.name), UI.esc(t.tagline),
         `<span>${UI.esc(t.frequency)} · ${UI.esc(t.sessionTime)} · ${UI.esc(t.level)}</span><span class="plan-choice-more" data-preview="${t.id}">Ver qué incluye ›</span>`, i === 0 ? 'Recomendada' : ''))
       .join('')
-      + card('ai', 'Con una IA', 'El PDF o las fotos de tu entrenador, o que te lo proponga la IA. Usa tus ejercicios, sin repetirlos.', '', 'Beta')
-      + card('custom', 'Plan en blanco', '7 días vacíos que montas a tu medida: tus ejercicios, tus días.', '', '')
+      + card('ai', 'Que me lo prepare una IA', 'Le cuentas tu objetivo, tus días y tu material, y te propone uno.', '', 'Beta')
+      + card('custom', 'En blanco', '7 días vacíos que montas a tu medida: tus ejercicios, tus días.', '', '')
       + '<p class="field-hint plan-choice-soon">Más plantillas en camino.</p>';
   }
   function bindPlanChoices(root, onChange) {
@@ -1285,7 +1290,7 @@ const VPlan = (() => {
     UI.modal({
       title: 'Crear plan', size: 'wide',
       bodyHTML: `<div id="newPlanForm">
-        <span class="field-label">Empieza con</span>
+        <span class="field-label">Tu plan</span>
         <div class="plan-choices" id="planChoices">${planChoicesHTML(type)}</div>
         <div id="npName">${UI.field('Nombre (opcional)', UI.input('name', '', { placeholder: 'Si lo dejas vacío, el de la plantilla' }))}</div>
         <p class="field-hint" id="npAiHint" hidden>El nombre lo pones al final, cuando veas el plan que te ha hecho la IA.</p>
@@ -1294,7 +1299,8 @@ const VPlan = (() => {
         { label: 'Cancelar', kind: 'ghost' },
         { label: 'Crear y activar', kind: 'primary', onClick: async (rootEl) => {
           const d = UI.readForm(rootEl.querySelector('#newPlanForm'));
-          if (type === 'ai') { setTimeout(() => VPlanAI.open(app), 50); return; } // el plan lo crea el importador
+          if (type === 'ai' || type === 'ai-doc') { setTimeout(() => VPlanAI.open(app, { mode: type === 'ai' ? 'ia' : 'doc' }), 50); return; } // el plan lo crea el importador
+          if (type === 'import') { setTimeout(() => VData.startImport(app), 50); return; }
           const tplId = type.startsWith('tpl:') ? type.slice(4) : null;
           await DB.createPlan(app.activeUser.id, tplId ? 'template' : 'custom', { name: d.name.trim() || undefined, activate: true, templateId: tplId });
           await app.refreshRoutine();
@@ -1305,10 +1311,10 @@ const VPlan = (() => {
       onMount: (rootEl) => {
         // Con IA aquí no se crea nada todavía: se abre el asistente (el nombre va al final)
         const sync = () => {
-          const ai = type === 'ai';
-          rootEl.querySelector('#npName').hidden = ai;
+          const ai = type === 'ai' || type === 'ai-doc', fuera = ai || type === 'import';
+          rootEl.querySelector('#npName').hidden = fuera;
           rootEl.querySelector('#npAiHint').hidden = !ai;
-          rootEl.querySelector('.modal-actions .btn.primary').textContent = ai ? 'Continuar ›' : 'Crear y activar';
+          rootEl.querySelector('.modal-actions .btn.primary').textContent = fuera ? 'Continuar ›' : 'Crear y activar';
         };
         bindPlanChoices(rootEl, (v) => { type = v; sync(); });
         sync();

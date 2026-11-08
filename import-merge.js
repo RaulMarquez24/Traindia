@@ -107,6 +107,7 @@ const VMerge = (() => {
     const usados = new Set();
     const tieneEj = (rt) => (rt.days || []).some(d => (d.blocks || []).some(b => (b.exercises || []).length));
     const myActive = mine.routines.find(r => r.isPrimary) || null;
+    A.activa = !myActive ? want.fileActive : null; // sin plan activo (perfil vacío): el activo del archivo lo es
     if (want.fileActive && myActive && !tieneEj(myActive) && (want.plans || []).includes(want.fileActive)) {
       // tu plan activo está en blanco (p. ej. el de un perfil recién creado): pasa a ser el activo del archivo
       A.swap = { mine: myActive, theirs: want.fileActive };
@@ -461,7 +462,7 @@ const VMerge = (() => {
       const t = it.theirs;
       if (it.status === 'nuevo') {
         const id = await libre('routines', t.id, 'rt');
-        await DB.put('routines', { ...t, id, userId: uid, planType: t.planType === 'template' ? 'template' : (t.planType || 'custom'), days: await remapDays(t.days), isPrimary: false, order: orden++ });
+        await DB.put('routines', { ...t, id, userId: uid, planType: t.planType === 'template' ? 'template' : (t.planType || 'custom'), days: await remapDays(t.days), isPrimary: t === A.activa, order: orden++ });
         planMap[t.id] = id; n.añadidos++;
       } else {
         planMap[t.id] = it.mine.id;
