@@ -122,7 +122,12 @@ const VShare = (() => {
     let txt = '';
     try { txt = await navigator.clipboard.readText(); } catch (e) {}
     if (parseLink(txt)) { open(app, txt); return true; }
-    UI.toast(txt ? 'Lo que tienes copiado no es un enlace de Traindía' : 'No hay ningún enlace copiado', 'err');
+    // El navegador no deja leer lo copiado (permiso, Firefox, dentro de un marco…) o no era un enlace:
+    // en vez de decir «no hay nada», se deja pegarlo a mano.
+    const v = await UI.prompt({ title: 'Pega el enlace de tu amigo', label: txt ? 'Lo que tenías copiado no era un enlace de Traindía. Pégalo aquí:' : 'Mantén pulsado aquí y elige «Pegar»:', placeholder: 'https://traindia.raulmarquez.dev/#s=…', confirmLabel: 'Abrir' });
+    if (v == null) return false;
+    if (parseLink(v)) { open(app, v.trim()); return true; }
+    UI.toast('Eso no es un enlace de Traindía', 'err');
     return false;
   }
 
@@ -173,14 +178,16 @@ const VShare = (() => {
       return true;
     }
     UI.toast('Abriendo lo que te han compartido…');
-    let payload;
+    let payload, r = null;
     try {
-      const r = await api(`/share/${l.id}`);
+      r = await api(`/share/${l.id}`);
       payload = await unseal(r.data, l.key);
     } catch (e) {
+      // sin respuesta (o rechazada) es cosa del servidor o de la conexión, no del enlace
+      const sinServidor = !r && !(e && e.status === 404);
       UI.modal({
         title: 'No se ha podido abrir',
-        bodyHTML: `<p class="modal-text">${e && e.status === 404 ? `Este enlace ha caducado o lo han retirado (duran ${TTL_TXT}). Pídele que te mande uno nuevo.` : navigator.onLine === false ? 'Sin conexión: vuelve a abrirlo cuando tengas internet.' : 'El enlace está incompleto o no se ha podido descifrar. Pídele que te lo reenvíe.'}</p>`,
+        bodyHTML: `<p class="modal-text">${e && e.status === 404 ? `Este enlace ha caducado o lo han retirado (duran ${TTL_TXT}). Pídele que te mande uno nuevo.` : navigator.onLine === false ? 'Sin conexión: vuelve a abrirlo cuando tengas internet.' : sinServidor ? 'No se ha podido conectar con el servidor de los enlaces. Inténtalo de nuevo en un rato.' : 'El enlace está incompleto o no se ha podido descifrar. Pídele que te lo reenvíe.'}</p>`,
         actions: [{ label: 'Cerrar', kind: 'primary' }],
       });
       return false;
