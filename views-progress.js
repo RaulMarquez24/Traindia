@@ -1186,12 +1186,12 @@ const VProgress = (() => {
 
     host.innerHTML = `
       <div class="card ex-card">
-        <button type="button" class="ex-pick" id="exSelBtn">
-          <span class="ex-name">${UI.esc(ex.name)}</span><span class="select-caret">▾</span>
+        <button type="button" class="ex-pick" id="exSelBtn" aria-label="Cambiar de ejercicio">
+          <span class="ex-name">${UI.esc(ex.name)}</span><span class="ex-change">${UI.icon('swap', 14)} Cambiar</span>
           <span class="ex-meta">${UI.esc(ex.muscleGroup || 'General')} · ${u.n} ${u.n === 1 ? 'entreno' : 'entrenos'} · último ${haceTxt(u.last)}</span>
         </button>
         ${cardioLabels.length > 1 || (cardioLabels.length === 1 && labelF) ? `<div class="chips-row small ex-label-row"><button class="chip${labelF === '' ? ' on' : ''}" data-exlabel="">Todas</button>${cardioLabels.map(l => `<button class="chip${labelF === l.k ? ' on' : ''}" data-exlabel="${UI.esc(l.k)}">${UI.esc(l.l)}</button>`).join('')}</div>` : ''}
-        <div class="pg-seg ex-metrics">${metrics.map(m => `<button type="button" data-metric="${m.key}" class="${m.key === metricSel ? 'on' : ''}">${METRIC_SHORT[m.key] || m.label}</button>`).join('')}</div>
+        <div class="pg-seg ex-metrics${metrics.length > 4 ? ' ex-metrics-2' : ''}" style="--cols:${metrics.length > 4 ? 3 : metrics.length}">${metrics.map(m => `<button type="button" data-metric="${m.key}" class="${m.key === metricSel ? 'on' : ''}">${METRIC_SHORT[m.key] || m.label}</button>`).join('')}</div>
         ${distancias.length ? `<div class="chips-row small ex-dist">${distancias.map(k => `<button class="chip${k === metric ? ' on' : ''}" data-dist="${k}">${TIME_REC_SHORT[k]}</button>`).join('')}</div>` : ''}
         <p class="ex-hint dim">${UI.esc(METRIC_HINT[metricSel] || '')}</p>
         ${metricSel === 'bestTime' && !distancias.length ? '<div class="chart-empty">Aún no tienes ninguna salida de 1 km o más.</div>' : ''}
@@ -1339,7 +1339,7 @@ const VProgress = (() => {
     const chartHTML = `<div class="card" id="cpChart">
       <div class="pg-h"><strong>Gráfica</strong></div>
       ${UI.selectButton('subjectSelBtn', titulo)}
-      ${exMetrics.length > 1 ? `<div class="pg-seg ex-metrics" style="margin-top:10px">${exMetrics.map(m => `<button type="button" data-exmetric="${m.key}" class="${m.key === exMetric ? 'on' : ''}">${METRIC_SHORT[m.key] || m.label}</button>`).join('')}</div>` : ''}
+      ${exMetrics.length > 1 ? `<div class="pg-seg ex-metrics${exMetrics.length > 4 ? ' ex-metrics-2' : ''}" style="margin-top:10px;--cols:${exMetrics.length > 4 ? 3 : exMetrics.length}">${exMetrics.map(m => `<button type="button" data-exmetric="${m.key}" class="${m.key === exMetric ? 'on' : ''}">${METRIC_SHORT[m.key] || m.label}</button>`).join('')}</div>` : ''}
       <div class="cp-legend">${quien(me, 'Tú')}${quien(guest, guest.name)}</div>
       ${UI.lineChart(series, { width: 320, height: 170, noLegend: true, niceY: true, ...(esTiempo ? chartOpts(exMetric) : { fmtY: (v) => nf(v) }), fmtPoint: subjectKey === 'body:weight' ? (p => `${fmt1(p.y)} kg`) : (p => fmtMetricPoint(exMetric, p)) })}
     </div>`;

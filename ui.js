@@ -619,7 +619,7 @@ const UI = (() => {
     let grupo = '';
     modal({
       title, size: 'wide',
-      bodyHTML: `${searchable ? '<input class="inp picker-search" id="listSearch" placeholder="Buscar…" autocomplete="off">' : ''}${grupos.length > 1 ? `<div class="chips-row small picker-groups"><button class="chip on" data-grp="">Todos</button>${grupos.map(g => `<button class="chip" data-grp="${esc(g)}">${esc(g)}</button>`).join('')}</div>` : ''}<div class="picker-list" id="listResults"></div>`,
+      bodyHTML: `${searchable ? '<input class="inp picker-search" id="listSearch" placeholder="Buscar…" autocomplete="off">' : ''}${grupos.length > 1 ? `<div class="chips-row small picker-groups"><button class="chip on" data-grp="">Todos</button>${grupos.map(g => `<button class="chip" data-grp="${esc(g)}">${esc(g)}</button>`).join('')}</div>` : ''}<div class="picker-list${searchable ? ' picker-fixed' : ''}" id="listResults"></div>`,
       actions: [{ label: 'Cerrar', kind: 'ghost' }],
       onMount: (root) => {
         const listEl = root.querySelector('#listResults');
