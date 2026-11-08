@@ -185,6 +185,7 @@ const VShare = (() => {
     } catch (e) {
       // sin respuesta (o rechazada) es cosa del servidor o de la conexión, no del enlace
       const sinServidor = !r && !(e && e.status === 404);
+      UI.hideToast(); // el «Abriendo…» no se queda encima del aviso
       UI.modal({
         title: 'No se ha podido abrir',
         bodyHTML: `<p class="modal-text">${e && e.status === 404 ? `Este enlace ha caducado o lo han retirado (duran ${TTL_TXT}). Pídele que te mande uno nuevo.` : navigator.onLine === false ? 'Sin conexión: vuelve a abrirlo cuando tengas internet.' : sinServidor ? 'No se ha podido conectar con el servidor de los enlaces. Inténtalo de nuevo en un rato.' : 'El enlace está incompleto o no se ha podido descifrar. Pídele que te lo reenvíe.'}</p>`,
@@ -193,6 +194,7 @@ const VShare = (() => {
       return false;
     }
     if (!payload || !payload.data || !payload.share) { UI.toast('El enlace no trae datos de Traindía', 'err'); return false; }
+    UI.hideToast();
     offer(app, payload, l.id);
     return true;
   }

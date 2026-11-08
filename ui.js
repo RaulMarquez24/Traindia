@@ -80,6 +80,12 @@ const UI = (() => {
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => { el.className = 'toast'; }, 2600);
   }
+  // Quita el aviso que esté a la vista (p. ej. «Abriendo…» cuando lo que sigue es una ventana)
+  function hideToast() {
+    clearTimeout(toastTimer);
+    const el = document.getElementById('toast');
+    if (el) el.className = 'toast';
+  }
 
   // Enfocar un campo al abrir un modal. En móvil (pantalla táctil) NO se hace en
   // los selectores con lista: abrir el teclado solo tapaba la lista y movía el modal
@@ -854,7 +860,7 @@ const UI = (() => {
   });
 
   return {
-    esc, norm, toast, modal, closeModal, confirm,
+    esc, norm, toast, hideToast, modal, closeModal, confirm,
     field, input, textarea, select, readForm,
     colorPicker, bindColorPicker, avatar, COLORS, ESSENTIALS,
     pickExercise, prompt, askAI, icon, autoFocus, pickFromList, selectButton,
