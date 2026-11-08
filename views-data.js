@@ -413,12 +413,28 @@ const VData = (() => {
     const rts = await DB.routinesOf(targetUserId);
     const target = rts.find(r => r.isPrimary) || rts[0];
     if (!target) { await createImportedPlan(targetUserId, routine, dayIds, routine.name || 'Plan importado', exercises); return; }
-    (routine.days || []).filter(d => dayIds.has(d.id)).forEach(sd => {
+    const elegidos = (routine.days || []).filter(d => dayIds.has(d.id)).slice().sort((a, b) => (a.order || 0) - (b.order || 0));
+    const remap = (sd) => {
       const copy = JSON.parse(JSON.stringify(sd));
       (copy.blocks || []).forEach(b => (b.exercises || []).forEach(e => { if (e.exerciseId && idMap[e.exerciseId]) e.exerciseId = idMap[e.exerciseId]; }));
+      return copy;
+    };
+    // Plan en blanco (p. ej. los 7 días vacíos con los que se empieza un perfil nuevo):
+    // no hay nada que conservar, así que queda el plan del archivo tal cual, con su nombre.
+    // Así restaurar tu copia en un móvil nuevo no mezcla tus días con Lunes…Domingo vacíos.
+    const vacio = !(target.days || []).some(d => (d.blocks || []).some(b => (b.exercises || []).length));
+    if (vacio) {
+      target.days = elegidos.map((sd, i) => ({ ...remap(sd), id: DB.uid('day'), order: i }));
+      if (routine.name) target.name = routine.name;
+      await DB.put('routines', target);
+      return;
+    }
+    let next = Math.max(-1, ...target.days.map(d => d.order || 0)) + 1;
+    elegidos.forEach(sd => {
+      const copy = remap(sd);
       const idx = target.days.findIndex(d => (d.name || '').trim().toLowerCase() === (sd.name || '').trim().toLowerCase());
       if (idx >= 0) { copy.id = target.days[idx].id; copy.order = target.days[idx].order; target.days[idx] = copy; }
-      else { copy.id = DB.uid('day'); target.days.push(copy); }
+      else { copy.id = DB.uid('day'); copy.order = next++; target.days.push(copy); } // los nuevos, al final y en su orden
     });
     await DB.put('routines', target);
   }
