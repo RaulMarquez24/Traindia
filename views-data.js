@@ -659,6 +659,14 @@ const VData = (() => {
       { key: 'files', label: 'Documentos' },
     ].filter(s => (counts[s.key] || []).length);
     const hasData = DATA_SECTIONS.length > 0;
+    // ¿A qué perfil va? Uno solo. Si el archivo es de otra persona, por defecto a un invitado
+    // (el que ya se llame así o uno nuevo); si es tuyo, a tu perfil. Antes venía marcado tu perfil
+    // y se podían marcar varios: al añadir un invitado, sus datos acababan también en el tuyo.
+    const main = users.find(u => u.isMain) || users[0];
+    const mismo = (a, b) => UI.norm(a || '').trim() === UI.norm(b || '').trim();
+    const deOtro = payload.user && payload.user.name && !mismo(payload.user.name, main && main.name);
+    const invitadoIgual = deOtro ? users.find(u => !u.isMain && mismo(u.name, payload.user.name)) : null;
+    const destinoDef = invitadoIgual ? invitadoIgual.id : deOtro ? '__new' : (main && main.id);
 
     // sección de datos: casilla global + lista de elementos editable
     const sectionHTML = (s) => {
@@ -682,13 +690,13 @@ const VData = (() => {
       bodyHTML: `
         <p class="modal-text">Archivo de <strong>${UI.esc(sender)}</strong>.</p>
         <div id="impForm">
-          <span class="field-label">Asignar a perfil(es)</span>
-          <p class="field-hint" style="margin-top:0;margin-bottom:8px">Puedes marcar varios: se importa lo mismo a cada uno.</p>
+          <span class="field-label">¿A qué perfil va?</span>
+          ${deOtro ? `<p class="field-hint" style="margin-top:0;margin-bottom:8px">Es de <strong>${UI.esc(sender)}</strong>: lo normal es un invitado, para que sus datos no se mezclen con los tuyos.</p>` : ''}
           <div class="check-list" style="max-height:none;margin-bottom:10px">
-            ${users.map((u, i) => `<label class="check-row"><input type="checkbox" data-user="${u.id}"${i === 0 ? ' checked' : ''}><span>${UI.esc(u.name)}${u.isMain ? ' (principal)' : ' (invitado)'}</span></label>`).join('')}
-            <label class="check-row"><input type="checkbox" data-newguest><span>+ Crear nuevo invitado</span></label>
+            ${users.map(u => `<label class="check-row"><input type="radio" name="impDest" data-user="${u.id}"${u.id === destinoDef ? ' checked' : ''}><span>${UI.esc(u.name)}${u.isMain ? ' (tú)' : ' (invitado)'}</span></label>`).join('')}
+            <label class="check-row"><input type="radio" name="impDest" data-newguest${destinoDef === '__new' ? ' checked' : ''}><span>+ Nuevo invitado</span></label>
           </div>
-          <div id="newGuestBox" style="display:none">
+          <div id="newGuestBox"${destinoDef === '__new' ? '' : ' style="display:none"'}>
             ${UI.field('Nombre del invitado', UI.input('guestName', sender, { placeholder: 'Nombre' }))}
             ${UI.field('Color', UI.colorPicker('guestColor', payload.user?.color || UI.ESSENTIALS[1]))}
           </div>
@@ -748,6 +756,9 @@ const VData = (() => {
             if (VMerge.hayAlgo(A)) listos.push({ d, A });
           }
           if (!listos.length) return;
+          // copia interna antes de tocar un perfil que ya existe: si algo no era lo que querías,
+          // se recupera desde Copias y datos
+          if (listos.some(x => x.d.id)) { try { await DB.saveInternalBackup(`Antes de importar el archivo de ${sender}`); } catch (e) {} }
           let añadidos = 0, cambiados = 0;
           for (const { d, A } of listos) {
             if (!d.id) { const g = await DB.createUser({ name: guestName, color: guestColor, isGuest: true }); A.uid = g.id; }
@@ -769,7 +780,7 @@ const VData = (() => {
         UI.bindColorPicker(root);
         const ng = root.querySelector('[data-newguest]');
         const gbox = root.querySelector('#newGuestBox');
-        ng.addEventListener('change', () => { gbox.style.display = ng.checked ? '' : 'none'; });
+        root.querySelectorAll('input[name="impDest"]').forEach(r => r.addEventListener('change', () => { gbox.style.display = ng.checked ? '' : 'none'; }));
         root.querySelectorAll('[data-toggle]').forEach(b => b.addEventListener('click', () => {
           const items = root.querySelector(`[data-items="${b.dataset.toggle}"]`);
           const open = items.style.display === 'none';

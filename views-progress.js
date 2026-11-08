@@ -1282,7 +1282,9 @@ const VProgress = (() => {
     misM.forEach((marks, k) => {
       const suyos = susM.get(k);
       if (!suyos) return;
-      const metr = MAIN_METRICS.find(mm => marks.some(r => r.metric === mm) && suyos.some(r => r.metric === mm));
+      // con tu propio peso (dominadas, fondos…) el «peso máx» es casi tu peso corporal: entre dos personas se comparan las reps
+      const orden = marks[0].ex.type === 'reps' ? ['maxReps', ...MAIN_METRICS] : MAIN_METRICS;
+      const metr = orden.find(mm => marks.some(r => r.metric === mm) && suyos.some(r => r.metric === mm));
       if (!metr) return;
       const mio = marks.find(r => r.metric === metr), suyo = suyos.find(r => r.metric === metr);
       const reciente = marks.reduce((x, r) => ((r.point.x || '') > x ? r.point.x : x), '');
