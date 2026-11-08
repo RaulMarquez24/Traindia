@@ -83,10 +83,16 @@ const app = {
     if (await VShare.checkPending(this)) return; // abriste la app con un enlace de un amigo
     if (enCurso) return VSessions.checkResume(this);
     if (VPlanAI.checkPending(this)) return; // volviste de la IA y Android recargó la app: paso 3
-    if (await VSessions.checkDayAfter(this)) return; // semáforo: cómo amaneciste tras el último entreno
-    VData.checkBackupReminder(this); // recordatorio semanal de copia (si procede)
-    VPlan.checkDuplicates(this);     // avisa si hay ejercicios duplicados sin usar
-    VNews.maybeShow(this);           // novedades: el último anuncio, una vez, solo en reposo
+    // Lo que toca al abrir: «¿Cómo amaneciste?» tras el último entreno, el recordatorio semanal de
+    // copia y el aviso de ejercicios duplicados. Si hay novedades sin ver, salen ellas primero (en
+    // cualquier pantalla, en reposo) y esto viene al cerrarlas.
+    const resto = async () => {
+      if (this._live) return;
+      if (await VSessions.checkDayAfter(this)) return;
+      VData.checkBackupReminder(this);
+      VPlan.checkDuplicates(this);
+    };
+    if (!VNews.maybeShow(this, resto)) resto();
   },
 
   // Archivo recibido por "Compartir" desde otra app (WhatsApp, Archivos…). El SW lo
