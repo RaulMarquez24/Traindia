@@ -378,7 +378,7 @@ const VData = (() => {
         UI.modal({
           title: 'Recuperar tu copia',
           bodyHTML: `<p class="modal-text">Copia de <strong>${UI.esc(p.user?.name || 'Traindía')}</strong>${cuando ? ` del ${UI.esc(cuando)}` : ''}.</p>
-            <div class="mg-row add"><span class="mg-ic">${UI.icon('upload', 16)}</span><div><strong>Se recupera</strong><span>${UI.esc(partes.join(' · '))}</span></div></div>
+            <div class="mg-sum"><div class="mg-row add"><span class="mg-ic">${UI.icon('upload', 16)}</span><div><strong>Se recupera</strong><span>${UI.esc(partes.join(' · '))}</span></div></div></div>
             <p class="field-hint">Tu perfil se crea con este nombre; lo puedes cambiar en Ajustes.</p>`,
           actions: [
             { label: 'Cancelar', kind: 'ghost' },

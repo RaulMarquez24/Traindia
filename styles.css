@@ -1709,17 +1709,20 @@ body.has-active-bar .dv-start { bottom: calc(var(--nav-h) + var(--safe-bottom) +
 .nv-tu-txt small.new { color: var(--priority); font-weight: 600; }
 
 /* ---- Importar: revisión antes de escribir nada (import-merge.js) ---- */
-.mg-sum { display: flex; flex-direction: column; gap: 8px; margin: 4px 0 16px; }
-.mg-row { display: flex; gap: 12px; align-items: flex-start; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg-card); }
+.mg-sum-h { margin: 14px 0 6px; }
+/* Resumen de solo lectura: una tarjeta con filas, nada que parezca un botón o una opción elegida */
+.mg-sum { display: flex; flex-direction: column; margin: 0 0 18px; border: 1px solid var(--line); border-radius: 14px; background: var(--bg-card); overflow: hidden; }
+.mg-row { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; }
+.mg-row + .mg-row { border-top: 1px solid var(--line-soft); }
 .mg-row > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
 .mg-row strong { font-size: 14px; color: var(--ink); }
 .mg-row span { font-size: 13px; color: var(--ink-soft); line-height: 1.35; }
-.mg-ic { width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; flex-shrink: 0; color: #fff; }
-.mg-row.add .mg-ic { background: var(--strong); }
-.mg-row.fill .mg-ic { background: var(--light); }
-.mg-row.same .mg-ic { background: var(--rest); }
-.mg-row.swap { border-color: var(--moderate); }
-.mg-row.swap .mg-ic { background: var(--moderate); }
+.mg-ic { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; flex-shrink: 0; margin-top: 1px; color: var(--ink-dim); background: var(--line-soft); }
+.mg-row.add .mg-ic { color: var(--strong); background: color-mix(in srgb, var(--strong) 15%, transparent); }
+.mg-row.fill .mg-ic { color: var(--light); background: color-mix(in srgb, var(--light) 16%, transparent); }
+.mg-row.swap .mg-ic { color: var(--moderate); background: color-mix(in srgb, var(--moderate) 16%, transparent); }
+.mg-row.same strong { color: var(--ink-soft); font-weight: 600; }
+.mg-row.same span { color: var(--ink-dim); }
 .mg-ver { align-self: flex-start; padding: 4px 0 0; }
 .mg-fills { margin-top: 6px; display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; max-height: 220px; overflow: auto; }
 .mg-fills strong { font-size: 12.5px; }

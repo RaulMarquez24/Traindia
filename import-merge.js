@@ -293,15 +293,15 @@ const VMerge = (() => {
       const fin = (v) => { if (!hecho) { hecho = true; resolve(v); } };
       const conf = conflictos(A);
       if (!hayAlgo(A)) {
-        UI.modal({ title: 'Nada que importar', bodyHTML: `<div class="mg-row same"><span class="mg-ic">${UI.icon('check', 16)}</span><div><strong>Ya lo tienes todo igual</strong><span>${UI.esc(cuenta(A, 'igual').join(' · ') || 'Nada nuevo en el archivo')}</span></div></div><p class="field-hint">${who ? `En ${UI.esc(who)} no` : 'No'} cambia nada y no se duplica nada.</p>`,
+        UI.modal({ title: 'Nada que importar', bodyHTML: `<div class="mg-sum"><div class="mg-row same"><span class="mg-ic">${UI.icon('check', 16)}</span><div><strong>Ya lo tienes todo igual</strong><span>${UI.esc(cuenta(A, 'igual').join(' · ') || 'Nada nuevo en el archivo')}</span></div></div></div><p class="field-hint">${who ? `En ${UI.esc(who)} no` : 'No'} cambia nada y no se duplica nada.</p>`,
           actions: [{ label: backLabel, kind: 'ghost', onClick: () => fin('back') }, { label: 'Cerrar', kind: 'primary', onClick: () => fin(null) }], onClose: () => fin(null) });
         return;
       }
       const nuevos = cuenta(A, 'nuevo'), completar = cuenta(A, 'completar'), iguales = cuenta(A, 'igual');
       const fills = A.ex.filter(x => x.status === 'completar');
       const alDia = A.ex.filter(x => x.status === 'alDia');
-      const swapHTML = A.swap ? `<div class="mg-row swap"><span class="mg-ic">${UI.icon('swap', 16)}</span><div><strong>Tu plan «${UI.esc(A.swap.mine.name || 'Mi plan')}» está vacío</strong><span>Pasa a ser «${UI.esc(A.swap.theirs.name || 'Plan')}», con sus ${(A.swap.theirs.days || []).length} días, y queda como tu plan activo.</span></div></div>` : '';
-      const blankHTML = (A.days && A.days.blank) ? `<div class="mg-row swap"><span class="mg-ic">${UI.icon('swap', 16)}</span><div><strong>Tu plan «${UI.esc(A.days.target.name || 'Mi plan')}» está vacío</strong><span>Se queda con los ${A.days.items.length} días del archivo, en su orden.</span></div></div>` : '';
+      const swapHTML = A.swap ? `<div class="mg-row swap"><span class="mg-ic">${UI.icon('swap', 16)}</span><div><strong>Tu plan pasa a ser «${UI.esc(A.swap.theirs.name || 'Plan')}»</strong><span>«${UI.esc(A.swap.mine.name || 'Mi plan')}» estaba vacío. Queda como tu plan activo, con sus ${(A.swap.theirs.days || []).length} días.</span></div></div>` : '';
+      const blankHTML = (A.days && A.days.blank) ? `<div class="mg-row swap"><span class="mg-ic">${UI.icon('swap', 16)}</span><div><strong>Tu plan se llena con los días del archivo</strong><span>«${UI.esc(A.days.target.name || 'Mi plan')}» estaba vacío: se queda con los ${A.days.items.length} días, en su orden.</span></div></div>` : '';
       const grupos = [['plans', 'Planes'], ['days', 'Días de tu plan'], ['sessions', 'Sesiones'], ['progress', 'Progreso'], ['nutrition', 'Nutrición'], ['files', 'Documentos'], ['ex', 'Ejercicios']];
       let idx = 0;
       const card = (it) => {
@@ -338,6 +338,7 @@ const VMerge = (() => {
       UI.modal({
         title: 'Antes de importar', size: 'wide',
         bodyHTML: `<p class="modal-text">${who ? `Así queda <strong>${UI.esc(who)}</strong>. ` : ''}Nada se duplica y nada tuyo cambia sin que lo elijas.</p>
+          <div class="card-label mg-sum-h">Qué va a pasar</div>
           <div class="mg-sum">
             ${swapHTML}${blankHTML}
             ${nuevos.length ? `<div class="mg-row add"><span class="mg-ic">${UI.icon('plus', 16)}</span><div><strong>Se añade</strong><span>${UI.esc(nuevos.join(' · '))}</span></div></div>` : ''}
@@ -345,7 +346,7 @@ const VMerge = (() => {
               ${fills.length ? `<button type="button" class="imp-toggle mg-ver" data-ver>ver</button><div class="mg-fills" hidden>${fills.map(f => `<div><strong>${UI.esc(f.mine.name)}</strong> <span class="dim">+ ${UI.esc(f.adds.join(', '))}</span></div>`).join('')}</div>` : ''}</div></div>` : ''}
             ${alDia.length ? `<div class="mg-row fill"><span class="mg-ic">${UI.icon('swap', 16)}</span><div><strong>Se ponen al día</strong><span>${plural(alDia.length, 'ejercicio', 'ejercicios')} de ejemplo de la app, que no habías tocado ni usado: se quedan como vienen en el archivo.</span>
               <button type="button" class="imp-toggle mg-ver" data-ver2>ver</button><div class="mg-fills" hidden data-box2>${alDia.map(f => `<div><strong>${UI.esc(f.mine.name)}</strong> <span class="dim">· ${UI.esc(f.diffs.map(d => d.label.toLowerCase()).join(', '))}</span></div>`).join('')}</div></div></div>` : ''}
-            ${iguales.length ? `<div class="mg-row same"><span class="mg-ic">${UI.icon('check', 16)}</span><div><strong>Ya lo tienes igual</strong><span>${UI.esc(iguales.join(' · '))} · no se toca</span></div></div>` : ''}
+            ${iguales.length ? `<div class="mg-row same"><span class="mg-ic">${UI.icon('check', 16)}</span><div><strong>Ya lo tenías igual</strong><span>${UI.esc(iguales.join(' · '))} · no se toca</span></div></div>` : ''}
           </div>
           ${confHTML}`,
         actions: [
