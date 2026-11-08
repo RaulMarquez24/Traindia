@@ -396,8 +396,20 @@ const UI = (() => {
     let minY = Math.min(...ys), maxY = Math.max(...ys);
     if (minX === maxX) { minX -= 86400000; maxX += 86400000; }
     if (minY === maxY) { minY -= 1; maxY += 1; }
+    const refs = (opts.refLines || []).filter(r => r && isFinite(r.y));
+    refs.forEach(r => { minY = Math.min(minY, r.y); maxY = Math.max(maxY, r.y); });
     const yPad = (maxY - minY) * 0.1;
     minY -= yPad; maxY += yPad;
+    // opts.niceY: el eje en saltos iguales y redondos (0,5 · 1 · 2 · 5 · 10…), con 3 a 5 marcas
+    let ticks = null;
+    if (opts.niceY) {
+      const span = maxY - minY;
+      const step = [0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500].find(s => span / s <= 4) || 1000;
+      minY = Math.floor(minY / step) * step; maxY = Math.ceil(maxY / step) * step;
+      if (maxY - minY < step * 2) maxY = minY + step * 2;
+      ticks = [];
+      for (let v = minY; v <= maxY + step / 1000; v += step) ticks.push(Math.round(v * 100) / 100);
+    }
 
     const sx = (x) => padL + ((+new Date(x) - minX) / (maxX - minX)) * (W - padL - padR);
     const sy = opts.invertY // p. ej. el ritmo: menos es mejor, así que lo bajo va arriba
@@ -407,12 +419,17 @@ const UI = (() => {
     const fmtY = opts.fmtY || ((v) => Math.round(v));
     // grid horizontal (3 líneas)
     let grid = '';
-    for (let i = 0; i <= 3; i++) {
-      const yVal = minY + (i / 3) * (maxY - minY);
+    (ticks || [0, 1, 2, 3].map(i => minY + (i / 3) * (maxY - minY))).forEach(yVal => {
       const yy = sy(yVal);
       grid += `<line x1="${padL}" y1="${yy.toFixed(1)}" x2="${W - padR}" y2="${yy.toFixed(1)}" class="chart-grid"/>`;
       grid += `<text x="2" y="${(yy + 3).toFixed(1)}" class="chart-axis">${esc(String(fmtY(yVal)))}</text>`;
-    }
+    });
+    // opts.refLines: [{ y, label }] líneas de referencia discontinuas (p. ej. tu mínimo del periodo)
+    refs.forEach(r => {
+      const yy = sy(r.y);
+      grid += `<line x1="${padL}" y1="${yy.toFixed(1)}" x2="${W - padR}" y2="${yy.toFixed(1)}" class="chart-ref"/>`;
+      if (r.label) grid += `<text x="${padL + 4}" y="${(yy - 4).toFixed(1)}" class="chart-ref-txt">${esc(r.label)}</text>`;
+    });
 
     const multi = series.filter(s => !s.noLegend).length > 1;
     const pointInfo = (p, s) => {
@@ -424,15 +441,17 @@ const UI = (() => {
       const pts = [...s.points].sort((a, b) => +new Date(a.x) - +new Date(b.x));
       if (pts.length === 0) return '';
       const d = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${sx(p.x).toFixed(1)},${sy(p.y).toFixed(1)}`).join(' ');
+      const dotOp = s.dotOpacity != null ? ` fill-opacity="${s.dotOpacity}"` : '';
       const dots = s.noDots ? '' : pts.map(p => {
         const cx = sx(p.x).toFixed(1), cy = sy(p.y).toFixed(1);
         // círculo visible + área de toque invisible (r grande) con la info del punto
-        return `<circle cx="${cx}" cy="${cy}" r="2.5" fill="${s.color}"/>`
+        return `<circle cx="${cx}" cy="${cy}" r="${s.r || 2.5}" fill="${s.color}"${dotOp}/>`
           + `<circle class="chart-hit" cx="${cx}" cy="${cy}" r="9" fill="transparent" data-cx="${cx}" data-cy="${cy}" data-color="${s.color}" data-info="${esc(pointInfo(p, s))}"/>`;
       }).join('');
       // por serie: grosor, opacidad y trazo (la tendencia va gruesa y sin puntos; los datos, tenues)
       const extra = `${s.opacity != null ? ` stroke-opacity="${s.opacity}"` : ''}${s.dash ? ` stroke-dasharray="${s.dash}"` : ''}`;
-      return `<path d="${d}" fill="none" stroke="${s.color}" stroke-width="${s.width || 2}" stroke-linejoin="round" stroke-linecap="round"${extra}/>${dots}`;
+      // s.noLine: solo los puntos (p. ej. los pesajes sueltos debajo de la tendencia)
+      return `${s.noLine ? '' : `<path d="${d}" fill="none" stroke="${s.color}" stroke-width="${s.width || 2}" stroke-linejoin="round" stroke-linecap="round"${extra}/>`}${dots}`;
     }).join('');
 
     const legend = multi && !opts.noLegend

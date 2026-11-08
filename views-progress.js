@@ -345,6 +345,15 @@ const VProgress = (() => {
       return { x: e.date, y: Math.round(t * 100) / 100 };
     });
   }
+  // Tendencia para dibujar: media de los pesajes cercanos (antes y después, pesando más los más próximos).
+  // No va «por detrás» como la exponencial, así que la línea pasa por el centro de los puntos.
+  function trendLine(ws, dias = 5) {
+    return ws.map(e => {
+      let s = 0, n = 0;
+      ws.forEach(o => { const d = diasEntre(o.date, e.date); if (d > dias * 3) return; const w = Math.exp(-(d * d) / (2 * dias * dias)); s += w * o.kg; n += w; });
+      return { x: e.date, y: Math.round((s / n) * 100) / 100 };
+    });
+  }
   // kg por semana: pendiente de la tendencia en las últimas 6 semanas (null si no hay datos para decirlo).
   function weeklyRate(trend) {
     if (trend.length < 3) return null;
@@ -709,7 +718,18 @@ const VProgress = (() => {
     const trend = trendOf(ws);
     const rate = weeklyRate(trend);
     const raw = ws.map(e => ({ x: e.date, y: e.kg })).filter(enRango);
-    const tr = trend.filter(enRango);
+    const tr = trendLine(ws).filter(enRango);
+    // la tendencia solo aporta si te pesas a menudo (unas 3 veces por semana o más en lo que se ve);
+    // si no, cada pesaje ya es la tendencia y una línea taparía a la otra
+    const spanSem = raw.length > 1 ? Math.max(1, diasEntre(raw[0].x, raw[raw.length - 1].x) / 7) : 1;
+    const conTendencia = raw.length >= 8 && raw.length / spanSem >= 3;
+    // línea de referencia: tu mínimo del periodo (o tu máximo si quieres subir), para ver «el más bajo desde…» de un vistazo
+    let ref = null;
+    if (raw.length >= 3) {
+      const ys = raw.map(p => p.y);
+      const v = goal === 'subir' ? Math.max(...ys) : Math.min(...ys);
+      ref = { y: v, label: `${goal === 'subir' ? 'máx.' : 'mín.'} ${fmt1(v)} kg` };
+    }
     const goalLbl = (GOALS.find(g => g.value === goal) || GOALS[3]).label;
     // dos datos: el ritmo y cuánto llevas desde tu máximo (o mínimo, si quieres subir)
     const datos = [];
@@ -723,11 +743,14 @@ const VProgress = (() => {
         <div class="pw-when">${cuando}</div>
         ${ph ? `<div class="pw-pill">${UI.icon('trophy', 14)}<span>${UI.esc(ph.txt)}</span></div>` : ''}
         ${datos.length ? `<div class="pw-datos">${datos.map(d => `<div><strong>${UI.esc(d.v)}</strong><span>${UI.esc(d.l)}</span></div>`).join('')}</div>` : ''}
-        ${raw.length ? UI.lineChart([
-          { label: 'Pesajes', color: u.color, points: raw, width: 1.5, opacity: 0.35, noLegend: true },
+        ${raw.length && conTendencia ? '<div class="pw-key"><b></b>pesajes <i></i>tendencia</div>' : ''}
+        ${raw.length ? UI.lineChart(conTendencia ? [
+          { label: 'Pesajes', color: u.color, points: raw, noLine: true, r: 2.5, dotOpacity: 0.4, noLegend: true },
           { label: 'Tendencia', color: u.color, points: tr, width: 3, noDots: true, noLegend: true },
-        ], { width: 320, height: 150, noLegend: true, fmtPoint: (p) => `${fmt1(p.y)} kg` }) : '<div class="chart-empty">Sin pesajes en este periodo.</div>'}
-        <div class="pw-foot"><div class="chips-row small">${RANGES.map(r => `<button class="chip${r.id === range ? ' on' : ''}" data-range="${r.id}">${r.label}</button>`).join('')}</div><span class="pw-key"><i></i>tendencia</span></div>`
+        ] : [
+          { label: 'Peso', color: u.color, points: raw, width: 2.5, r: 3.5, noLegend: true },
+        ], { width: 320, height: 160, noLegend: true, niceY: true, fmtY: (v) => fmt1(v).replace(',0', ''), refLines: ref ? [ref] : [], fmtPoint: (p) => `${fmt1(p.y)} kg` }) : '<div class="chart-empty">Sin pesajes en este periodo.</div>'}
+        <div class="pw-foot"><div class="chips-row small">${RANGES.map(r => `<button class="chip${r.id === range ? ' on' : ''}" data-range="${r.id}">${r.label}</button>`).join('')}</div></div>`
       : '<p class="dim" style="margin:6px 0 0">Aún no has apuntado tu peso. Apúntalo de vez en cuando y aquí verás tu tendencia.</p>'}
     </div>`;
 

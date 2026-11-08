@@ -1861,3 +1861,9 @@ body.has-active-bar .dv-start { bottom: calc(var(--nav-h) + var(--safe-bottom) +
 .pg-seg button.on { background: var(--strong); color: #fff; font-weight: 700; }
 .pg-psub { font-size: 12px; margin: 2px 0 12px; }
 .pg-mt.pg-mthead { border-top: none; padding: 0 0 4px; }
+/* Corporal: gráfica del peso */
+.chart-ref { stroke: var(--strong); stroke-opacity: .55; stroke-width: 1; stroke-dasharray: 5 4; }
+.chart-ref-txt { font-family: 'IBM Plex Mono', monospace; font-size: 8px; fill: var(--strong); fill-opacity: .85; }
+.pw-key b { width: 6px; height: 6px; border-radius: 50%; background: var(--strong); opacity: .45; display: block; }
+.pw-key i { margin-left: 6px; }
+.pw-card > .pw-key { justify-content: flex-end; margin: 14px 0 -8px; }
