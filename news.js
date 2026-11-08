@@ -38,7 +38,6 @@ const VNews = (() => {
   // etiqueta que lo remata (timer cuenta solo). Sin cifras que se queden viejas. Sin vídeo, capturas
   // de la app (con datos de ejemplo, en novedades/) dentro de un móvil.
   const NEWS = [
-    // OJO: al publicar, poner aquí la fecha del día de la subida (id y date)
     { id: '2026-11-08', date: '2026-11-08', stories: [
       { tag: 'nuevo', title: 'Tu progreso, de un vistazo', text: 'Progreso empieza con un resumen: tus logros recientes, tu semana frente a la pasada (o el mes, con un toque) y tu racha de semanas entrenando.', video: 'progreso', try: 'go:progress:summary',
         card: { lines: ['Tu progreso,', 'de un', 'vistazo'], mark: 0 } },
