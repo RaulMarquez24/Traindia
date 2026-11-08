@@ -760,8 +760,8 @@ const VProgress = (() => {
       return { ...g, main, recent, grp: g.ex.muscleGroup || 'General' };
     });
     if (sort === 'name') groups.sort((a, b) => a.ex.name.localeCompare(b.ex.name));
-    else if (sort === 'old') groups.sort((a, b) => (a.main.point.x || '').localeCompare(b.main.point.x || ''));
-    else groups.sort((a, b) => (b.recent || '').localeCompare(a.recent || ''));
+    else if (sort === 'old') groups.sort((a, b) => (a.main.point.x || '').localeCompare(b.main.point.x || '') || a.ex.name.localeCompare(b.ex.name));
+    else groups.sort((a, b) => (b.recent || '').localeCompare(a.recent || '') || a.ex.name.localeCompare(b.ex.name)); // a igual fecha, por nombre (orden estable)
 
     const cats = [...new Set(groups.map(g => g.grp))].sort((a, b) => a.localeCompare(b));
     const cat = cats.includes(host._recCat) ? host._recCat : '';
@@ -921,8 +921,8 @@ const VProgress = (() => {
     // dos datos: el ritmo y cuánto llevas desde tu máximo (o mínimo, si quieres subir)
     const datos = [];
     if (rate != null) datos.push({ v: Math.abs(rate) < 0.1 ? 'Estable' : `${signo(rate)} kg`, l: Math.abs(rate) < 0.1 ? 'en las últimas semanas' : 'por semana, de media' });
-    if (ins && goal === 'subir' && ins.last.kg - ins.min.kg >= 0.5) datos.push({ v: `${signo(ins.last.kg - ins.min.kg)} kg`, l: `desde tu mínimo (${fmt1(ins.min.kg)} · ${UI.fmtDateShort(ins.min.date)})` });
-    else if (ins && goal !== 'subir' && ins.max.kg - ins.last.kg >= 0.5) datos.push({ v: `${signo(ins.last.kg - ins.max.kg)} kg`, l: `desde tu máximo (${fmt1(ins.max.kg)} · ${UI.fmtDateShort(ins.max.date)})` });
+    if (ins && goal === 'subir' && ins.last.kg - ins.min.kg >= 0.5) datos.push({ v: `${signo(ins.last.kg - ins.min.kg)} kg`, l: `desde tu mínimo (${fmt1(ins.min.kg)} · ${UI.fmtDateShort(ins.min.date).replace(' ', ' ')})` });
+    else if (ins && goal !== 'subir' && ins.max.kg - ins.last.kg >= 0.5) datos.push({ v: `${signo(ins.last.kg - ins.max.kg)} kg`, l: `desde tu máximo (${fmt1(ins.max.kg)} · ${UI.fmtDateShort(ins.max.date).replace(' ', ' ')})` });
     const cuando = ins ? (diasEntre(ins.last.date, hoy) === 0 ? 'Hoy' : diasEntre(ins.last.date, hoy) === 1 ? 'Ayer' : `El ${UI.fmtDateShort(ins.last.date)}`) : '';
     const pesoHTML = `<div class="card pw-card">
       <div class="pw-head"><span class="pw-title">Peso corporal</span><button type="button" class="pw-goal" id="pwGoal">Objetivo: <strong>${UI.esc(goalLbl.toLowerCase())}</strong> ▾</button></div>

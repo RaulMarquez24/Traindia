@@ -50,14 +50,14 @@ Sin cuentas, sin servidores, sin dependencias. Tus datos viven en tu dispositivo
 <td width="50%" align="center">
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="ui-progreso-dark.jpg">
-  <img src="ui-progreso-light.jpg" alt="Progreso: racha de semanas, total de entrenos y gráfica de peso corporal">
+  <img src="ui-progreso-light.jpg" alt="Progreso: peso corporal con su logro, el ritmo por semana y la gráfica bajando">
 </picture>
 <br><sub><b>La gráfica no discute</b></sub>
 </td>
 <td width="50%" align="center">
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="ui-records-dark.jpg">
-  <img src="ui-records-light.jpg" alt="Récords: peso máximo, 1RM estimado, repeticiones máximas y kilos totales levantados">
+  <img src="ui-records-light.jpg" alt="Récords: el peso máximo de cada ejercicio con su fecha, frente a la última vez">
 </picture>
 <br><sub><b>Cada récord, con su fecha</b></sub>
 </td>
