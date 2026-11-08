@@ -1866,4 +1866,5 @@ body.has-active-bar .dv-start { bottom: calc(var(--nav-h) + var(--safe-bottom) +
 .chart-ref-txt { font-family: 'IBM Plex Mono', monospace; font-size: 8px; fill: var(--strong); fill-opacity: .85; }
 .pw-key b { width: 6px; height: 6px; border-radius: 50%; background: var(--strong); opacity: .45; display: block; }
 .pw-key i { margin-left: 6px; }
-.pw-card > .pw-key { justify-content: flex-end; margin: 14px 0 -8px; }
+.pw-vista { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 16px 0 -6px; }
+.pw-vista .pg-seg button { font-size: 12px; padding: 4px 11px; }

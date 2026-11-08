@@ -718,11 +718,17 @@ const VProgress = (() => {
     const trend = trendOf(ws);
     const rate = weeklyRate(trend);
     const raw = ws.map(e => ({ x: e.date, y: e.kg })).filter(enRango);
-    const tr = trendLine(ws).filter(enRango);
-    // la tendencia solo aporta si te pesas a menudo (unas 3 veces por semana o más en lo que se ve);
-    // si no, cada pesaje ya es la tendencia y una línea taparía a la otra
-    const spanSem = raw.length > 1 ? Math.max(1, diasEntre(raw[0].x, raw[raw.length - 1].x) / 7) : 1;
-    const conTendencia = raw.length >= 8 && raw.length / spanSem >= 3;
+    // Vista de la gráfica: «Pesajes» (una línea con cada pesaje) o «Tendencia» (puntos suaves y la línea media).
+    // Sin elegir, la app decide: tendencia si te pesas a menudo (unas 3 veces por semana o más en lo que se ve).
+    const spanDias = raw.length > 1 ? Math.max(1, diasEntre(raw[0].x, raw[raw.length - 1].x)) : 1;
+    const VISTA_KEY = 'traindia.pesoVista';
+    let vista = host._vista;
+    if (!vista) { try { vista = localStorage.getItem(VISTA_KEY); } catch (e) { vista = null; } }
+    if (vista !== 'pesajes' && vista !== 'tendencia') vista = raw.length >= 8 && raw.length / (spanDias / 7) >= 3 ? 'tendencia' : 'pesajes';
+    const conTendencia = vista === 'tendencia' && raw.length >= 3;
+    // si te pesas poco, la media abarca más días (si no, saldría igual que tus pesajes)
+    const ventana = Math.min(21, Math.max(5, raw.length > 1 ? (spanDias / (raw.length - 1)) * 1.2 : 5));
+    const tr = trendLine(ws, ventana).filter(enRango);
     // línea de referencia: tu mínimo del periodo (o tu máximo si quieres subir), para ver «el más bajo desde…» de un vistazo
     let ref = null;
     if (raw.length >= 3) {
@@ -743,7 +749,10 @@ const VProgress = (() => {
         <div class="pw-when">${cuando}</div>
         ${ph ? `<div class="pw-pill">${UI.icon('trophy', 14)}<span>${UI.esc(ph.txt)}</span></div>` : ''}
         ${datos.length ? `<div class="pw-datos">${datos.map(d => `<div><strong>${UI.esc(d.v)}</strong><span>${UI.esc(d.l)}</span></div>`).join('')}</div>` : ''}
-        ${raw.length && conTendencia ? '<div class="pw-key"><b></b>pesajes <i></i>tendencia</div>' : ''}
+        ${raw.length >= 3 ? `<div class="pw-vista">
+          <span class="pg-seg"><button type="button" data-vista="pesajes" class="${conTendencia ? '' : 'on'}">Pesajes</button><button type="button" data-vista="tendencia" class="${conTendencia ? 'on' : ''}">Tendencia</button></span>
+          ${conTendencia ? '<span class="pw-key"><b></b>pesajes <i></i>media</span>' : ''}
+        </div>` : ''}
         ${raw.length ? UI.lineChart(conTendencia ? [
           { label: 'Pesajes', color: u.color, points: raw, noLine: true, r: 2.5, dotOpacity: 0.4, noLegend: true },
           { label: 'Tendencia', color: u.color, points: tr, width: 3, noDots: true, noLegend: true },
@@ -794,6 +803,12 @@ const VProgress = (() => {
         ${entries.length > VISIBLES ? `<button class="btn ghost block" id="prTodos">${verTodos ? 'Ver menos' : `Ver los ${entries.length}`}</button>` : ''}` : ''}`;
 
     host.querySelectorAll('[data-range]').forEach(c => c.addEventListener('click', () => { host._range = c.dataset.range; renderBody(app, host); }));
+    host.querySelectorAll('[data-vista]').forEach(b => b.addEventListener('click', () => {
+      if (b.classList.contains('on')) return;
+      host._vista = b.dataset.vista;
+      try { localStorage.setItem(VISTA_KEY, host._vista); } catch (e) { /* no se recuerda, da igual */ }
+      renderBody(app, host);
+    }));
     host.querySelectorAll('[data-metric]').forEach(c => c.addEventListener('click', () => { host._metric = c.dataset.metric; renderBody(app, host); }));
     const gb = host.querySelector('#pwGoal');
     if (gb) gb.addEventListener('click', () => UI.pickFromList({
