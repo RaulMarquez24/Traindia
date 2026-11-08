@@ -398,14 +398,17 @@ const UI = (() => {
     if (minY === maxY) { minY -= 1; maxY += 1; }
     const refs = (opts.refLines || []).filter(r => r && isFinite(r.y));
     refs.forEach(r => { minY = Math.min(minY, r.y); maxY = Math.max(maxY, r.y); });
+    const positivos = minY >= 0;
     const yPad = (maxY - minY) * 0.1;
     minY -= yPad; maxY += yPad;
+    if (positivos && minY < 0) minY = 0; // km, kg, reps… nunca por debajo de 0
     // opts.niceY: el eje en saltos iguales y redondos (0,5 · 1 · 2 · 5 · 10…), con 3 a 5 marcas
     let ticks = null;
     if (opts.niceY) {
       const span = maxY - minY;
       const step = [0.5, 1, 2, 5, 10, 15, 20, 30, 50, 60, 100, 200, 500, 1000, 2000, 5000].filter(s => s >= (opts.minStep || 0)).find(s => span / s <= 4) || 10000;
       minY = Math.floor(minY / step) * step; maxY = Math.ceil(maxY / step) * step;
+      if (positivos && minY < 0) minY = 0;
       if (maxY - minY < step * 2) maxY = minY + step * 2;
       ticks = [];
       for (let v = minY; v <= maxY + step / 1000; v += step) ticks.push(Math.round(v * 100) / 100);
@@ -611,20 +614,29 @@ const UI = (() => {
   function pickFromList({ title = 'Elegir', options, value, onPick }) {
     const opts = (options || []).map(o => (typeof o === 'object' ? o : { value: o, label: o }));
     const searchable = opts.length > 8;
+    // opciones con «group» (p. ej. la categoría de un ejercicio): fila de filtros arriba
+    const grupos = [...new Set(opts.map(o => o.group).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+    let grupo = '';
     modal({
       title, size: 'wide',
-      bodyHTML: `${searchable ? '<input class="inp picker-search" id="listSearch" placeholder="Buscar…" autocomplete="off">' : ''}<div class="picker-list" id="listResults"></div>`,
+      bodyHTML: `${searchable ? '<input class="inp picker-search" id="listSearch" placeholder="Buscar…" autocomplete="off">' : ''}${grupos.length > 1 ? `<div class="chips-row small picker-groups"><button class="chip on" data-grp="">Todos</button>${grupos.map(g => `<button class="chip" data-grp="${esc(g)}">${esc(g)}</button>`).join('')}</div>` : ''}<div class="picker-list" id="listResults"></div>`,
       actions: [{ label: 'Cerrar', kind: 'ghost' }],
       onMount: (root) => {
         const listEl = root.querySelector('#listResults');
         const draw = (q) => {
           const ql = norm(q || '');
-          const items = opts.filter(o => !ql || norm(o.label + ' ' + (o.hint || '')).includes(ql));
+          const items = opts.filter(o => (!ql || norm(o.label + ' ' + (o.hint || '')).includes(ql)) && (!grupo || o.group === grupo));
           listEl.innerHTML = items.map(o => `<button class="picker-row${String(o.value) === String(value) ? ' sel' : ''}" data-val="${esc(o.value)}"><span class="picker-name">${esc(o.label)}</span>${o.hint ? `<span class="picker-tag">${esc(o.hint)}</span>` : ''}</button>`).join('') || '<div class="empty-state"><p class="dim">Sin resultados.</p></div>';
           listEl.querySelectorAll('[data-val]').forEach(b => b.addEventListener('click', () => { closeModal(); onPick(b.dataset.val, opts.find(o => String(o.value) === b.dataset.val)); }));
         };
         const search = root.querySelector('#listSearch');
         if (search) { search.addEventListener('input', () => draw(search.value)); autoFocus(search); }
+        root.querySelectorAll('[data-grp]').forEach(b => b.addEventListener('click', () => {
+          grupo = b.dataset.grp;
+          root.querySelectorAll('[data-grp]').forEach(x => x.classList.toggle('on', x === b));
+          b.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' });
+          draw(search ? search.value : '');
+        }));
         draw('');
       },
     });
@@ -802,6 +814,7 @@ const UI = (() => {
     if (!hit) {
       // clic fuera de un punto: oculta cualquier tooltip abierto
       document.querySelectorAll('.chart-tip:not([hidden])').forEach(t => { t.hidden = true; });
+      document.querySelectorAll('.chart-sel').forEach(c => c.remove());
       return;
     }
     const wrap = hit.closest('.chart-wrap');
@@ -815,14 +828,28 @@ const UI = (() => {
     const py = (+hit.dataset.cy / Hh) * rect.height + (rect.top - wrapRect.top);
     tip.textContent = hit.dataset.info || '';
     tip.style.setProperty('--tip-color', hit.dataset.color || 'var(--accent)');
+    tip.style.setProperty('--ax', '50%');
     tip.hidden = false;
     tip.style.left = px + 'px';
     tip.style.top = py + 'px';
-    // si se sale por un borde, ajusta para que no se corte
+    // el punto tocado, marcado con un anillo (encima de todo)
+    svg.querySelectorAll('.chart-sel').forEach(c => c.remove());
+    const sel = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    sel.setAttribute('class', 'chart-sel');
+    sel.setAttribute('cx', hit.dataset.cx); sel.setAttribute('cy', hit.dataset.cy); sel.setAttribute('r', '7');
+    sel.setAttribute('stroke', hit.dataset.color || 'currentColor');
+    svg.appendChild(sel);
+    // si el globo se sale por un borde se mueve hacia dentro, pero la flecha sigue señalando el punto
     requestAnimationFrame(() => {
       const tr = tip.getBoundingClientRect();
-      if (tr.left < wrapRect.left + 2) tip.style.left = (px + (wrapRect.left + 2 - tr.left)) + 'px';
-      if (tr.right > wrapRect.right - 2) tip.style.left = (px - (tr.right - (wrapRect.right - 2))) + 'px';
+      let dx = 0;
+      if (tr.left < wrapRect.left + 2) dx = wrapRect.left + 2 - tr.left;
+      else if (tr.right > wrapRect.right - 2) dx = (wrapRect.right - 2) - tr.right;
+      if (dx) {
+        tip.style.left = (px + dx) + 'px';
+        const ax = Math.max(10, Math.min(tr.width - 10, tr.width / 2 - dx));
+        tip.style.setProperty('--ax', ax + 'px');
+      }
     });
   });
 

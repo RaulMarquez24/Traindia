@@ -1919,3 +1919,8 @@ body.has-active-bar .dv-start { bottom: calc(var(--nav-h) + var(--safe-bottom) +
 .cp-v.on { color: var(--ink); font-weight: 700; }
 .cp-legend { display: flex; gap: 14px; justify-content: flex-end; margin: 14px 0 -6px; }
 .cp-guests { margin-bottom: 10px; }
+.ex-dist { margin-top: 10px; }
+.chart-tip::after { left: var(--ax, 50%); }
+.chart-sel { fill: none; stroke-width: 2.2; pointer-events: none; }
+.picker-groups { margin: 10px 0; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+.picker-groups .chip { flex-shrink: 0; }

@@ -28,11 +28,21 @@ const VProgress = (() => {
   // Cardio (distancia/kcal totales): la métrica de tiempo es el TOTAL de la sesión.
   const TIME_METRICS_CARDIO = [
     { key: 'distance', label: 'Distancia (km)' },
-    { key: 'totalTime', label: 'Tiempo total' },
+    { key: 'bestTime', label: 'Tiempos' },               // tus mejores tiempos en 1, 3, 5, 10… km (se elige la distancia)
     { key: 'pace', label: 'Ritmo (min/km)' },            // salidas de 1 km o más; récord = el más bajo
     { key: 'bestSet', label: 'Mejor serie (min/km)' },   // la serie más rápida (series de 400 m…)
+    { key: 'totalTime', label: 'Tiempo total' },
     { key: 'kcal', label: 'Kcal' },
   ];
+  // Mejores tiempos por distancia: de cada salida de esa distancia o más, el tiempo a su ritmo medio.
+  // (Correr más minutos no es un récord; hacer los 5 km en menos tiempo, sí.)
+  const TIME_REC = { time1k: 1, time3k: 3, time5k: 5, time10k: 10, time21k: 21.0975, time42k: 42.195 };
+  const TIME_REC_LABEL = { time1k: 'Mejor 1 km', time3k: 'Mejor 3 km', time5k: 'Mejor 5 km', time10k: 'Mejor 10 km', time21k: 'Media maratón', time42k: 'Maratón' };
+  const TIME_REC_SHORT = { time1k: '1 km', time3k: '3 km', time5k: '5 km', time10k: '10 km', time21k: '21 km', time42k: '42 km' };
+  // Lo que no es un récord (más minutos o más kcal no es «mejor»): se enseña frente a tu media
+  const NO_RECORD = new Set(['totalTime', 'kcal']);
+  // Variantes de cardio (Z2, «Z2 - Suave», «Z2 · suave»…): iguales sin mirar mayúsculas, acentos ni separadores
+  const labelKey = (s) => UI.norm(String(s || '')).replace(/[^a-z0-9]+/g, ' ').trim();
   // Isométricos (plancha, dead hang…): el récord es el aguante máximo de una serie.
   const TIME_METRICS_HOLD = [
     { key: 'maxTime', label: 'Tiempo máx' },
@@ -46,26 +56,28 @@ const VProgress = (() => {
   const metricsFor = (ex) => (!ex ? EX_METRICS : ex.type === 'time' ? timeMetricsFor(ex) : ex.type === 'reps' ? REPS_METRICS : EX_METRICS);
   const METRIC_UNIT = { maxWeight: ' kg', e1rm: ' kg', volume: ' kg', maxReps: ' reps', distance: ' km', kcal: ' kcal', maxLoad: ' kg' };
   // Métricas en las que MENOS es mejor (el ritmo): el récord es el valor más bajo.
-  const LOWER_BETTER = new Set(['pace', 'bestSet']);
+  const LOWER_BETTER = new Set(['pace', 'bestSet', ...Object.keys(TIME_REC)]);
   const fmtPaceV = (sec) => { sec = Math.round(sec); return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`; };
   const METRIC_LABEL = {};
   EX_METRICS.concat(TIME_METRICS).forEach(m => { METRIC_LABEL[m.key] = m.label; });
+  Object.assign(METRIC_LABEL, TIME_REC_LABEL);
   METRIC_LABEL.maxLoad = 'Peso máx levantado'; // récord: mayor (corporal+lastre) en una serie
   // Orden de las marcas dentro de la tarjeta de cada ejercicio en "Récords".
-  const METRIC_ORDER = ['maxWeight', 'e1rm', 'maxReps', 'maxLoad', 'volume', 'distance', 'pace', 'bestSet', 'totalTime', 'kcal', 'maxTime'];
+  const METRIC_ORDER = ['maxWeight', 'e1rm', 'maxReps', 'maxLoad', 'volume', 'time42k', 'time21k', 'time10k', 'time5k', 'time3k', 'time1k', 'distance', 'pace', 'bestSet', 'totalTime', 'kcal', 'maxTime'];
   // Nombres cortos (para botones) y qué mide cada una, en cristiano.
-  const METRIC_SHORT = { maxWeight: 'Peso máx', e1rm: '1RM', volume: 'Volumen', maxReps: 'Reps', maxLoad: 'Peso máx', distance: 'Distancia', totalTime: 'Tiempo', pace: 'Ritmo', bestSet: 'Mejor serie', kcal: 'Kcal', maxTime: 'Tiempo máx' };
+  const METRIC_SHORT = { maxWeight: 'Peso máx', e1rm: '1RM', volume: 'Volumen', maxReps: 'Reps', maxLoad: 'Peso máx', distance: 'Distancia', bestTime: 'Tiempos', totalTime: 'Tiempo', pace: 'Ritmo', bestSet: 'Mejor serie', kcal: 'Kcal', maxTime: 'Tiempo máx', ...TIME_REC_LABEL };
   const METRIC_HINT = {
     maxWeight: 'El peso más alto que moviste en una serie.',
     e1rm: 'Cuánto levantarías a una sola repetición, estimado con tus series.',
     volume: 'Todo el peso que moviste en el entreno: kilos × repeticiones.',
     maxReps: 'Las repeticiones de tu mejor serie.',
     maxLoad: 'Tu peso ± el lastre o la asistencia, en tu mejor serie.',
-    distance: 'Los kilómetros de cada salida.',
-    totalTime: 'El tiempo total de cada salida.',
+    distance: 'Los kilómetros de cada salida. El récord es la más larga.',
+    bestTime: 'Tu tiempo en esa distancia, de cada salida igual o más larga, a su ritmo medio.',
+    totalTime: 'Cuánto duró cada salida. No es un récord: se compara con tu media.',
     pace: 'Ritmo medio de las salidas de 1 km o más. Cuanto más bajo, mejor.',
     bestSet: 'Tu serie más rápida de cada entreno. Cuanto más bajo, mejor.',
-    kcal: 'Las calorías de cada salida.',
+    kcal: 'Las calorías de cada salida. No es un récord: se compara con tu media.',
     maxTime: 'Tu serie más larga.',
   };
   // Números en español (coma decimal), con el formateador reutilizado.
@@ -98,6 +110,7 @@ const VProgress = (() => {
   const bestPoint = (points, metric) => (points.length ? points.reduce((b, p) => (better(p, b, metric) ? p : b), points[0]) : null);
   // valor de una métrica con su unidad (sin condiciones)
   function fmtMetricValue(metric, y) {
+    if (TIME_REC[metric]) return fmtSecs(y);
     if (LOWER_BETTER.has(metric)) return `${fmtPaceV(y)} /km`;
     if (metric === 'maxTime' || metric === 'totalTime') return fmtSecs(y);
     return `${nf(y, metric === 'distance' ? 2 : 1)}${METRIC_UNIT[metric] || ''}`;
@@ -108,7 +121,8 @@ const VProgress = (() => {
     return p.detail ? `${base} ${p.detail}` : base;
   }
   // opciones de la gráfica según la métrica (eje con mm:ss y, en el ritmo, invertido)
-  const chartOpts = (metric) => LOWER_BETTER.has(metric) ? { fmtY: fmtPaceV, invertY: true }
+  const chartOpts = (metric) => TIME_REC[metric] ? { fmtY: fmtSecs, invertY: true }
+    : LOWER_BETTER.has(metric) ? { fmtY: fmtPaceV, invertY: true }
     : (metric === 'maxTime' || metric === 'totalTime') ? { fmtY: fmtSecs } : {};
 
   // Serie del 1RM respetando "solo esfuerzo"; si no hay ninguna serie con
@@ -176,7 +190,7 @@ const VProgress = (() => {
       (s.entries || []).forEach(e => {
         if ((e.name || '').toLowerCase() !== lname) return;
         if (e.type === 'reps') e_isReps = true;
-        if (labelFilter && !(e.sets || []).some(st => (st.label || '').trim() === labelFilter)) return; // solo la variante elegida
+        if (labelFilter && !(e.sets || []).some(st => labelKey(st.label) === labelFilter)) return; // solo la variante elegida
         found = true;
         // cardio nuevo: distancia/kcal como TOTAL del ejercicio (entry.totals).
         // Sin totals (sesiones viejas) → se suman por serie como antes.
@@ -235,6 +249,8 @@ const VProgress = (() => {
       if (metric === 'pace' && !pace) return;
       if (metric === 'bestSet' && !bestSetPace) return;
       const map = { maxWeight, volume: Math.round(volume), maxReps, maxTime, totalTime, distance: distR, kcal: Math.round(kcal), pace, bestSet: bestSetPace, e1rm: Math.round(best1rm), maxLoad: Math.round(maxLoad * 10) / 10 };
+      // mejor tiempo en una distancia: salidas de esa distancia o más (2 % de margen), a su ritmo medio
+      if (TIME_REC[metric]) { const D = TIME_REC[metric]; map[metric] = distR >= D * 0.98 && totalTime > 0 ? Math.round(totalTime / distR * D) : 0; }
       const y = map[metric] || 0;
       if (metric === 'e1rm' && best1rm <= 0) return; // sin series válidas (p.ej. effortOnly y sin esfuerzo)
       // condiciones de la marca + desempate. La "tie" mayor = mejor marca a igual valor.
@@ -249,6 +265,7 @@ const VProgress = (() => {
       else if (metric === 'maxTime' && distR > 0) { detail = `· ${nf(distR, 2)} km`; tie = distR; }                      // + distancia a igual tiempo
       else if (metric === 'totalTime' && distR > 0) { detail = `· ${nf(distR, 2)} km`; tie = distR; }                    // tiempo total (cardio) + distancia
       else if (metric === 'pace') { detail = `· ${nf(distR, 2)} km en ${fmtSecs(totalTime)}`; tie = distR; }            // a igual ritmo, gana la más larga
+      else if (TIME_REC[metric]) { detail = distR > TIME_REC[metric] * 1.05 ? `· en una salida de ${nf(distR, 2)} km` : ''; tie = distR; }
       else if (metric === 'bestSet' && bestSetInfo) { detail = `· ${bestSetInfo.m} m en ${fmtSecs(bestSetInfo.t)}`; tie = bestSetInfo.m; }
       else if (metric === 'maxLoad' && bestLoad) { // peso máx levantado: reps de la serie + lastre/asistencia
         const extra = bestLoad.mode && bestLoad.load ? ` (${bestLoad.mode === 'asist' ? '−' : '+'}${nf(bestLoad.load)} kg)` : '';
@@ -266,7 +283,7 @@ const VProgress = (() => {
   // (las que no tengan datos se descartan luego). Así "un ejercicio no es solo de algo".
   function recordMetrics(ex) {
     if (ex.type === 'check') return [];  // hecho / no hecho: no hay métrica que seguir
-    if (ex.type === 'time') return isCardioEx(ex) ? ['distance', 'pace', 'bestSet', 'totalTime', 'kcal'] : ['maxTime', 'maxLoad'];
+    if (ex.type === 'time') return isCardioEx(ex) ? ['distance', 'pace', 'bestSet', ...Object.keys(TIME_REC)] : ['maxTime', 'maxLoad'];
     if (ex.type === 'reps') return ['maxReps', 'maxLoad', 'e1rm', 'volume'];
     return ['maxWeight', 'e1rm', 'maxReps', 'volume'];
   }
@@ -377,7 +394,8 @@ const VProgress = (() => {
   const rateTxt = (r) => r == null ? '' : Math.abs(r) < 0.1 ? 'estable' : `${signo(r)} kg/semana`;
 
   // ---------- RESUMEN ----------
-  const MAIN_METRICS = ['maxWeight', 'maxLoad', 'maxReps', 'distance', 'pace', 'maxTime', 'bestSet'];
+  // La marca principal de cada ejercicio (la primera que tenga). En cardio, tu mejor tiempo en la distancia más larga que hayas hecho.
+  const MAIN_METRICS = ['maxWeight', 'maxLoad', 'maxReps', 'time42k', 'time21k', 'time10k', 'time5k', 'time3k', 'time1k', 'distance', 'pace', 'maxTime', 'bestSet'];
   const NO_MUSCULO = new Set(['calentamiento', 'movilidad', 'cardio', 'carrera', 'estiramientos', 'general']);
   const RECIENTE_DIAS = 14;
 
@@ -403,7 +421,7 @@ const VProgress = (() => {
     records.forEach(r => {
       if (!MAIN_METRICS.includes(r.metric)) return;
       const g = UI.norm(r.ex.muscleGroup || '');
-      const cardio = ['distance', 'pace', 'bestSet'].includes(r.metric);
+      const cardio = ['distance', 'pace', 'bestSet'].includes(r.metric) || !!TIME_REC[r.metric];
       if (SIN_LOGRO.has(g) && !cardio) return;                          // calentar no es una marca (correr más km sí, esté donde esté)
       if (r.metric === 'maxTime' && CORRER.has(g)) return;             // en carrera, la serie más larga es la más lenta
       const cur = porEj.get(r.ex.name);
@@ -454,7 +472,7 @@ const VProgress = (() => {
   }
   // Subtítulo corto de una marca: «12 repeticiones», «en 42:30», «a 4:51 /km»…
   function subDe(metric, p) {
-    const d = (p.detail || '').trim();
+    const d = (p.detail || '').trim().replace(/^·\s*/, ''); // sin el «·» del principio (ya va separado)
     if (metric === 'maxWeight' || metric === 'maxLoad') { const m = d.match(/^× (\d+)(.*)$/); return m ? `${m[1]} ${m[1] === '1' ? 'repetición' : 'repeticiones'}${m[2]}` : d; }
     if (metric === 'maxReps') return d ? `seguidas ${d}` : 'seguidas';
     if (metric === 'distance') return d;
@@ -673,6 +691,7 @@ const VProgress = (() => {
   // Diferencia entre dos valores de una métrica, con su unidad («10 kg», «0:20 /km»…)
   function difTxt(metric, a, b) {
     const d = Math.abs(a - b);
+    if (TIME_REC[metric]) return fmtSecs(d);
     if (LOWER_BETTER.has(metric)) return `${fmtPaceV(d)} /km`;
     if (metric === 'maxTime' || metric === 'totalTime') return fmtSecs(d);
     return `${nf(d, metric === 'distance' ? 2 : 1)}${METRIC_UNIT[metric] || ''}`;
@@ -1058,22 +1077,38 @@ const VProgress = (() => {
     const ex = catalog.find(e => e.id === pedido) || (pedidoNombre && catalog.find(e => e.name.trim().toLowerCase() === pedidoNombre)) || catalog[0];
     const u = usoDe(ex);
     const metrics = metricsFor(ex);
-    const metric = (host._metric && metrics.some(m => m.key === host._metric)) ? host._metric : metrics[0].key;
+    const metricSel = (host._metric && metrics.some(m => m.key === host._metric)) ? host._metric : metrics[0].key;
 
     // Filtro por variante (solo cardio con etiquetas apuntadas)
     const lname = ex.name.toLowerCase();
-    const etiquetas = new Set();
-    if (isCardioEx(ex)) sessions.forEach(s => (s.entries || []).forEach(e => { if ((e.name || '').toLowerCase() === lname) (e.sets || []).forEach(st => { if (st.label) etiquetas.add(st.label.trim()); }); }));
-    const cardioLabels = [...etiquetas].sort((a, b) => a.localeCompare(b));
-    const labelF = (host._exLabel && cardioLabels.includes(host._exLabel)) ? host._exLabel : '';
+    const etiquetas = new Map(); // clave → { nombre más usado, cuántas }
+    if (isCardioEx(ex)) sessions.forEach(s => (s.entries || []).forEach(e => {
+      if ((e.name || '').toLowerCase() !== lname) return;
+      (e.sets || []).forEach(st => {
+        const k = labelKey(st.label); if (!k) return;
+        const v = etiquetas.get(k) || { formas: new Map(), n: 0 };
+        const f = String(st.label).trim(); v.formas.set(f, (v.formas.get(f) || 0) + 1); v.n++;
+        etiquetas.set(k, v);
+      });
+    }));
+    const cardioLabels = [...etiquetas.entries()].map(([k, v]) => ({ k, l: [...v.formas.entries()].sort((a, b) => b[1] - a[1])[0][0] })).sort((a, b) => a.l.localeCompare(b.l));
+    const labelF = (host._exLabel && etiquetas.has(host._exLabel)) ? host._exLabel : '';
 
+    // «Tiempos»: la distancia elegida entre las que has llegado a hacer (por defecto, 5 km o la mayor)
+    let distancias = [], metric = metricSel;
+    if (metricSel === 'bestTime') {
+      const maxKm = Math.max(0, ...(await metricSeries(uid, ex.name, 'distance', false, 'epley', labelF, { sessions, bodyWeights: bws })).points.map(p => p.y));
+      distancias = Object.keys(TIME_REC).filter(k => maxKm >= TIME_REC[k] * 0.98);
+      metric = distancias.includes(host._dist) ? host._dist : distancias.includes('time5k') ? 'time5k' : distancias[distancias.length - 1] || 'time1k';
+    }
+    const esRec = !NO_RECORD.has(metric);
     const sinPeso = ex.type === 'reps' && ['maxLoad', 'e1rm', 'volume'].includes(metric) && !bws.length;
     const isE1 = metric === 'e1rm';
     const effortOnly = isE1 ? (host._effortOnly !== false) : false; // por defecto activado
     const formula = app._e1Formula || 'epley';
     const { points: crudos, noEffort } = await metricSeries(uid, ex.name, metric, effortOnly, formula, labelF, { sessions, bodyWeights: bws });
     if (!host.isConnected) return;
-    const points = marcarRecords(crudos, metric);
+    const points = esRec ? marcarRecords(crudos, metric) : crudos.map(p => ({ ...p, rec: false }));
     const hoy = DB.todayISO();
     const range = host._exRange || 'all';
     const rDays = (RANGES.find(r => r.id === range) || RANGES[RANGES.length - 1]).days;
@@ -1084,7 +1119,13 @@ const VProgress = (() => {
 
     // Récord frente a la última vez
     let datosHTML = '';
-    if (pr) {
+    if (pr && !esRec) {
+      const media = points.reduce((s, p) => s + p.y, 0) / points.length;
+      datosHTML = `<div class="pw-datos ex-datos">
+          <div><span class="ex-dl">Tu media</span><strong>${UI.esc(fmtMetricValue(metric, Math.round(media)))}</strong><span>de ${points.length} ${points.length === 1 ? 'salida' : 'salidas'}</span></div>
+          <div><span class="ex-dl">Última vez</span><strong>${UI.esc(fmtMetricValue(metric, last.y))}</strong><span>${UI.esc([subDe(metric, last), UI.fmtDateShort(last.x)].filter(Boolean).join(' · '))}</span></div>
+        </div>`;
+    } else if (pr) {
       const subPr = [subDe(metric, pr), UI.fmtDateShort(pr.x)].filter(Boolean).join(' · ');
       const subLast = [subDe(metric, last), UI.fmtDateShort(last.x)].filter(Boolean).join(' · ');
       const esRecord = last === pr || (last.y === pr.y && !mejorQue(metric, pr.y, last.y));
@@ -1149,9 +1190,11 @@ const VProgress = (() => {
           <span class="ex-name">${UI.esc(ex.name)}</span><span class="select-caret">▾</span>
           <span class="ex-meta">${UI.esc(ex.muscleGroup || 'General')} · ${u.n} ${u.n === 1 ? 'entreno' : 'entrenos'} · último ${haceTxt(u.last)}</span>
         </button>
-        ${cardioLabels.length ? `<div class="chips-row small ex-label-row"><button class="chip${labelF === '' ? ' on' : ''}" data-exlabel="">Todas</button>${cardioLabels.map(l => `<button class="chip${labelF === l ? ' on' : ''}" data-exlabel="${UI.esc(l)}">${UI.esc(l)}</button>`).join('')}</div>` : ''}
-        <div class="pg-seg ex-metrics">${metrics.map(m => `<button type="button" data-metric="${m.key}" class="${m.key === metric ? 'on' : ''}">${METRIC_SHORT[m.key] || m.label}</button>`).join('')}</div>
-        <p class="ex-hint dim">${UI.esc(METRIC_HINT[metric] || '')}</p>
+        ${cardioLabels.length > 1 || (cardioLabels.length === 1 && labelF) ? `<div class="chips-row small ex-label-row"><button class="chip${labelF === '' ? ' on' : ''}" data-exlabel="">Todas</button>${cardioLabels.map(l => `<button class="chip${labelF === l.k ? ' on' : ''}" data-exlabel="${UI.esc(l.k)}">${UI.esc(l.l)}</button>`).join('')}</div>` : ''}
+        <div class="pg-seg ex-metrics">${metrics.map(m => `<button type="button" data-metric="${m.key}" class="${m.key === metricSel ? 'on' : ''}">${METRIC_SHORT[m.key] || m.label}</button>`).join('')}</div>
+        ${distancias.length ? `<div class="chips-row small ex-dist">${distancias.map(k => `<button class="chip${k === metric ? ' on' : ''}" data-dist="${k}">${TIME_REC_SHORT[k]}</button>`).join('')}</div>` : ''}
+        <p class="ex-hint dim">${UI.esc(METRIC_HINT[metricSel] || '')}</p>
+        ${metricSel === 'bestTime' && !distancias.length ? '<div class="chart-empty">Aún no tienes ninguna salida de 1 km o más.</div>' : ''}
         ${e1Panel}
         ${sinPeso ? `<div class="e1-alert">${UI.icon('star', 15)}<span>Para el peso de los ejercicios con tu propio peso hace falta tu <strong>peso corporal</strong>: apúntalo en <strong>Progreso → Corporal</strong> y se calcula solo (corporal ± lastre o asistencia).</span></div>` : ''}
         ${datosHTML}
@@ -1166,13 +1209,14 @@ const VProgress = (() => {
     const re = () => { host._exId = ex.id; renderExercise(app, host, params); };
     host.querySelector('#exSelBtn').addEventListener('click', () => UI.pickFromList({
       title: 'Elegir ejercicio',
-      options: catalog.map(c => ({ value: c.id, label: c.name, hint: `${c.muscleGroup || 'General'} · ${haceTxt(usoDe(c).last)}` })),
+      options: catalog.map(c => { const n = usoDe(c).n; return { value: c.id, label: c.name, group: c.muscleGroup || 'General', hint: `${c.muscleGroup || 'General'} · ${n} ${n === 1 ? 'registro' : 'registros'} · ${haceTxt(usoDe(c).last)}` }; }),
       value: ex.id,
       onPick: (val) => { host._exId = val; host._metric = null; host._exLabel = ''; host._exTodos = false; renderExercise(app, host, params); },
     }));
     host.querySelectorAll('[data-metric]').forEach(c => c.addEventListener('click', () => { host._metric = c.dataset.metric; re(); }));
     host.querySelectorAll('[data-exlabel]').forEach(c => c.addEventListener('click', () => { host._exLabel = c.dataset.exlabel; re(); }));
     host.querySelectorAll('[data-range]').forEach(c => c.addEventListener('click', () => { host._exRange = c.dataset.range; re(); }));
+    host.querySelectorAll('[data-dist]').forEach(c => c.addEventListener('click', () => { host._dist = c.dataset.dist; re(); }));
     const effChk = host.querySelector('#effOnly');
     if (effChk) effChk.addEventListener('change', () => { host._effortOnly = effChk.checked; re(); });
     const helpBtn = host.querySelector('#e1Help');
@@ -1271,7 +1315,9 @@ const VProgress = (() => {
     } else {
       const exName = subjectKey.slice(3);
       const subj = misR.find(r => r.ex.name === exName);
-      exMetrics = metricsFor(subj && subj.ex);
+      exMetrics = metricsFor(subj && subj.ex).filter(m => m.key !== 'bestTime');
+      const comun = comunes.find(c => c.name === exName);
+      if (comun && TIME_REC[comun.metric]) exMetrics = [{ key: comun.metric, label: TIME_REC_LABEL[comun.metric] }, ...exMetrics];
       exMetric = (host._exMetric && exMetrics.some(m => m.key === host._exMetric)) ? host._exMetric : (comunes.find(c => c.name === exName) || {}).metric || exMetrics[0].key;
       if (!exMetrics.some(m => m.key === exMetric)) exMetric = exMetrics[0].key;
       const e1f = app._e1Formula || 'epley';
