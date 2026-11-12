@@ -26,8 +26,21 @@ const app = {
     }
   },
 
-  // Pantalla de error en vez de dejar la app en blanco si el arranque falla.
+  // Si el arranque falla (no se abre la base de datos): a quien ya usaba la app se le explica;
+  // a quien no tiene perfil se le deja la presentación, que no necesita la base de datos. Así
+  // es también como la ve el robot de Google (su navegador no la deja abrir): antes veía este
+  // error en vez de la presentación y no indexaba la página. Si pulsa «Empezar», ahí sí se explica.
   showBootError(e) {
+    let conPerfil = false;
+    try { conPerfil = localStorage.getItem('traindia-hasprofile') === '1'; } catch (x) {}
+    if (!conPerfil) {
+      console.warn('Traindía: arranque sin base de datos', e);
+      document.querySelectorAll('[data-ld-start]').forEach(b => b.addEventListener('click', () => this.bootErrorScreen(e), { once: true }));
+      return;
+    }
+    this.bootErrorScreen(e);
+  },
+  bootErrorScreen(e) {
     const bloqueada = e && (e.message === 'BLOCKED' || e.name === 'VersionError');
     document.documentElement.classList.add('has-profile'); // saca la app (si no, el error quedaría oculto tras la presentación)
     const main = document.getElementById('mainContent');
@@ -309,7 +322,7 @@ const app = {
     this._updForce = true;
     const r = await this.checkUpdate();
     if (r === true) UI.toast('Hay una versión nueva: se aplica en un momento');
-    else { this._updForce = false; UI.toast(r === false ? 'Ya tienes la última versión (v2.65.1)' : 'No se pudo comprobar. Prueba en un rato', r === false ? undefined : 'err'); }
+    else { this._updForce = false; UI.toast(r === false ? 'Ya tienes la última versión (v2.65.2)' : 'No se pudo comprobar. Prueba en un rato', r === false ? undefined : 'err'); }
   },
 
   registerViews() {
@@ -926,7 +939,7 @@ const app = {
                 tipo: d.tipo,
                 mensaje: d.mensaje.trim(),
                 contacto: (d.contacto || '').trim() || '(no indicado)',
-                version: 'v2.65.1',
+                version: 'v2.65.2',
                 perfil: (this.mainUser && this.mainUser.name) || '',
                 navegador: navigator.userAgent,
               }),
@@ -987,7 +1000,7 @@ const app = {
         <div class="more-group">${g.rows.map(r => `<button class="more-row" ${r.feedback ? 'data-feedback' : `data-link="${r.v}"`}>
           <span class="more-ic" style="background:${g.color}">${UI.icon(r.icon, 20)}</span>
           <span class="more-txt"><strong>${r.label}</strong><span${r.warn ? ' class="warn"' : ''}>${UI.esc(r.sub)}</span></span><span class="chev">›</span></button>`).join('')}</div>`).join('')}
-      <p class="version-foot">Traindía · v2.65.1<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
+      <p class="version-foot">Traindía · v2.65.2<br>© 2026 Raúl Márquez · <a class="foot-link" href="${this.REPO_URL}" target="_blank" rel="noopener">Ver en GitHub ↗</a></p>
     </div>`;
   },
   bindMore(root) {
@@ -1436,7 +1449,7 @@ const app = {
         ${(window.traindiaInstalled && window.traindiaInstalled())
           ? `<div class="more-row set-static"><span class="more-ic" style="background:var(--light)">${UI.icon('check', 18)}</span><span class="more-txt"><strong>Instalada en este móvil</strong><span>La estás usando como app</span></span></div>`
           : row('id="installRow"', 'download', 'var(--light)', 'Instalar en el móvil', 'Como una app, a pantalla completa y sin conexión')}
-        ${row('id="checkUpd"', 'repeat', 'var(--light)', 'Buscar actualizaciones', 'Tienes la v2.65.1. Se actualiza sola, esto es por si quieres forzarlo')}
+        ${row('id="checkUpd"', 'repeat', 'var(--light)', 'Buscar actualizaciones', 'Tienes la v2.65.2. Se actualiza sola, esto es por si quieres forzarlo')}
         ${row('id="seeLanding"', 'info', 'var(--rest)', 'Ver la presentación', 'Qué es Traindía y cómo funciona')}
         ${row('id="seeRepo"', 'code', 'var(--rest)', 'Código en GitHub', 'Novedades de cada versión', `<span class="chev">↗</span>`)}
       </div>
