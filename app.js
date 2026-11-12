@@ -26,8 +26,21 @@ const app = {
     }
   },
 
-  // Pantalla de error en vez de dejar la app en blanco si el arranque falla.
+  // Si el arranque falla (no se abre la base de datos): a quien ya usaba la app se le explica;
+  // a quien no tiene perfil se le deja la presentación, que no necesita la base de datos. Así
+  // es también como la ve el robot de Google (su navegador no la deja abrir): antes veía este
+  // error en vez de la presentación y no indexaba la página. Si pulsa «Empezar», ahí sí se explica.
   showBootError(e) {
+    let conPerfil = false;
+    try { conPerfil = localStorage.getItem('traindia-hasprofile') === '1'; } catch (x) {}
+    if (!conPerfil) {
+      console.warn('Traindía: arranque sin base de datos', e);
+      document.querySelectorAll('[data-ld-start]').forEach(b => b.addEventListener('click', () => this.bootErrorScreen(e), { once: true }));
+      return;
+    }
+    this.bootErrorScreen(e);
+  },
+  bootErrorScreen(e) {
     const bloqueada = e && (e.message === 'BLOCKED' || e.name === 'VersionError');
     document.documentElement.classList.add('has-profile'); // saca la app (si no, el error quedaría oculto tras la presentación)
     const main = document.getElementById('mainContent');
