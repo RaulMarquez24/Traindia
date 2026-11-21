@@ -1057,6 +1057,8 @@ body.modal-open { overflow: hidden; }
 .ld-logo { border-radius: 18px; margin-bottom: 14px; }
 #landing h1 { font-size: 42px; font-weight: 800; letter-spacing: -0.03em; line-height: 1; color: var(--ink); }
 .ld-tagline { font-size: 17px; font-weight: 600; color: var(--strong); margin-top: 8px; }
+/* qué es, dicho claro (también para los buscadores, que no conocen la palabra «Traindía») */
+.ld-what { font-size: 16px; font-weight: 600; line-height: 1.45; color: var(--ink); margin: 14px auto 0; max-width: 26em; }
 .ld-lead { font-size: 15px; line-height: 1.55; color: var(--ink-soft); margin: 14px auto 20px; max-width: 34em; }
 .ld-cta { font-size: 16px; padding: 14px 30px; border-radius: 12px; width: auto; }
 .ld-note { font-size: 12px; color: var(--ink-dim); margin-top: 10px; }
